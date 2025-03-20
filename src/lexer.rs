@@ -19,8 +19,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn scan_tokens(&self) -> Vec<Token> {
-        vec![]
+    pub fn scan_tokens(&self) -> miette::Result<Vec<Token>> {
+        Ok(vec![])
     }
 }
 

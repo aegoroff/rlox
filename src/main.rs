@@ -57,7 +57,10 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 
 fn scan(content: String) -> miette::Result<()> {
     let scanner = Lexer::new(&content);
-    for t in scanner.scan_tokens() {
+    for t in scanner
+        .scan_tokens()
+        .map_err(|e| e.with_source_code(content.clone()))?
+    {
         println!("{t}");
     }
     Ok(())
