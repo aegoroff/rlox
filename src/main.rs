@@ -10,6 +10,7 @@ use bugreport::{
 };
 use clap::{ArgMatches, Command, command};
 use miette::{Context, IntoDiagnostic, miette};
+use rlox::lexer::Scanner;
 
 #[macro_use]
 extern crate clap;
@@ -42,7 +43,7 @@ fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
     let content = fs::read_to_string(path)
         .into_diagnostic()
         .wrap_err(format!("Failed to read: {path}"))?;
-    scan(&content)
+    scan(content)
 }
 
 fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
@@ -51,11 +52,14 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
         .read_to_string(&mut content)
         .into_diagnostic()
         .wrap_err("Failed to read stdin content")?;
-    scan(&content)
+    scan(content)
 }
 
-fn scan(content: &str) -> miette::Result<()> {
-    print!("{content}");
+fn scan(content: String) -> miette::Result<()> {
+    let scanner = Scanner::new(content);
+    for t in scanner.scan_tokens() {
+        println!("{t}");
+    }
     Ok(())
 }
 
