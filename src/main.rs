@@ -1,10 +1,15 @@
+use std::{
+    fs,
+    io::{self, Read},
+};
+
 use bugreport::{
     bugreport,
     collector::{CompileTimeInformation, EnvironmentVariables, OperatingSystem, SoftwareVersion},
     format::Markdown,
 };
 use clap::{ArgMatches, Command, command};
-use miette::miette;
+use miette::{Context, IntoDiagnostic, miette};
 
 #[macro_use]
 extern crate clap;
@@ -34,10 +39,23 @@ fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
     let path = cmd
         .get_one::<String>(PATH)
         .ok_or(miette! {"Path required"})?;
-    Ok(())
+    let content = fs::read_to_string(path)
+        .into_diagnostic()
+        .wrap_err(format!("Failed to read: {path}"))?;
+    scan(&content)
 }
 
-fn scan_stdin(cmd: &ArgMatches) -> miette::Result<()> {
+fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
+    let mut content = String::new();
+    io::stdin()
+        .read_to_string(&mut content)
+        .into_diagnostic()
+        .wrap_err("Failed to read stdin content")?;
+    scan(&content)
+}
+
+fn scan(content: &str) -> miette::Result<()> {
+    print!("{content}");
     Ok(())
 }
 
