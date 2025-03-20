@@ -1,3 +1,85 @@
-fn main() {
-    println!("Hello, world!");
+use bugreport::{
+    bugreport,
+    collector::{CompileTimeInformation, EnvironmentVariables, OperatingSystem, SoftwareVersion},
+    format::Markdown,
+};
+use clap::{ArgMatches, Command, command};
+use miette::miette;
+
+#[macro_use]
+extern crate clap;
+
+const FILE_CMD: &str = "f";
+const STDIN_CMD: &str = "i";
+const BUGREPORT_CMD: &str = "bugreport";
+
+const PATH: &str = "PATH";
+
+fn main() -> miette::Result<()> {
+    let app = build_cli();
+    let matches = app.get_matches();
+
+    match matches.subcommand() {
+        Some((FILE_CMD, cmd)) => scan_file(cmd),
+        Some((STDIN_CMD, cmd)) => scan_stdin(cmd),
+        Some((BUGREPORT_CMD, cmd)) => {
+            print_bugreport(cmd);
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
+    let path = cmd
+        .get_one::<String>(PATH)
+        .ok_or(miette! {"Path required"})?;
+    Ok(())
+}
+
+fn scan_stdin(cmd: &ArgMatches) -> miette::Result<()> {
+    Ok(())
+}
+
+fn print_bugreport(_matches: &ArgMatches) {
+    bugreport!()
+        .info(SoftwareVersion::default())
+        .info(OperatingSystem::default())
+        .info(EnvironmentVariables::list(&["SHELL", "TERM"]))
+        .info(CompileTimeInformation::default())
+        .print::<Markdown>();
+}
+
+fn build_cli() -> Command {
+    #![allow(non_upper_case_globals)]
+    command!(crate_name!())
+        .arg_required_else_help(true)
+        .version(crate_version!())
+        .author(crate_authors!("\n"))
+        .about(crate_description!())
+        .subcommand(file_cmd())
+        .subcommand(stdin_cmd())
+        .subcommand(bugreport_cmd())
+}
+
+fn file_cmd() -> Command {
+    Command::new(FILE_CMD)
+        .aliases(["file"])
+        .about("Interpret file specified")
+        .arg(
+            arg!([PATH])
+                .help("Sets file path to interpret")
+                .required(true),
+        )
+}
+
+fn stdin_cmd() -> Command {
+    Command::new(STDIN_CMD)
+        .aliases(["stdin"])
+        .about("Use data from standard input")
+}
+
+fn bugreport_cmd() -> Command {
+    Command::new(BUGREPORT_CMD)
+        .about("Collect information about the system and the environment that users can send along with a bug report")
 }
