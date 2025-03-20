@@ -1,14 +1,22 @@
 use std::fmt::Display;
 
-pub struct Scanner {
-    content: String,
+pub struct Lexer<'a> {
+    whole: &'a str,
+    rest: &'a str,
+    byte: usize,
 }
 
-pub enum Token {}
+pub enum Token<'a> {
+    String(&'a str),
+}
 
-impl Scanner {
-    pub fn new(content: String) -> Self {
-        Self { content }
+impl<'a> Lexer<'a> {
+    pub fn new(content: &'a str) -> Self {
+        Self {
+            whole: content,
+            rest: content,
+            byte: 0,
+        }
     }
 
     pub fn scan_tokens(&self) -> Vec<Token> {
@@ -16,8 +24,10 @@ impl Scanner {
     }
 }
 
-impl Display for Token {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        match self {
+            Token::String(s) => write!(f, "STRING \"{s}\""),
+        }
     }
 }

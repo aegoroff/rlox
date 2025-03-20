@@ -10,7 +10,7 @@ use bugreport::{
 };
 use clap::{ArgMatches, Command, command};
 use miette::{Context, IntoDiagnostic, miette};
-use rlox::lexer::Scanner;
+use rlox::lexer::Lexer;
 
 #[macro_use]
 extern crate clap;
@@ -56,7 +56,7 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 }
 
 fn scan(content: String) -> miette::Result<()> {
-    let scanner = Scanner::new(content);
+    let scanner = Lexer::new(&content);
     for t in scanner.scan_tokens() {
         println!("{t}");
     }
