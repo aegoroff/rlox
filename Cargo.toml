@@ -1,0 +1,8 @@
+[package]
+name = "rlox"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = "4.5.32"
+miette = { version = "7.5.0", features = ["fancy"] }
