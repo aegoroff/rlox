@@ -73,6 +73,11 @@ impl<'a> Iterator for Lexer<'a> {
                 '+' => Some(Ok(Token::Plus)),
                 ';' => Some(Ok(Token::Semicolon)),
                 '/' => Some(Ok(Token::Slash)),
+                '*' => Some(Ok(Token::Star)),
+                '!' => Some(Ok(Token::Bang)),
+                '=' => Some(Ok(Token::Equal)),
+                '>' => Some(Ok(Token::Greater)),
+                '<' => Some(Ok(Token::Less)),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(i..i + 1, "Problem is here"),],

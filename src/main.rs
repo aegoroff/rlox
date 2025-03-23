@@ -57,11 +57,20 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 
 fn scan(content: String) -> miette::Result<()> {
     let scanner = Lexer::new(&content);
+    let mut errors = vec![];
     for t in scanner {
         match t {
             Ok(t) => println!("{t}"),
-            Err(e) => println!("{:?}", e.with_source_code(content.clone())),
+            Err(e) => {
+                if let Some(l) = e.labels() {
+                    errors.extend(l);
+                }
+            }
         }
+    }
+    if !errors.is_empty() {
+        let report = miette!(labels = errors, "errors occured");
+        println!("{:?}", report.with_source_code(content))
     }
     Ok(())
 }
