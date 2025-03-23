@@ -57,19 +57,19 @@ impl<'a> Lexer<'a> {
 
     fn two_char_token(
         &mut self,
-        c: char,
-        two: Token<'a>,
-        single: Token<'a>,
+        next: char,
+        success: Token<'a>,
+        failure: Token<'a>,
     ) -> Option<miette::Result<Token<'a>>> {
-        if let Some((_, next)) = self.chars.peek() {
-            if c == *next {
+        if let Some((_, peek)) = self.chars.peek() {
+            if next == *peek {
                 self.chars.next(); // if match advance iterator
-                Some(Ok(two))
+                Some(Ok(success))
             } else {
-                Some(Ok(single))
+                Some(Ok(failure))
             }
         } else {
-            Some(Ok(single))
+            Some(Ok(failure))
         }
     }
 }
