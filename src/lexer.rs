@@ -1,9 +1,9 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::CharIndices};
+
+use miette::LabeledSpan;
 
 pub struct Lexer<'a> {
-    whole: &'a str,
-    rest: &'a str,
-    byte: usize,
+    chars: std::iter::Peekable<CharIndices<'a>>,
 }
 
 pub enum Token<'a> {
@@ -51,14 +51,37 @@ pub enum Token<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(content: &'a str) -> Self {
         Self {
-            whole: content,
-            rest: content,
-            byte: 0,
+            chars: content.char_indices().peekable(),
         }
     }
+}
 
-    pub fn scan_tokens(&self) -> miette::Result<Vec<Token>> {
-        Ok(vec![])
+impl<'a> Iterator for Lexer<'a> {
+    type Item = miette::Result<Token<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (i, current) = self.chars.next()?;
+            return match current {
+                '(' => Some(Ok(Token::LeftParen)),
+                ')' => Some(Ok(Token::RightParen)),
+                '{' => Some(Ok(Token::RightBrace)),
+                '}' => Some(Ok(Token::LeftBrace)),
+                ',' => Some(Ok(Token::Comma)),
+                '.' => Some(Ok(Token::Dot)),
+                '-' => Some(Ok(Token::Minus)),
+                '+' => Some(Ok(Token::Plus)),
+                ';' => Some(Ok(Token::Semicolon)),
+                '/' => Some(Ok(Token::Slash)),
+                ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
+                _ => Some(Err(miette::miette!(
+                    labels = vec![LabeledSpan::at(i..i + 1, "Problem is here"),],
+                    "Unexpected char {} at {}",
+                    current,
+                    i
+                ))),
+            };
+        }
     }
 }
 
