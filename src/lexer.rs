@@ -54,6 +54,24 @@ impl<'a> Lexer<'a> {
             chars: content.char_indices().peekable(),
         }
     }
+
+    fn two_char_token(
+        &mut self,
+        c: char,
+        two: Token<'a>,
+        single: Token<'a>,
+    ) -> Option<miette::Result<Token<'a>>> {
+        if let Some((_, next)) = self.chars.peek() {
+            if c == *next {
+                self.chars.next(); // if match advance iterator
+                Some(Ok(two))
+            } else {
+                Some(Ok(single))
+            }
+        } else {
+            Some(Ok(single))
+        }
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -72,12 +90,12 @@ impl<'a> Iterator for Lexer<'a> {
                 '-' => Some(Ok(Token::Minus)),
                 '+' => Some(Ok(Token::Plus)),
                 ';' => Some(Ok(Token::Semicolon)),
-                '/' => Some(Ok(Token::Slash)),
                 '*' => Some(Ok(Token::Star)),
-                '!' => Some(Ok(Token::Bang)),
-                '=' => Some(Ok(Token::Equal)),
-                '>' => Some(Ok(Token::Greater)),
-                '<' => Some(Ok(Token::Less)),
+                '=' => self.two_char_token('=', Token::EqualEqual, Token::Equal),
+                '>' => self.two_char_token('=', Token::GreaterEqual, Token::Greater),
+                '<' => self.two_char_token('=', Token::LessEqual, Token::Less),
+                '!' => self.two_char_token('=', Token::BangEqual, Token::BangEqual),
+                '/' => Some(Ok(Token::Slash)),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(i..i + 1, "Problem is here"),],
