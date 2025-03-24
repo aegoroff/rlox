@@ -76,7 +76,7 @@ impl<'a> Lexer<'a> {
     fn skip_comment_or(
         &mut self,
         next: char,
-        div: Token<'a>,
+        token: Token<'a>,
     ) -> Option<miette::Result<Token<'a>>> {
         if let Some((_, peek)) = self.chars.peek() {
             if next == *peek {
@@ -88,10 +88,10 @@ impl<'a> Lexer<'a> {
                 }
                 None
             } else {
-                Some(Ok(div))
+                Some(Ok(token))
             }
         } else {
-            Some(Ok(div))
+            Some(Ok(token))
         }
     }
 }
