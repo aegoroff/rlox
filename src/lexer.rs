@@ -72,6 +72,28 @@ impl<'a> Lexer<'a> {
             Some(Ok(failure))
         }
     }
+
+    fn skip_comment_or_div(
+        &mut self,
+        next: char,
+        div: Token<'a>,
+    ) -> Option<miette::Result<Token<'a>>> {
+        if let Some((_, peek)) = self.chars.peek() {
+            if next == *peek {
+                // skip all char until EOL (end of line)
+                for (_, c) in self.chars.by_ref() {
+                    if c == '\n' {
+                        break;
+                    }
+                }
+                None
+            } else {
+                Some(Ok(div))
+            }
+        } else {
+            Some(Ok(div))
+        }
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -95,7 +117,13 @@ impl<'a> Iterator for Lexer<'a> {
                 '>' => self.two_char_token('=', Token::GreaterEqual, Token::Greater),
                 '<' => self.two_char_token('=', Token::LessEqual, Token::Less),
                 '!' => self.two_char_token('=', Token::BangEqual, Token::BangEqual),
-                '/' => Some(Ok(Token::Slash)),
+                '/' => {
+                    if let Some(t) = self.skip_comment_or_div('/', Token::Slash) {
+                        Some(t)
+                    } else {
+                        continue;
+                    }
+                }
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(i..i + 1, "Problem is here"),],
