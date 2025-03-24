@@ -83,8 +83,8 @@ impl<'a> Iterator for Lexer<'a> {
             return match current {
                 '(' => Some(Ok(Token::LeftParen)),
                 ')' => Some(Ok(Token::RightParen)),
-                '{' => Some(Ok(Token::RightBrace)),
-                '}' => Some(Ok(Token::LeftBrace)),
+                '{' => Some(Ok(Token::LeftBrace)),
+                '}' => Some(Ok(Token::RightBrace)),
                 ',' => Some(Ok(Token::Comma)),
                 '.' => Some(Ok(Token::Dot)),
                 '-' => Some(Ok(Token::Minus)),
