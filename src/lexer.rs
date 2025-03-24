@@ -73,7 +73,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn skip_comment_or_div(
+    fn skip_comment_or(
         &mut self,
         next: char,
         div: Token<'a>,
@@ -118,7 +118,7 @@ impl<'a> Iterator for Lexer<'a> {
                 '<' => self.two_char_token('=', Token::LessEqual, Token::Less),
                 '!' => self.two_char_token('=', Token::BangEqual, Token::BangEqual),
                 '/' => {
-                    if let Some(t) = self.skip_comment_or_div('/', Token::Slash) {
+                    if let Some(t) = self.skip_comment_or('/', Token::Slash) {
                         Some(t)
                     } else {
                         continue;
