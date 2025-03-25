@@ -166,6 +166,48 @@ impl<'a> Lexer<'a> {
         );
         Some(Err(report))
     }
+
+    fn identifier_or_keyword(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
+        while let Some((finish, next)) = self.chars.peek() {
+            match *next {
+                'a'..='z' | 'A'..='Z' | '_' | '0'..='9' => {
+                    self.chars.next();
+                    continue;
+                }
+                _ => {}
+            }
+            let id = &self.whole[start..*finish];
+            return match id {
+                "and" => Some(Ok(Token::And)),
+                "class" => Some(Ok(Token::Class)),
+                "else" => Some(Ok(Token::Else)),
+                "false" => Some(Ok(Token::False)),
+                "fun" => Some(Ok(Token::Fun)),
+                "for" => Some(Ok(Token::For)),
+                "if" => Some(Ok(Token::If)),
+                "nil" => Some(Ok(Token::Nil)),
+                "or" => Some(Ok(Token::Or)),
+                "print" => Some(Ok(Token::Print)),
+                "return" => Some(Ok(Token::Return)),
+                "super" => Some(Ok(Token::Super)),
+                "this" => Some(Ok(Token::This)),
+                "true" => Some(Ok(Token::True)),
+                "var" => Some(Ok(Token::Var)),
+                "while" => Some(Ok(Token::While)),
+                _ => Some(Ok(Token::Identifier(id))),
+            };
+        }
+        let problem_ix = if let Some((f, _)) = self.chars.peek() {
+            *f
+        } else {
+            self.whole.len() - 1
+        };
+        let report = miette::miette!(
+            labels = vec![LabeledSpan::at(start..problem_ix, "Problem is here")],
+            "Parsing identifier error"
+        );
+        Some(Err(report))
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -197,6 +239,7 @@ impl<'a> Iterator for Lexer<'a> {
                     }
                 }
                 '"' => self.string(i),
+                'a'..='z' | 'A'..='Z' | '_' => self.identifier_or_keyword(i),
                 '0'..='9' => self.number(i),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
