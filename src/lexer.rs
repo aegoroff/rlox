@@ -114,6 +114,58 @@ impl<'a> Lexer<'a> {
         );
         Some(Err(report))
     }
+
+    fn number(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
+        let mut with_fractional = false;
+
+        while let Some((finish, next)) = self.chars.peek() {
+            if next.is_ascii_digit() {
+                self.chars.next();
+                continue;
+            }
+            if *next == '.' {
+                if with_fractional {
+                    match self.whole[start..*finish].parse().map_err(|e| {
+                        miette::miette!(
+                            labels = vec![LabeledSpan::at(
+                                start..*finish,
+                                format!("Problem is here: {e}")
+                            )],
+                            "Parsing fractional f64 failed"
+                        )
+                    }) {
+                        Ok(value) => return Some(Ok(Token::Number(value))),
+                        Err(e) => return Some(Err(e)),
+                    };
+                }
+                self.chars.next();
+                with_fractional = true;
+            } else {
+                match self.whole[start..*finish].parse().map_err(|e| {
+                    miette::miette!(
+                        labels = vec![LabeledSpan::at(
+                            start..=*finish,
+                            format!("Problem is here: {e}")
+                        )],
+                        "Invalid number"
+                    )
+                }) {
+                    Ok(value) => return Some(Ok(Token::Number(value))),
+                    Err(e) => return Some(Err(e)),
+                };
+            }
+        }
+        let problem_ix = if let Some((f, _)) = self.chars.peek() {
+            *f
+        } else {
+            self.whole.len() - 1
+        };
+        let report = miette::miette!(
+            labels = vec![LabeledSpan::at(start..problem_ix, "Problem is here")],
+            "Parsing number error"
+        );
+        Some(Err(report))
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -145,6 +197,7 @@ impl<'a> Iterator for Lexer<'a> {
                     }
                 }
                 '"' => self.string(i),
+                '0'..='9' => self.number(i),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(i..i + 1, "Problem is here"),],
@@ -181,7 +234,7 @@ impl Display for Token<'_> {
             Token::Less => write!(f, "<"),
             Token::LessEqual => write!(f, "<="),
             Token::Identifier(s) => write!(f, "IDENTIFIER \"{s}\""),
-            Token::Number(n) => write!(f, "NUMBER \"{n}\""),
+            Token::Number(n) => write!(f, "NUMBER {n}"),
             Token::And => write!(f, "AND"),
             Token::Class => write!(f, "CLASS"),
             Token::Else => write!(f, "ELSE"),
