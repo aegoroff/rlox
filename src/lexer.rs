@@ -267,10 +267,11 @@ impl<'a> Iterator for Lexer<'a> {
                 '0'..='9' => self.number(i),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
-                    labels = vec![LabeledSpan::at(i..i + 1, "Problem is here"),],
-                    "Unexpected char {} at {}",
-                    current,
-                    i
+                    labels = vec![LabeledSpan::at(
+                        i..i + 1,
+                        format!("Unexpected char {current} at {i}")
+                    ),],
+                    "Unexpected char"
                 ))),
             };
         }
