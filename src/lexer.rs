@@ -4,6 +4,7 @@ use miette::LabeledSpan;
 
 pub struct Lexer<'a> {
     chars: std::iter::Peekable<CharIndices<'a>>,
+    whole: &'a str,
 }
 
 pub enum Token<'a> {
@@ -52,6 +53,7 @@ impl<'a> Lexer<'a> {
     pub fn new(content: &'a str) -> Self {
         Self {
             chars: content.char_indices().peekable(),
+            whole: content,
         }
     }
 
@@ -94,6 +96,24 @@ impl<'a> Lexer<'a> {
             Some(Ok(token))
         }
     }
+
+    fn string(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
+        for (finish, next) in self.chars.by_ref() {
+            if next == '"' {
+                return Some(Ok(Token::String(&self.whole[start + 1..finish])));
+            }
+        }
+        let problem_ix = if let Some((f, _)) = self.chars.peek() {
+            *f
+        } else {
+            self.whole.len() - 1
+        };
+        let report = miette::miette!(
+            labels = vec![LabeledSpan::at(start..problem_ix, "Problem is here")],
+            "Unterminated string"
+        );
+        Some(Err(report))
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -124,6 +144,7 @@ impl<'a> Iterator for Lexer<'a> {
                         continue;
                     }
                 }
+                '"' => self.string(i),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(i..i + 1, "Problem is here"),],
