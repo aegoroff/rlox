@@ -77,11 +77,11 @@ impl<'a> Lexer<'a> {
 
     fn skip_comment_or(
         &mut self,
-        next: char,
+        start: usize,
         token: Token<'a>,
     ) -> Option<miette::Result<Token<'a>>> {
         if let Some((_, peek)) = self.chars.peek() {
-            if next == *peek {
+            if '/' == *peek {
                 // skip all char until EOL (end of line)
                 for (_, c) in self.chars.by_ref() {
                     if c == '\n' {
@@ -89,6 +89,30 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 None
+            } else if '*' == *peek {
+                // multiline comments
+                // skip all char until next star
+                let mut prev = *peek;
+                for (_, c) in self.chars.by_ref() {
+                    if c == '/' && prev == '*' {
+                        // correct multiline comment termination
+                        return None;
+                    }
+                    prev = c;
+                }
+                let problem_ix = if let Some((f, _)) = self.chars.peek() {
+                    *f
+                } else {
+                    self.whole.len() - 1
+                };
+                let report = miette::miette!(
+                    labels = vec![LabeledSpan::at(
+                        start..=problem_ix,
+                        "Unterminated multiline comment"
+                    )],
+                    "Comment syntax error"
+                );
+                Some(Err(report))
             } else {
                 Some(Ok(token))
             }
@@ -232,7 +256,7 @@ impl<'a> Iterator for Lexer<'a> {
                 '<' => self.two_char_token('=', Token::LessEqual, Token::Less),
                 '!' => self.two_char_token('=', Token::BangEqual, Token::BangEqual),
                 '/' => {
-                    if let Some(t) = self.skip_comment_or('/', Token::Slash) {
+                    if let Some(t) = self.skip_comment_or(i, Token::Slash) {
                         Some(t)
                     } else {
                         continue;
