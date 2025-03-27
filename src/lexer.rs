@@ -150,7 +150,7 @@ impl<'a> Lexer<'a> {
             if *next == '.' {
                 if with_fractional {
                     let report = miette::miette!(
-                        labels = vec![LabeledSpan::at(start..=*finish, "Invalid number")],
+                        labels = vec![LabeledSpan::at(*finish..=*finish, "Dot not allowed here")],
                         "Parsing fractional f64 failed"
                     );
                     return Some(Err(report));
