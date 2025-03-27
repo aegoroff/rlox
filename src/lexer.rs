@@ -133,8 +133,8 @@ impl<'a> Lexer<'a> {
             self.whole.len() - 1
         };
         let report = miette::miette!(
-            labels = vec![LabeledSpan::at(start..problem_ix, "Problem is here")],
-            "Unterminated string"
+            labels = vec![LabeledSpan::at(start..=problem_ix, "Unterminated string")],
+            "String parsing error"
         );
         Some(Err(report))
     }
@@ -154,7 +154,19 @@ impl<'a> Lexer<'a> {
                 self.chars.next();
                 with_fractional = true;
             } else {
-                return Self::parse_number(self.whole, start, *finish);
+                match *next {
+                    // letters and quotes are not allowed after number literal
+                    'a'..='z' | 'A'..='Z' | '"' | '.' => {
+                        let report = miette::miette!(
+                            labels = vec![LabeledSpan::at(start..=*finish, "Invalid number")],
+                            "Parsing fractional f64 failed"
+                        );
+                        return Some(Err(report));
+                    }
+                    _ => {
+                        return Self::parse_number(self.whole, start, *finish);
+                    }
+                }
             }
         }
         Some(Ok(Token::Eof))
