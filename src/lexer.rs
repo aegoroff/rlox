@@ -149,46 +149,31 @@ impl<'a> Lexer<'a> {
             }
             if *next == '.' {
                 if with_fractional {
-                    match self.whole[start..*finish].parse().map_err(|e| {
-                        miette::miette!(
-                            labels = vec![LabeledSpan::at(
-                                start..*finish,
-                                format!("Problem is here: {e}")
-                            )],
-                            "Parsing fractional f64 failed"
-                        )
-                    }) {
-                        Ok(value) => return Some(Ok(Token::Number(value))),
-                        Err(e) => return Some(Err(e)),
-                    };
+                    return Self::parse_number(self.whole, start, *finish);
                 }
                 self.chars.next();
                 with_fractional = true;
             } else {
-                match self.whole[start..*finish].parse().map_err(|e| {
-                    miette::miette!(
-                        labels = vec![LabeledSpan::at(
-                            start..=*finish,
-                            format!("Problem is here: {e}")
-                        )],
-                        "Invalid number"
-                    )
-                }) {
-                    Ok(value) => return Some(Ok(Token::Number(value))),
-                    Err(e) => return Some(Err(e)),
-                };
+                return Self::parse_number(self.whole, start, *finish);
             }
         }
-        let problem_ix = if let Some((f, _)) = self.chars.peek() {
-            *f
-        } else {
-            self.whole.len() - 1
-        };
-        let report = miette::miette!(
-            labels = vec![LabeledSpan::at(start..problem_ix, "Problem is here")],
-            "Parsing number error"
-        );
-        Some(Err(report))
+        Some(Ok(Token::Eof))
+    }
+
+    fn parse_number(whole: &str, start: usize, finish: usize) -> Option<miette::Result<Token<'a>>> {
+        let result = whole[start..finish].parse().map_err(|e| {
+            miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    start..finish,
+                    format!("Problem is here: {e}")
+                )],
+                "Parsing fractional f64 failed"
+            )
+        });
+        match result {
+            Ok(value) => Some(Ok(Token::Number(value))),
+            Err(e) => Some(Err(e)),
+        }
     }
 
     fn identifier_or_keyword(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
@@ -221,16 +206,7 @@ impl<'a> Lexer<'a> {
                 _ => Some(Ok(Token::Identifier(id))),
             };
         }
-        let problem_ix = if let Some((f, _)) = self.chars.peek() {
-            *f
-        } else {
-            self.whole.len() - 1
-        };
-        let report = miette::miette!(
-            labels = vec![LabeledSpan::at(start..problem_ix, "Problem is here")],
-            "Parsing identifier error"
-        );
-        Some(Err(report))
+        Some(Ok(Token::Eof))
     }
 }
 
