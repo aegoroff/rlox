@@ -7,6 +7,7 @@ pub struct Lexer<'a> {
     whole: &'a str,
 }
 
+#[derive(PartialEq, Debug)]
 pub enum Token<'a> {
     LeftParen,
     RightParen,
@@ -313,5 +314,29 @@ impl Display for Token<'_> {
             Token::While => write!(f, "WHILE"),
             Token::Eof => write!(f, "EOF"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case("(", vec![Token::LeftParen] ; "Left paren")]
+    #[test_case(")", vec![Token::RightParen] ; "Right paren")]
+    #[test_case("()", vec![Token::LeftParen, Token::RightParen] ; "Both paren")]
+    #[test_case("var x = 2+3;", vec![Token::Var, Token::Identifier("x"), Token::Equal, Token::Number(2.0), Token::Plus, Token::Number(3.0), Token::Semicolon] ; "Expression")]
+    #[test_case(r#""str""#, vec![Token::String("str")] ; "String")]
+    #[test_case(r#""str" // Comment"#, vec![Token::String("str")] ; "String + Comment")]
+    #[test_case(r#"1.2.3 4"#, vec![Token::Dot, Token::Number(3.0), Token::Eof] ; "Bad number")]
+    fn positive_tests(input: &str, expected: Vec<Token>) {
+        // Arrange
+        let lexer = Lexer::new(input);
+
+        // Act
+        let actual: Vec<Token> = lexer.into_iter().filter_map(|t| t.ok()).collect();
+
+        // Assert
+        assert_eq!(expected, actual);
     }
 }
