@@ -149,14 +149,18 @@ impl<'a> Lexer<'a> {
             }
             if *next == '.' {
                 if with_fractional {
-                    return Self::parse_number(self.whole, start, *finish);
+                    let report = miette::miette!(
+                        labels = vec![LabeledSpan::at(start..=*finish, "Invalid number")],
+                        "Parsing fractional f64 failed"
+                    );
+                    return Some(Err(report));
                 }
                 self.chars.next();
                 with_fractional = true;
             } else {
                 match *next {
                     // letters and quotes are not allowed after number literal
-                    'a'..='z' | 'A'..='Z' | '"' | '.' => {
+                    'a'..='z' | 'A'..='Z' | '"' => {
                         let report = miette::miette!(
                             labels = vec![LabeledSpan::at(start..=*finish, "Invalid number")],
                             "Parsing fractional f64 failed"
