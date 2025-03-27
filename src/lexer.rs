@@ -47,7 +47,6 @@ pub enum Token<'a> {
     True,
     Var,
     While,
-    Eof,
 }
 
 impl<'a> Lexer<'a> {
@@ -142,48 +141,45 @@ impl<'a> Lexer<'a> {
 
     fn number(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
         let mut with_fractional = false;
+        let mut finish = start;
 
-        while let Some((finish, next)) = self.chars.peek() {
-            if next.is_ascii_digit() {
-                self.chars.next();
-                continue;
-            }
-            if *next == '.' {
-                if with_fractional {
-                    let report = miette::miette!(
-                        labels = vec![LabeledSpan::at(*finish..=*finish, "Dot not allowed here")],
-                        "Parsing fractional f64 failed"
-                    );
-                    return Some(Err(report));
+        while let Some((i, next)) = self.chars.peek() {
+            finish = *i;
+
+            match *next {
+                '0'..='9' => {
+                    self.chars.next();
+                    continue;
                 }
-                self.chars.next();
-                with_fractional = true;
-            } else {
-                match *next {
-                    // letters and quotes are not allowed after number literal
-                    'a'..='z' | 'A'..='Z' | '"' => {
+                '.' => {
+                    if with_fractional {
                         let report = miette::miette!(
-                            labels = vec![LabeledSpan::at(start..=*finish, "Invalid number")],
+                            labels = vec![LabeledSpan::at(finish..=finish, "Dot not allowed here")],
                             "Parsing fractional f64 failed"
                         );
                         return Some(Err(report));
                     }
-                    _ => {
-                        return Self::parse_number(self.whole, start, *finish);
-                    }
+                    self.chars.next();
+                    with_fractional = true;
+                    continue;
+                }
+                'a'..='z' | 'A'..='Z' | '"' => {
+                    let report = miette::miette!(
+                        labels = vec![LabeledSpan::at(start..=finish, "Invalid number")],
+                        "Parsing fractional f64 failed"
+                    );
+                    return Some(Err(report));
+                }
+                _ => {
+                    finish -= 1;
+                    break;
                 }
             }
         }
-        Some(Ok(Token::Eof))
-    }
-
-    fn parse_number(whole: &str, start: usize, finish: usize) -> Option<miette::Result<Token<'a>>> {
-        let result = whole[start..finish].parse().map_err(|e| {
+        let range = start..=finish;
+        let result = self.whole[range.clone()].parse().map_err(|e| {
             miette::miette!(
-                labels = vec![LabeledSpan::at(
-                    start..finish,
-                    format!("Problem is here: {e}")
-                )],
+                labels = vec![LabeledSpan::at(range, format!("Problem is here: {e}"))],
                 "Parsing fractional f64 failed"
             )
         });
@@ -194,36 +190,40 @@ impl<'a> Lexer<'a> {
     }
 
     fn identifier_or_keyword(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
-        while let Some((finish, next)) = self.chars.peek() {
+        let mut finish = start;
+        while let Some((i, next)) = self.chars.peek() {
+            finish = *i;
             match *next {
                 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' => {
                     self.chars.next();
                     continue;
                 }
-                _ => {}
+                _ => {
+                    finish -= 1;
+                    break;
+                }
             }
-            let id = &self.whole[start..*finish];
-            return match id {
-                "and" => Some(Ok(Token::And)),
-                "class" => Some(Ok(Token::Class)),
-                "else" => Some(Ok(Token::Else)),
-                "false" => Some(Ok(Token::False)),
-                "fun" => Some(Ok(Token::Fun)),
-                "for" => Some(Ok(Token::For)),
-                "if" => Some(Ok(Token::If)),
-                "nil" => Some(Ok(Token::Nil)),
-                "or" => Some(Ok(Token::Or)),
-                "print" => Some(Ok(Token::Print)),
-                "return" => Some(Ok(Token::Return)),
-                "super" => Some(Ok(Token::Super)),
-                "this" => Some(Ok(Token::This)),
-                "true" => Some(Ok(Token::True)),
-                "var" => Some(Ok(Token::Var)),
-                "while" => Some(Ok(Token::While)),
-                _ => Some(Ok(Token::Identifier(id))),
-            };
         }
-        Some(Ok(Token::Eof))
+        let id = &self.whole[start..=finish];
+        match id {
+            "and" => Some(Ok(Token::And)),
+            "class" => Some(Ok(Token::Class)),
+            "else" => Some(Ok(Token::Else)),
+            "false" => Some(Ok(Token::False)),
+            "fun" => Some(Ok(Token::Fun)),
+            "for" => Some(Ok(Token::For)),
+            "if" => Some(Ok(Token::If)),
+            "nil" => Some(Ok(Token::Nil)),
+            "or" => Some(Ok(Token::Or)),
+            "print" => Some(Ok(Token::Print)),
+            "return" => Some(Ok(Token::Return)),
+            "super" => Some(Ok(Token::Super)),
+            "this" => Some(Ok(Token::This)),
+            "true" => Some(Ok(Token::True)),
+            "var" => Some(Ok(Token::Var)),
+            "while" => Some(Ok(Token::While)),
+            _ => Some(Ok(Token::Identifier(id))),
+        }
     }
 }
 
@@ -312,7 +312,6 @@ impl Display for Token<'_> {
             Token::True => write!(f, "TRUE"),
             Token::Var => write!(f, "VAR"),
             Token::While => write!(f, "WHILE"),
-            Token::Eof => write!(f, "EOF"),
         }
     }
 }
@@ -328,7 +327,10 @@ mod tests {
     #[test_case("var x = 2+3;", vec![Token::Var, Token::Identifier("x"), Token::Equal, Token::Number(2.0), Token::Plus, Token::Number(3.0), Token::Semicolon] ; "Expression")]
     #[test_case(r#""str""#, vec![Token::String("str")] ; "String")]
     #[test_case(r#""str" // Comment"#, vec![Token::String("str")] ; "String + Comment")]
-    #[test_case(r#"1.2.3 4"#, vec![Token::Dot, Token::Number(3.0), Token::Eof] ; "Bad number")]
+    #[test_case(r#"1.2.3 4"#, vec![Token::Dot, Token::Number(3.0), Token::Number(4.0)] ; "Bad number")]
+    #[test_case(r#"id"#, vec![Token::Identifier("id")] ; "Single identifier")]
+    #[test_case(r#"var"#, vec![Token::Var] ; "Single var")]
+    #[test_case(r#"1.2"#, vec![Token::Number(1.2)] ; "Single number")]
     fn positive_tests(input: &str, expected: Vec<Token>) {
         // Arrange
         let lexer = Lexer::new(input);
