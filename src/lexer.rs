@@ -148,16 +148,15 @@ impl<'a> Lexer<'a> {
 
             match *next {
                 '0'..='9' => {
+                    finish += 1; // to handle cases where digit is the last char
                     self.chars.next();
                     continue;
                 }
                 '.' => {
                     if with_fractional {
-                        let report = miette::miette!(
-                            labels = vec![LabeledSpan::at(finish..=finish, "Dot not allowed here")],
-                            "Parsing fractional f64 failed"
-                        );
-                        return Some(Err(report));
+                        // we have already parsed dot so stop here and not consume dot
+                        // that will be parsed later
+                        return Lexer::parse_number(self.whole, start, finish);
                     }
                     self.chars.next();
                     with_fractional = true;
@@ -170,16 +169,23 @@ impl<'a> Lexer<'a> {
                     );
                     return Some(Err(report));
                 }
-                _ => {
-                    finish -= 1;
-                    break;
-                }
+                _ => return Lexer::parse_number(self.whole, start, finish),
             }
         }
-        let range = start..=finish;
-        let result = self.whole[range.clone()].parse().map_err(|e| {
+        // special case - single digit number at the end
+        if start == finish {
+            finish += 1;
+        }
+        Lexer::parse_number(self.whole, start, finish)
+    }
+
+    fn parse_number(whole: &str, start: usize, finish: usize) -> Option<miette::Result<Token<'a>>> {
+        let result = whole[start..finish].parse().map_err(|e| {
             miette::miette!(
-                labels = vec![LabeledSpan::at(range, format!("Problem is here: {e}"))],
+                labels = vec![LabeledSpan::at(
+                    start..finish,
+                    format!("Problem is here: {e}")
+                )],
                 "Parsing fractional f64 failed"
             )
         });
@@ -327,10 +333,12 @@ mod tests {
     #[test_case("var x = 2+3;", vec![Token::Var, Token::Identifier("x"), Token::Equal, Token::Number(2.0), Token::Plus, Token::Number(3.0), Token::Semicolon] ; "Expression")]
     #[test_case(r#""str""#, vec![Token::String("str")] ; "String")]
     #[test_case(r#""str" // Comment"#, vec![Token::String("str")] ; "String + Comment")]
-    #[test_case(r#"1.2.3 4"#, vec![Token::Dot, Token::Number(3.0), Token::Number(4.0)] ; "Bad number")]
+    #[test_case(r#"1.2.3 4"#, vec![Token::Number(1.2), Token::Dot, Token::Number(3.0), Token::Number(4.0)] ; "Bad number")]
     #[test_case(r#"id"#, vec![Token::Identifier("id")] ; "Single identifier")]
     #[test_case(r#"var"#, vec![Token::Var] ; "Single var")]
     #[test_case(r#"1.2"#, vec![Token::Number(1.2)] ; "Single number")]
+    #[test_case(r#"3 4"#, vec![Token::Number(3.0), Token::Number(4.0)] ; "Couple nums separated space")]
+    #[test_case(r#"3 45"#, vec![Token::Number(3.0), Token::Number(45.0)] ; "Couple nums separated space second above 10")]
     fn positive_tests(input: &str, expected: Vec<Token>) {
         // Arrange
         let lexer = Lexer::new(input);
