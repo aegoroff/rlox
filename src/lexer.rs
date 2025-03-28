@@ -159,9 +159,9 @@ impl<'a> Lexer<'a> {
     fn skip_digits(&mut self, start: usize) -> usize {
         let mut finish = start;
         while let Some((i, next)) = self.chars.peek() {
-            finish = *i;
             match *next {
                 '0'..='9' => {
+                    finish = *i;
                     self.chars.next();
                     continue;
                 }
