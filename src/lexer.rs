@@ -140,50 +140,42 @@ impl<'a> Lexer<'a> {
     }
 
     fn number(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
-        let mut with_fractional = false;
-        let mut finish = start;
+        let mut finish = self.skip_digits(start);
 
-        while let Some((i, next)) = self.chars.peek() {
-            finish = *i;
-
-            match *next {
-                '0'..='9' => {
-                    finish += 1; // to handle cases where digit is the last char
-                    self.chars.next();
-                    continue;
+        if let Some((i, next)) = self.chars.peek() {
+            if *next == '.' {
+                let next_ix = *i + 1;
+                if let Some("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9") =
+                    self.whole.get(next_ix..=next_ix)
+                {
+                    self.chars.next(); // consume dot
+                    finish = self.skip_digits(next_ix);
                 }
-                '.' => {
-                    if with_fractional {
-                        // we have already parsed dot so stop here and not consume dot
-                        // that will be parsed later
-                        return Lexer::parse_number(self.whole, start, finish);
-                    }
-                    self.chars.next();
-                    with_fractional = true;
-                    continue;
-                }
-                'a'..='z' | 'A'..='Z' | '"' => {
-                    let report = miette::miette!(
-                        labels = vec![LabeledSpan::at(start..=finish, "Invalid number")],
-                        "Parsing fractional f64 failed"
-                    );
-                    return Some(Err(report));
-                }
-                _ => return Lexer::parse_number(self.whole, start, finish),
             }
-        }
-        // special case - single digit number at the end
-        if start == finish {
-            finish += 1;
-        }
+        };
         Lexer::parse_number(self.whole, start, finish)
     }
 
+    fn skip_digits(&mut self, start: usize) -> usize {
+        let mut finish = start;
+        while let Some((i, next)) = self.chars.peek() {
+            finish = *i;
+            match *next {
+                '0'..='9' => {
+                    self.chars.next();
+                    continue;
+                }
+                _ => break,
+            }
+        }
+        finish
+    }
+
     fn parse_number(whole: &str, start: usize, finish: usize) -> Option<miette::Result<Token<'a>>> {
-        let result = whole[start..finish].parse().map_err(|e| {
+        let result = whole[start..=finish].parse().map_err(|e| {
             miette::miette!(
                 labels = vec![LabeledSpan::at(
-                    start..finish,
+                    start..=finish,
                     format!("Problem is here: {e}")
                 )],
                 "Parsing fractional f64 failed"
@@ -267,7 +259,7 @@ impl<'a> Iterator for Lexer<'a> {
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(
-                        i..i + 1,
+                        i..=i,
                         format!("Unexpected char {current} at {i}")
                     ),],
                     "Unexpected char"
@@ -339,6 +331,7 @@ mod tests {
     #[test_case(r#"1.2"#, vec![Token::Number(1.2)] ; "Single number")]
     #[test_case(r#"3 4"#, vec![Token::Number(3.0), Token::Number(4.0)] ; "Couple nums separated space")]
     #[test_case(r#"3 45"#, vec![Token::Number(3.0), Token::Number(45.0)] ; "Couple nums separated space second above 10")]
+    #[test_case(r#"123."#, vec![Token::Number(123.0), Token::Dot] ; "Number with trailing dot")]
     fn positive_tests(input: &str, expected: Vec<Token>) {
         // Arrange
         let lexer = Lexer::new(input);

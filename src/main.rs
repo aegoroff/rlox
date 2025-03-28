@@ -70,7 +70,7 @@ fn scan(content: String) -> miette::Result<()> {
     }
     if !errors.is_empty() {
         let report = miette!(labels = errors, "errors occured");
-        println!("{:?}", report.with_source_code(content))
+        println!("{:?}", report.with_source_code(content));
     }
     Ok(())
 }
