@@ -43,7 +43,8 @@ fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
     let content = fs::read_to_string(path)
         .into_diagnostic()
         .wrap_err(format!("Failed to read: {path}"))?;
-    scan(content)
+    scan(content);
+    Ok(())
 }
 
 fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
@@ -52,10 +53,11 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
         .read_to_string(&mut content)
         .into_diagnostic()
         .wrap_err("Failed to read stdin content")?;
-    scan(content)
+    scan(content);
+    Ok(())
 }
 
-fn scan(content: String) -> miette::Result<()> {
+fn scan(content: String) {
     let scanner = Lexer::new(&content);
     let mut errors = vec![];
     for t in scanner {
@@ -72,7 +74,6 @@ fn scan(content: String) -> miette::Result<()> {
         let report = miette!(labels = errors, "errors occured");
         println!("{:?}", report.with_source_code(content));
     }
-    Ok(())
 }
 
 fn print_bugreport(_matches: &ArgMatches) {
