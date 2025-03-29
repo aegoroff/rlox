@@ -50,6 +50,7 @@ pub enum Token<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    #[must_use]
     pub fn new(content: &'a str) -> Self {
         Self {
             chars: content.char_indices().peekable(),
@@ -57,21 +58,16 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn two_char_token(
-        &mut self,
-        next: char,
-        success: Token<'a>,
-        failure: Token<'a>,
-    ) -> Option<miette::Result<Token<'a>>> {
+    fn two_char_token(&mut self, next: char, success: Token<'a>, failure: Token<'a>) -> Token<'a> {
         if let Some((_, peek)) = self.chars.peek() {
             if next == *peek {
                 self.chars.next(); // if match advance iterator
-                Some(Ok(success))
+                success
             } else {
-                Some(Ok(failure))
+                failure
             }
         } else {
-            Some(Ok(failure))
+            failure
         }
     }
 
@@ -121,10 +117,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn string(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
+    fn string(&mut self, start: usize) -> miette::Result<Token<'a>> {
         for (finish, next) in self.chars.by_ref() {
             if next == '"' {
-                return Some(Ok(Token::String(&self.whole[start + 1..finish])));
+                return Ok(Token::String(&self.whole[start + 1..finish]));
             }
         }
         let problem_ix = if let Some((f, _)) = self.chars.peek() {
@@ -136,18 +132,16 @@ impl<'a> Lexer<'a> {
             labels = vec![LabeledSpan::at(start..=problem_ix, "Unterminated string")],
             "String parsing error"
         );
-        Some(Err(report))
+        Err(report)
     }
 
-    fn number(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
+    fn number(&mut self, start: usize) -> miette::Result<Token<'a>> {
         let mut finish = self.skip_digits(start);
 
         if let Some((i, next)) = self.chars.peek() {
             if *next == '.' {
                 let next_ix = *i + 1;
-                if let Some("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9") =
-                    self.whole.get(next_ix..=next_ix)
-                {
+                if let Some('0'..='9') = self.whole.chars().nth(next_ix) {
                     self.chars.next(); // consume dot
                     finish = self.skip_digits(next_ix);
                 }
@@ -171,7 +165,7 @@ impl<'a> Lexer<'a> {
         finish
     }
 
-    fn parse_number(whole: &str, start: usize, finish: usize) -> Option<miette::Result<Token<'a>>> {
+    fn parse_number(whole: &str, start: usize, finish: usize) -> miette::Result<Token<'a>> {
         let result = whole[start..=finish].parse().map_err(|e| {
             miette::miette!(
                 labels = vec![LabeledSpan::at(
@@ -182,12 +176,12 @@ impl<'a> Lexer<'a> {
             )
         });
         match result {
-            Ok(value) => Some(Ok(Token::Number(value))),
-            Err(e) => Some(Err(e)),
+            Ok(value) => Ok(Token::Number(value)),
+            Err(e) => Err(e),
         }
     }
 
-    fn identifier_or_keyword(&mut self, start: usize) -> Option<miette::Result<Token<'a>>> {
+    fn identifier_or_keyword(&mut self, start: usize) -> Token<'a> {
         let mut finish = start;
         while let Some((i, next)) = self.chars.peek() {
             finish = *i;
@@ -204,23 +198,23 @@ impl<'a> Lexer<'a> {
         }
         let id = &self.whole[start..=finish];
         match id {
-            "and" => Some(Ok(Token::And)),
-            "class" => Some(Ok(Token::Class)),
-            "else" => Some(Ok(Token::Else)),
-            "false" => Some(Ok(Token::False)),
-            "fun" => Some(Ok(Token::Fun)),
-            "for" => Some(Ok(Token::For)),
-            "if" => Some(Ok(Token::If)),
-            "nil" => Some(Ok(Token::Nil)),
-            "or" => Some(Ok(Token::Or)),
-            "print" => Some(Ok(Token::Print)),
-            "return" => Some(Ok(Token::Return)),
-            "super" => Some(Ok(Token::Super)),
-            "this" => Some(Ok(Token::This)),
-            "true" => Some(Ok(Token::True)),
-            "var" => Some(Ok(Token::Var)),
-            "while" => Some(Ok(Token::While)),
-            _ => Some(Ok(Token::Identifier(id))),
+            "and" => Token::And,
+            "class" => Token::Class,
+            "else" => Token::Else,
+            "false" => Token::False,
+            "fun" => Token::Fun,
+            "for" => Token::For,
+            "if" => Token::If,
+            "nil" => Token::Nil,
+            "or" => Token::Or,
+            "print" => Token::Print,
+            "return" => Token::Return,
+            "super" => Token::Super,
+            "this" => Token::This,
+            "true" => Token::True,
+            "var" => Token::Var,
+            "while" => Token::While,
+            _ => Token::Identifier(id),
         }
     }
 }
@@ -242,10 +236,22 @@ impl<'a> Iterator for Lexer<'a> {
                 '+' => Some(Ok(Token::Plus)),
                 ';' => Some(Ok(Token::Semicolon)),
                 '*' => Some(Ok(Token::Star)),
-                '=' => self.two_char_token('=', Token::EqualEqual, Token::Equal),
-                '>' => self.two_char_token('=', Token::GreaterEqual, Token::Greater),
-                '<' => self.two_char_token('=', Token::LessEqual, Token::Less),
-                '!' => self.two_char_token('=', Token::BangEqual, Token::BangEqual),
+                '=' => Some(Ok(self.two_char_token(
+                    '=',
+                    Token::EqualEqual,
+                    Token::Equal,
+                ))),
+                '>' => Some(Ok(self.two_char_token(
+                    '=',
+                    Token::GreaterEqual,
+                    Token::Greater,
+                ))),
+                '<' => Some(Ok(self.two_char_token('=', Token::LessEqual, Token::Less))),
+                '!' => Some(Ok(self.two_char_token(
+                    '=',
+                    Token::BangEqual,
+                    Token::BangEqual,
+                ))),
                 '/' => {
                     if let Some(t) = self.skip_comment_or(i, Token::Slash) {
                         Some(t)
@@ -253,9 +259,9 @@ impl<'a> Iterator for Lexer<'a> {
                         continue;
                     }
                 }
-                '"' => self.string(i),
-                'a'..='z' | 'A'..='Z' | '_' => self.identifier_or_keyword(i),
-                '0'..='9' => self.number(i),
+                '"' => Some(self.string(i)),
+                'a'..='z' | 'A'..='Z' | '_' => Some(Ok(self.identifier_or_keyword(i))),
+                '0'..='9' => Some(self.number(i)),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(
