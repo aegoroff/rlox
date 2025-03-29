@@ -316,6 +316,9 @@ mod tests {
 
     #[test_case("(", vec![Token::LeftParen] ; "Left paren")]
     #[test_case("!!=", vec![Token::Bang, Token::BangEqual] ; "Bang tests")]
+    #[test_case(">>=", vec![Token::Greater, Token::GreaterEqual] ; "Greater tests")]
+    #[test_case("<<=", vec![Token::Less, Token::LessEqual] ; "Less tests")]
+    #[test_case("===", vec![Token::EqualEqual, Token::Equal] ; "Equal tests")]
     #[test_case(")", vec![Token::RightParen] ; "Right paren")]
     #[test_case("()", vec![Token::LeftParen, Token::RightParen] ; "Both paren")]
     #[test_case("var x = 2+3;", vec![Token::Var, Token::Identifier("x"), Token::Equal, Token::Number(2.0), Token::Plus, Token::Number(3.0), Token::Semicolon] ; "Expression")]
