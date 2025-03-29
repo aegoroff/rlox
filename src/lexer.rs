@@ -118,16 +118,13 @@ impl<'a> Lexer<'a> {
     }
 
     fn string(&mut self, start: usize) -> miette::Result<Token<'a>> {
+        let mut problem_ix = start;
         for (finish, next) in self.chars.by_ref() {
+            problem_ix = finish;
             if next == '"' {
                 return Ok(Token::String(&self.whole[start + 1..finish]));
             }
         }
-        let problem_ix = if let Some((f, _)) = self.chars.peek() {
-            *f
-        } else {
-            self.whole.len() - 1
-        };
         let report = miette::miette!(
             labels = vec![LabeledSpan::at(start..=problem_ix, "Unterminated string")],
             "String parsing error"
