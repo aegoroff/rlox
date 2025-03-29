@@ -36,6 +36,11 @@ fn main() -> miette::Result<()> {
     }
 }
 
+/// Scans file specified.
+///
+/// # Errors
+///
+/// This function will return an error if scanning failed.
 fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
     let path = cmd
         .get_one::<String>(PATH)
@@ -47,6 +52,11 @@ fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
     Ok(())
 }
 
+/// Scans data from standard input.
+///
+/// # Errors
+///
+/// This function will return an error if scanning failed.
 fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
     let mut content = String::new();
     io::stdin()
