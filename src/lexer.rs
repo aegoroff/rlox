@@ -147,7 +147,19 @@ impl<'a> Lexer<'a> {
                 }
             }
         };
-        Lexer::parse_number(self.whole, start, finish)
+        let result = self.whole[start..=finish].parse().map_err(|e| {
+            miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    format!("Problem is here: {e}")
+                )],
+                "Parsing fractional f64 failed"
+            )
+        });
+        match result {
+            Ok(value) => Ok(Token::Number(value)),
+            Err(e) => Err(e),
+        }
     }
 
     fn skip_digits(&mut self, start: usize) -> usize {
@@ -163,22 +175,6 @@ impl<'a> Lexer<'a> {
             }
         }
         finish
-    }
-
-    fn parse_number(whole: &str, start: usize, finish: usize) -> miette::Result<Token<'a>> {
-        let result = whole[start..=finish].parse().map_err(|e| {
-            miette::miette!(
-                labels = vec![LabeledSpan::at(
-                    start..=finish,
-                    format!("Problem is here: {e}")
-                )],
-                "Parsing fractional f64 failed"
-            )
-        });
-        match result {
-            Ok(value) => Ok(Token::Number(value)),
-            Err(e) => Err(e),
-        }
     }
 
     fn identifier_or_keyword(&mut self, start: usize) -> Token<'a> {
