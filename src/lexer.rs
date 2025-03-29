@@ -240,11 +240,7 @@ impl<'a> Iterator for Lexer<'a> {
                     Token::Greater,
                 ))),
                 '<' => Some(Ok(self.two_char_token('=', Token::LessEqual, Token::Less))),
-                '!' => Some(Ok(self.two_char_token(
-                    '=',
-                    Token::BangEqual,
-                    Token::BangEqual,
-                ))),
+                '!' => Some(Ok(self.two_char_token('=', Token::BangEqual, Token::Bang))),
                 '/' => {
                     if let Some(t) = self.skip_comment_or(i, Token::Slash) {
                         Some(t)
@@ -319,6 +315,7 @@ mod tests {
     use test_case::test_case;
 
     #[test_case("(", vec![Token::LeftParen] ; "Left paren")]
+    #[test_case("!!=", vec![Token::Bang, Token::BangEqual] ; "Bang tests")]
     #[test_case(")", vec![Token::RightParen] ; "Right paren")]
     #[test_case("()", vec![Token::LeftParen, Token::RightParen] ; "Both paren")]
     #[test_case("var x = 2+3;", vec![Token::Var, Token::Identifier("x"), Token::Equal, Token::Number(2.0), Token::Plus, Token::Number(3.0), Token::Semicolon] ; "Expression")]
