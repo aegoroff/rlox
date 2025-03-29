@@ -39,6 +39,12 @@ impl Expr for LiteralExpr<'_> {
     }
 }
 
+impl Expr for &LiteralExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_literal(self)
+    }
+}
+
 pub struct BinaryExpr<'a> {
     pub operator: Token<'a>,
     pub left: Box<dyn Expr>,
@@ -68,6 +74,12 @@ impl Expr for UnaryExpr<'_> {
     }
 }
 
+impl Expr for &UnaryExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_unary_expr(self)
+    }
+}
+
 pub struct AssignExpr<'a> {
     pub name: Token<'a>,
     pub expr: Box<dyn Expr>,
@@ -85,6 +97,12 @@ pub struct CallExpr<'a> {
     pub args: Vec<Box<dyn Expr>>,
 }
 
+impl Expr for CallExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_call_expr(self)
+    }
+}
+
 impl Expr for &CallExpr<'_> {
     fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
         visitor.visit_call_expr(self)
@@ -94,6 +112,12 @@ impl Expr for &CallExpr<'_> {
 pub struct GetExpr<'a> {
     pub name: Token<'a>,
     pub object: Box<dyn Expr>,
+}
+
+impl Expr for GetExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_get_expr(self)
+    }
 }
 
 impl Expr for &GetExpr<'_> {
@@ -106,13 +130,13 @@ pub struct GroupingExpr {
     pub expression: Box<dyn Expr>,
 }
 
-impl Expr for &GroupingExpr {
+impl Expr for GroupingExpr {
     fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
         visitor.visit_grouping_expr(self)
     }
 }
 
-impl Expr for GroupingExpr {
+impl Expr for &GroupingExpr {
     fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
         visitor.visit_grouping_expr(self)
     }
@@ -130,10 +154,22 @@ impl Expr for LogicalExpr<'_> {
     }
 }
 
+impl Expr for &LogicalExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_logical_expr(self)
+    }
+}
+
 pub struct SetExpr<'a> {
     pub name: Token<'a>,
     pub object: Box<dyn Expr>,
     pub value: Box<dyn Expr>,
+}
+
+impl Expr for SetExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_set_expr(self)
+    }
 }
 
 impl Expr for &SetExpr<'_> {
@@ -163,6 +199,12 @@ pub struct ThisExpr<'a> {
     pub keyword: Token<'a>,
 }
 
+impl Expr for ThisExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_this_expr(self)
+    }
+}
+
 impl Expr for &ThisExpr<'_> {
     fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
         visitor.visit_this_expr(self)
@@ -171,6 +213,12 @@ impl Expr for &ThisExpr<'_> {
 
 pub struct VariableExpr<'a> {
     pub name: Token<'a>,
+}
+
+impl Expr for VariableExpr<'_> {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        visitor.visit_variable_expr(self)
+    }
 }
 
 impl Expr for &VariableExpr<'_> {
