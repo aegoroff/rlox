@@ -331,7 +331,8 @@ mod tests {
     #[test_case(r#"3 4"#, vec![Token::Number(3.0), Token::Number(4.0)] ; "Couple nums separated space")]
     #[test_case(r#"3 45"#, vec![Token::Number(3.0), Token::Number(45.0)] ; "Couple nums separated space second above 10")]
     #[test_case(r#"123."#, vec![Token::Number(123.0), Token::Dot] ; "Number with trailing dot")]
-    #[test_case(r#" .456 123. "#, vec![Token::Dot, Token::Number(456.0), Token::Number(123.0), Token::Dot] ; "Number with starting dot and number with trailing dot")]
+    #[test_case(r#" .456 123. "#, vec![Token::Dot, Token::Number(456.0), Token::Number(123.0),
+        Token::Dot] ; "Number with starting dot and number with trailing dot")]
     fn positive_tests(input: &str, expected: Vec<Token>) {
         // Arrange
         let lexer = Lexer::new(input);
