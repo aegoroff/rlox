@@ -14,6 +14,12 @@ pub struct Literal<'a> {
     pub token: Token<'a>,
 }
 
+impl<'a> Literal<'a> {
+    pub fn new(token: Token<'a>) -> Self {
+        Self { token }
+    }
+}
+
 impl Expr for Literal<'_> {
     fn visit<V: Visitor>(&self, visitor: V) {
         visitor.visit_literal(self);
