@@ -372,12 +372,14 @@ impl ExprVisitor<String> for &AstPrinter {
 
     fn visit_binary_expr(&self, binary: &BinaryExpr) -> String {
         let op = format!("{}", binary.operator);
-        self.parenthesize(&op, vec![binary.left.as_ref(), binary.right.as_ref()])
+        //self.parenthesize(&op, vec![binary.left.as_ref(), binary.right.as_ref()])
+        op
     }
 
     fn visit_unary_expr(&self, unary: &UnaryExpr) -> String {
         let op = format!("{}", unary.operator);
-        self.parenthesize(&op, vec![unary.right.as_ref()])
+        //self.parenthesize(&op, vec![unary.right.as_ref()])
+        op
     }
 
     fn visit_assign_expr(&self, _assign: &AssignExpr) -> String {
