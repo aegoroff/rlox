@@ -23,12 +23,6 @@ pub trait Expr {
         Self: Sized;
 }
 
-impl Expr for &dyn Expr {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        self.accept(visitor)
-    }
-}
-
 pub struct LiteralExpr<'a> {
     pub token: Option<Token<'a>>,
 }
