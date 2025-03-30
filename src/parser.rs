@@ -23,6 +23,12 @@ pub trait Expr {
         Self: Sized;
 }
 
+impl Expr for &dyn Expr {
+    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
+        self.accept(visitor)
+    }
+}
+
 pub struct LiteralExpr<'a> {
     pub token: Option<Token<'a>>,
 }
@@ -347,7 +353,7 @@ impl<E: Expr, S: Stmt> Stmt for WhileStmt<E, S> {
 pub struct AstPrinter {}
 
 impl AstPrinter {
-    fn parenthesize(&self, name: &str, expressions: Vec<&dyn Expr>) -> String {
+    fn parenthesize(&self, name: &str, expressions: Vec<impl Expr>) -> String {
         let expressions = expressions
             .iter()
             .map(|e| e.accept(self))
