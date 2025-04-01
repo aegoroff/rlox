@@ -2,352 +2,91 @@ use crate::lexer::Token;
 
 // Expressions
 
-pub trait ExprVisitor<R> {
-    fn visit_literal(&self, literal: &LiteralExpr) -> R;
-    fn visit_binary_expr(&self, binary: &BinaryExpr) -> R;
-    fn visit_unary_expr(&self, unary: &UnaryExpr) -> R;
-    fn visit_assign_expr(&self, assign: &AssignExpr) -> R;
-    fn visit_call_expr(&self, call: &CallExpr) -> R;
-    fn visit_get_expr(&self, get: &GetExpr) -> R;
-    fn visit_grouping_expr(&self, grouping: &GroupingExpr) -> R;
-    fn visit_logical_expr(&self, logical: &LogicalExpr) -> R;
-    fn visit_set_expr(&self, set: &SetExpr) -> R;
-    fn visit_super_expr(&self, super_expr: &SuperExpr) -> R;
-    fn visit_this_expr(&self, this: &ThisExpr) -> R;
-    fn visit_variable_expr(&self, variable: &VariableExpr) -> R;
+pub trait ExprVisitor<'a, R> {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> R;
+    fn visit_binary_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
+    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> R;
+    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> R;
+    fn visit_call_expr(&self, call: &Expr<'a>) -> R;
+    fn visit_get_expr(&self, get: &Expr<'a>) -> R;
+    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> R;
+    fn visit_logical_expr(&self, logical: &Expr<'a>) -> R;
+    fn visit_set_expr(&self, set: &Expr<'a>) -> R;
+    fn visit_super_expr(&self, super_expr: &Expr<'a>) -> R;
+    fn visit_this_expr(&self, this: &Expr<'a>) -> R;
+    fn visit_variable_expr(&self, variable: &Expr<'a>) -> R;
 }
 
-pub trait Expr {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R
-    where
-        Self: Sized;
+pub enum Expr<'a> {
+    Literal(Option<Token<'a>>),
+    Binary(Token<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
+    Unary(Token<'a>, Box<Expr<'a>>),
+    Assign(Token<'a>, Box<Expr<'a>>),
+    /// paren, callee, args
+    Call(Token<'a>, Box<Expr<'a>>, Vec<Box<Expr<'a>>>),
+    Get(Token<'a>, Box<Expr<'a>>),
+    Grouping(Box<Expr<'a>>),
+    Logical(Token<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
+    /// name, object, value
+    Set(Token<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
+    /// keyword, method
+    Super(Token<'a>, Token<'a>),
+    This(Token<'a>),
+    Variable(Token<'a>),
 }
 
-pub struct LiteralExpr<'a> {
-    pub token: Option<Token<'a>>,
-}
-
-impl<'a> LiteralExpr<'a> {
-    pub fn new(token: Option<Token<'a>>) -> Self {
-        Self { token }
-    }
-}
-
-impl Expr for LiteralExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_literal(self)
-    }
-}
-
-impl Expr for &LiteralExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_literal(self)
-    }
-}
-
-pub struct BinaryExpr<'a> {
-    pub operator: Token<'a>,
-    pub left: Box<dyn Expr>,
-    pub right: Box<dyn Expr>,
-}
-
-impl Expr for BinaryExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_binary_expr(self)
-    }
-}
-
-impl Expr for &BinaryExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_binary_expr(self)
-    }
-}
-
-pub struct UnaryExpr<'a> {
-    pub operator: Token<'a>,
-    pub right: Box<dyn Expr>,
-}
-
-impl Expr for UnaryExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_unary_expr(self)
-    }
-}
-
-impl Expr for &UnaryExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_unary_expr(self)
-    }
-}
-
-pub struct AssignExpr<'a> {
-    pub name: Token<'a>,
-    pub expr: Box<dyn Expr>,
-}
-
-impl Expr for &AssignExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_assign_expr(self)
-    }
-}
-
-pub struct CallExpr<'a> {
-    pub paren: Token<'a>,
-    pub callee: Box<dyn Expr>,
-    pub args: Vec<Box<dyn Expr>>,
-}
-
-impl Expr for CallExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_call_expr(self)
-    }
-}
-
-impl Expr for &CallExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_call_expr(self)
-    }
-}
-
-pub struct GetExpr<'a> {
-    pub name: Token<'a>,
-    pub object: Box<dyn Expr>,
-}
-
-impl Expr for GetExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_get_expr(self)
-    }
-}
-
-impl Expr for &GetExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_get_expr(self)
-    }
-}
-
-pub struct GroupingExpr {
-    pub expression: Box<dyn Expr>,
-}
-
-impl Expr for GroupingExpr {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_grouping_expr(self)
-    }
-}
-
-impl Expr for &GroupingExpr {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_grouping_expr(self)
-    }
-}
-
-pub struct LogicalExpr<'a> {
-    pub operator: Token<'a>,
-    pub left: Box<dyn Expr>,
-    pub right: Box<dyn Expr>,
-}
-
-impl Expr for LogicalExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_logical_expr(self)
-    }
-}
-
-impl Expr for &LogicalExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_logical_expr(self)
-    }
-}
-
-pub struct SetExpr<'a> {
-    pub name: Token<'a>,
-    pub object: Box<dyn Expr>,
-    pub value: Box<dyn Expr>,
-}
-
-impl Expr for SetExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_set_expr(self)
-    }
-}
-
-impl Expr for &SetExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_set_expr(self)
-    }
-}
-
-pub struct SuperExpr<'a> {
-    pub keyword: Token<'a>,
-    pub method: Token<'a>,
-}
-
-impl Expr for SuperExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_super_expr(self)
-    }
-}
-
-impl Expr for &SuperExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_super_expr(self)
-    }
-}
-
-pub struct ThisExpr<'a> {
-    pub keyword: Token<'a>,
-}
-
-impl Expr for ThisExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_this_expr(self)
-    }
-}
-
-impl Expr for &ThisExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_this_expr(self)
-    }
-}
-
-pub struct VariableExpr<'a> {
-    pub name: Token<'a>,
-}
-
-impl Expr for VariableExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_variable_expr(self)
-    }
-}
-
-impl Expr for &VariableExpr<'_> {
-    fn accept<R>(&self, visitor: impl ExprVisitor<R>) -> R {
-        visitor.visit_variable_expr(self)
+impl<'a> Expr<'a> {
+    pub fn accept<R>(&self, visitor: impl ExprVisitor<'a, R>) -> R {
+        match self {
+            Expr::Literal(token) => visitor.visit_literal(token),
+            Expr::Binary(token, left, right) => visitor.visit_binary_expr(token, left, right),
+            Expr::Unary(token, expr) => visitor.visit_unary_expr(token, expr),
+            Expr::Assign(token, expr) => visitor.visit_assign_expr(token, expr),
+            Expr::Call(token, expr, exprs) => todo!(),
+            Expr::Get(token, expr) => todo!(),
+            Expr::Grouping(expr) => visitor.visit_grouping_expr(expr),
+            Expr::Logical(token, expr, expr1) => todo!(),
+            Expr::Set(token, expr, expr1) => todo!(),
+            Expr::Super(token, token1) => todo!(),
+            Expr::This(token) => todo!(),
+            Expr::Variable(token) => todo!(),
+        }
     }
 }
 
 // Statements
 
-pub trait StmtVisitor<R> {
-    fn visit_block_stmt<S: Stmt>(&self, block: &BlockStmt<S>) -> R;
-    fn visit_class_stmt<S: Stmt>(&self, class: &ClassStmt<S>) -> R;
-    fn visit_expression_stmt<E: Expr>(&self, expr: &ExpressionStmt<E>) -> R;
-    fn visit_function_stmt<S: Stmt>(&self, function: &FunctionStmt<S>) -> R;
-    fn visit_if_stmt<E: Expr, S: Stmt>(&self, if_stmt: &IfStmt<E, S>) -> R;
-    fn visit_print_stmt<E: Expr>(&self, print: &PrintStmt<E>) -> R;
-    fn visit_return_stmt<E: Expr>(&self, ret: &ReturnStmt<E>) -> R;
-    fn visit_variable_stmt<E: Expr>(&self, variable: &VariableStmt<E>) -> R;
-    fn visit_while_stmt<E: Expr, S: Stmt>(&self, while_stmt: &WhileStmt<E, S>) -> R;
+pub enum Stmt<'a> {
+    Block(Vec<Box<Stmt<'a>>>),
+    /// name, superclass, methods
+    Class(Token<'a>, Box<Stmt<'a>>, Vec<Box<Stmt<'a>>>),
+    Expression(Expr<'a>),
+    /// token, params, body
+    Function(Token<'a>, Vec<Box<Stmt<'a>>>, Vec<Box<Stmt<'a>>>),
+    /// condition, then, else
+    If(Expr<'a>, Box<Stmt<'a>>, Box<Stmt<'a>>),
+    Print(Expr<'a>),
+    Return(Token<'a>, Expr<'a>),
+    Variable(Token<'a>, Expr<'a>),
+    While(Expr<'a>, Box<Stmt<'a>>),
 }
 
-pub trait Stmt {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R;
-}
-
-pub struct BlockStmt<S: Stmt> {
-    pub args: Vec<S>,
-}
-
-impl<S: Stmt> Stmt for BlockStmt<S> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_block_stmt(self)
-    }
-}
-
-pub struct ClassStmt<'a, S: Stmt> {
-    pub methods: Vec<FunctionStmt<'a, S>>,
-    pub superclass: VariableExpr<'a>,
-    pub name: Token<'a>,
-}
-
-impl<S: Stmt> Stmt for ClassStmt<'_, S> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_class_stmt(self)
-    }
-}
-
-pub struct ExpressionStmt<E: Expr> {
-    pub expression: E,
-}
-
-impl<E: Expr> Stmt for ExpressionStmt<E> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_expression_stmt(self)
-    }
-}
-
-pub struct FunctionStmt<'a, S: Stmt> {
-    pub token: Token<'a>,
-    pub params: Vec<S>,
-    pub body: Vec<S>,
-}
-
-impl<S: Stmt> Stmt for FunctionStmt<'_, S> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_function_stmt(self)
-    }
-}
-
-pub struct IfStmt<E: Expr, S: Stmt> {
-    pub condition: E,
-    pub then_branch: S,
-    pub else_branch: S,
-}
-
-impl<E: Expr, S: Stmt> Stmt for IfStmt<E, S> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_if_stmt(self)
-    }
-}
-
-pub struct PrintStmt<E: Expr> {
-    pub expression: E,
-}
-
-impl<E: Expr> Stmt for PrintStmt<E> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_print_stmt(self)
-    }
-}
-
-pub struct ReturnStmt<'a, E: Expr> {
-    pub token: Token<'a>,
-    pub value: E,
-}
-
-impl<E: Expr> Stmt for ReturnStmt<'_, E> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_return_stmt(self)
-    }
-}
-
-pub struct VariableStmt<'a, E: Expr> {
-    pub token: Token<'a>,
-    pub initializer: E,
-}
-
-impl<E: Expr> Stmt for VariableStmt<'_, E> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_variable_stmt(self)
-    }
-}
-
-pub struct WhileStmt<E: Expr, S: Stmt> {
-    pub condition: E,
-    pub body: S,
-}
-
-impl<E: Expr, S: Stmt> Stmt for WhileStmt<E, S> {
-    fn accept<V: StmtVisitor<R>, R>(&self, visitor: V) -> R {
-        visitor.visit_while_stmt(self)
-    }
+pub trait StmtVisitor<'a, R> {
+    fn visit_block_stmt(&self, block: &Stmt<'a>) -> R;
+    fn visit_class_stmt(&self, class: &Stmt<'a>) -> R;
+    fn visit_expression_stmt(&self, expr: &Stmt<'a>) -> R;
+    fn visit_function_stmt(&self, function: &Stmt<'a>) -> R;
+    fn visit_if_stmt(&self, if_stmt: &Stmt<'a>) -> R;
+    fn visit_print_stmt(&self, print: &Stmt<'a>) -> R;
+    fn visit_return_stmt(&self, ret: &Stmt<'a>) -> R;
+    fn visit_variable_stmt(&self, variable: &Stmt<'a>) -> R;
+    fn visit_while_stmt(&self, while_stmt: &Stmt<'a>) -> R;
 }
 
 pub struct AstPrinter {}
 
 impl AstPrinter {
-    fn parenthesize(&self, name: &str, expressions: Vec<impl Expr>) -> String {
+    fn parenthesize(&self, name: &str, expressions: Vec<&Expr<'_>>) -> String {
         let expressions = expressions
             .iter()
             .map(|e| e.accept(self))
@@ -357,64 +96,62 @@ impl AstPrinter {
         format!("({name} {expressions})")
     }
 
-    pub fn print<E: Expr>(&self, expr: E) {
+    pub fn print(&self, expr: &Expr<'_>) {
         println!("{}", expr.accept(self))
     }
 }
 
-impl ExprVisitor<String> for &AstPrinter {
-    fn visit_literal(&self, literal: &LiteralExpr) -> String {
-        match &literal.token {
+impl<'a> ExprVisitor<'a, String> for &AstPrinter {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> String {
+        match token {
             Some(t) => format!("{t}"),
             None => "null".to_owned(),
         }
     }
 
-    fn visit_binary_expr(&self, binary: &BinaryExpr) -> String {
-        let op = format!("{}", binary.operator);
-        //self.parenthesize(&op, vec![binary.left.as_ref(), binary.right.as_ref()])
-        op
+    fn visit_binary_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> String {
+        let op = format!("{}", operator);
+        self.parenthesize(&op, vec![left, right])
     }
 
-    fn visit_unary_expr(&self, unary: &UnaryExpr) -> String {
-        let op = format!("{}", unary.operator);
-        //self.parenthesize(&op, vec![unary.right.as_ref()])
-        op
+    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> String {
+        let op = format!("{}", operator);
+        self.parenthesize(&op, vec![expr])
     }
 
-    fn visit_assign_expr(&self, _assign: &AssignExpr) -> String {
+    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> String {
         todo!()
     }
 
-    fn visit_call_expr(&self, _call: &CallExpr) -> String {
+    fn visit_call_expr(&self, _call: &Expr<'a>) -> String {
         todo!()
     }
 
-    fn visit_get_expr(&self, _get: &GetExpr) -> String {
+    fn visit_get_expr(&self, _get: &Expr<'a>) -> String {
         todo!()
     }
 
-    fn visit_grouping_expr(&self, grouping: &GroupingExpr) -> String {
+    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> String {
         self.parenthesize("group", vec![grouping])
     }
 
-    fn visit_logical_expr(&self, _logical: &LogicalExpr) -> String {
+    fn visit_logical_expr(&self, _logical: &Expr<'a>) -> String {
         todo!()
     }
 
-    fn visit_set_expr(&self, _set: &SetExpr) -> String {
+    fn visit_set_expr(&self, _set: &Expr<'a>) -> String {
         todo!()
     }
 
-    fn visit_super_expr(&self, _super_expr: &SuperExpr) -> String {
+    fn visit_super_expr(&self, _super_expr: &Expr<'a>) -> String {
         todo!()
     }
 
-    fn visit_this_expr(&self, _this: &ThisExpr) -> String {
+    fn visit_this_expr(&self, _this: &Expr<'a>) -> String {
         todo!()
     }
 
-    fn visit_variable_expr(&self, _variable: &VariableExpr) -> String {
+    fn visit_variable_expr(&self, _variable: &Expr<'a>) -> String {
         todo!()
     }
 }
@@ -426,23 +163,14 @@ mod tests {
     #[test]
     fn ast_printing_test() {
         // Arrange
-        let literal1 = LiteralExpr::new(Some(Token::Number(123.0)));
-        let left = UnaryExpr {
-            operator: Token::Minus,
-            right: Box::new(literal1),
-        };
-        let literal2 = LiteralExpr::new(Some(Token::Number(45.67)));
-        let right = GroupingExpr {
-            expression: Box::new(literal2),
-        };
-        let bin = BinaryExpr {
-            left: Box::new(left),
-            operator: Token::Star,
-            right: Box::new(right),
-        };
+        let literal1 = Expr::Literal(Some(Token::Number(123.0)));
+        let left = Expr::Unary(Token::Minus, Box::new(literal1));
+        let literal2 = Expr::Literal(Some(Token::Number(45.67)));
+        let right = Expr::Grouping(Box::new(literal2));
+        let bin = Expr::Binary(Token::Star, Box::new(left), Box::new(right));
         let ast_printer = AstPrinter {};
 
         // Act
-        ast_printer.print(bin);
+        ast_printer.print(&bin);
     }
 }
