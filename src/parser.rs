@@ -36,7 +36,7 @@ pub enum Expr<'a> {
 }
 
 impl<'a> Expr<'a> {
-    pub fn accept<R>(&self, visitor: impl ExprVisitor<'a, R>) -> R {
+    pub fn accept<R>(&self, visitor: &impl ExprVisitor<'a, R>) -> R {
         match self {
             Expr::Literal(token) => visitor.visit_literal(token),
             Expr::Binary(operator, left, right) => visitor.visit_binary_expr(operator, left, right),
@@ -72,7 +72,7 @@ pub enum Stmt<'a> {
 }
 
 impl<'a> Stmt<'a> {
-    pub fn accept<R>(&self, visitor: impl StmtVisitor<'a, R>) -> R {
+    pub fn accept<R>(&self, visitor: &impl StmtVisitor<'a, R>) -> R {
         match self {
             Stmt::Block(body) => visitor.visit_block_stmt(body),
             Stmt::Class(name, superclass, methods) => {
@@ -114,10 +114,10 @@ pub trait StmtVisitor<'a, R> {
 pub struct AstPrinter {}
 
 impl AstPrinter {
-    fn parenthesize(&self, name: &str, expressions: Vec<&Expr<'_>>) -> String {
+    fn parenthesize(&self, name: &str, expressions: &[&Expr<'_>]) -> String {
         let expressions = expressions
             .iter()
-            .map(|e| e.accept(self))
+            .map(|e| e.accept(&self))
             .collect::<Vec<String>>()
             .join(" ");
 
@@ -125,7 +125,7 @@ impl AstPrinter {
     }
 
     pub fn print(&self, expr: &Expr<'_>) {
-        println!("{}", expr.accept(self))
+        println!("{}", expr.accept(&self));
     }
 }
 
@@ -138,13 +138,13 @@ impl<'a> ExprVisitor<'a, String> for &AstPrinter {
     }
 
     fn visit_binary_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> String {
-        let op = format!("{}", operator);
-        self.parenthesize(&op, vec![left, right])
+        let op = format!("{operator}");
+        self.parenthesize(&op, &[left, right])
     }
 
     fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> String {
-        let op = format!("{}", operator);
-        self.parenthesize(&op, vec![expr])
+        let op = format!("{operator}");
+        self.parenthesize(&op, &[expr])
     }
 
     fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> String {
@@ -172,7 +172,7 @@ impl<'a> ExprVisitor<'a, String> for &AstPrinter {
     }
 
     fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> String {
-        self.parenthesize("group", vec![grouping])
+        self.parenthesize("group", &[grouping])
     }
 
     fn visit_logical_expr(
