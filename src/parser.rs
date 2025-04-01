@@ -7,14 +7,14 @@ pub trait ExprVisitor<'a, R> {
     fn visit_binary_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
     fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> R;
     fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> R;
-    fn visit_call_expr(&self, call: &Expr<'a>) -> R;
-    fn visit_get_expr(&self, get: &Expr<'a>) -> R;
+    fn visit_call_expr(&self, paren: &Token<'a>, callee: &Expr<'a>, args: &[Box<Expr<'a>>]) -> R;
+    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> R;
     fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> R;
-    fn visit_logical_expr(&self, logical: &Expr<'a>) -> R;
-    fn visit_set_expr(&self, set: &Expr<'a>) -> R;
-    fn visit_super_expr(&self, super_expr: &Expr<'a>) -> R;
-    fn visit_this_expr(&self, this: &Expr<'a>) -> R;
-    fn visit_variable_expr(&self, variable: &Expr<'a>) -> R;
+    fn visit_logical_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
+    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> R;
+    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> R;
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> R;
+    fn visit_variable_expr(&self, name: &Token<'a>) -> R;
 }
 
 pub enum Expr<'a> {
@@ -42,14 +42,14 @@ impl<'a> Expr<'a> {
             Expr::Binary(token, left, right) => visitor.visit_binary_expr(token, left, right),
             Expr::Unary(token, expr) => visitor.visit_unary_expr(token, expr),
             Expr::Assign(token, expr) => visitor.visit_assign_expr(token, expr),
-            Expr::Call(token, expr, exprs) => todo!(),
-            Expr::Get(token, expr) => todo!(),
+            Expr::Call(token, expr, exprs) => visitor.visit_call_expr(token, expr, exprs),
+            Expr::Get(name, object) => visitor.visit_get_expr(name, object),
             Expr::Grouping(expr) => visitor.visit_grouping_expr(expr),
-            Expr::Logical(token, expr, expr1) => todo!(),
-            Expr::Set(token, expr, expr1) => todo!(),
-            Expr::Super(token, token1) => todo!(),
-            Expr::This(token) => todo!(),
-            Expr::Variable(token) => todo!(),
+            Expr::Logical(token, left, right) => visitor.visit_logical_expr(token, left, right),
+            Expr::Set(name, obj, val) => visitor.visit_set_expr(name, obj, val),
+            Expr::Super(keyword, method) => visitor.visit_super_expr(keyword, method),
+            Expr::This(keyword) => visitor.visit_this_expr(keyword),
+            Expr::Variable(name) => visitor.visit_variable_expr(name),
         }
     }
 }
@@ -120,14 +120,26 @@ impl<'a> ExprVisitor<'a, String> for &AstPrinter {
     }
 
     fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> String {
+        let _ = value;
+        let _ = name;
         todo!()
     }
 
-    fn visit_call_expr(&self, _call: &Expr<'a>) -> String {
+    fn visit_call_expr(
+        &self,
+        paren: &Token<'a>,
+        callee: &Expr<'a>,
+        args: &[Box<Expr<'a>>],
+    ) -> String {
+        let _ = args;
+        let _ = callee;
+        let _ = paren;
         todo!()
     }
 
-    fn visit_get_expr(&self, _get: &Expr<'a>) -> String {
+    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> String {
+        let _ = object;
+        let _ = name;
         todo!()
     }
 
@@ -135,23 +147,38 @@ impl<'a> ExprVisitor<'a, String> for &AstPrinter {
         self.parenthesize("group", vec![grouping])
     }
 
-    fn visit_logical_expr(&self, _logical: &Expr<'a>) -> String {
+    fn visit_logical_expr(
+        &self,
+        operator: &Token<'a>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+    ) -> String {
+        let _ = right;
+        let _ = left;
+        let _ = operator;
         todo!()
     }
 
-    fn visit_set_expr(&self, _set: &Expr<'a>) -> String {
+    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> String {
+        let _ = val;
+        let _ = obj;
+        let _ = name;
         todo!()
     }
 
-    fn visit_super_expr(&self, _super_expr: &Expr<'a>) -> String {
+    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> String {
+        let _ = method;
+        let _ = keyword;
         todo!()
     }
 
-    fn visit_this_expr(&self, _this: &Expr<'a>) -> String {
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> String {
+        let _ = keyword;
         todo!()
     }
 
-    fn visit_variable_expr(&self, _variable: &Expr<'a>) -> String {
+    fn visit_variable_expr(&self, name: &Token<'a>) -> String {
+        let _ = name;
         todo!()
     }
 }
