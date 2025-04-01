@@ -211,6 +211,109 @@ impl<'a> ExprVisitor<'a, String> for &AstPrinter {
     }
 }
 
+pub struct ReversePolishPrinter {}
+
+impl ReversePolishPrinter {
+    fn rev_polish(&self, operation: &str, expressions: &[&Expr<'_>]) -> String {
+        let expressions = self.to_space_sep_string(expressions);
+        format!("{expressions} {operation}")
+    }
+
+    fn to_space_sep_string(&self, expressions: &[&Expr<'_>]) -> String {
+        expressions
+            .iter()
+            .map(|e| e.accept(&self))
+            .collect::<Vec<String>>()
+            .join(" ")
+    }
+
+    pub fn print(&self, expr: &Expr<'_>) {
+        println!("{}", expr.accept(&self));
+    }
+}
+
+impl<'a> ExprVisitor<'a, String> for &ReversePolishPrinter {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> String {
+        match token {
+            Some(t) => format!("{t}"),
+            None => "null".to_owned(),
+        }
+    }
+
+    fn visit_binary_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> String {
+        let op = format!("{operator}");
+        self.rev_polish(&op, &[left, right])
+    }
+
+    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> String {
+        let op = format!("{operator}");
+        self.rev_polish(&op, &[expr])
+    }
+
+    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> String {
+        let _ = value;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_call_expr(
+        &self,
+        paren: &Token<'a>,
+        callee: &Expr<'a>,
+        args: &[Box<Expr<'a>>],
+    ) -> String {
+        let _ = args;
+        let _ = callee;
+        let _ = paren;
+        todo!()
+    }
+
+    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> String {
+        let _ = object;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> String {
+        self.to_space_sep_string(&[grouping])
+    }
+
+    fn visit_logical_expr(
+        &self,
+        operator: &Token<'a>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+    ) -> String {
+        let _ = right;
+        let _ = left;
+        let _ = operator;
+        todo!()
+    }
+
+    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> String {
+        let _ = val;
+        let _ = obj;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> String {
+        let _ = method;
+        let _ = keyword;
+        todo!()
+    }
+
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> String {
+        let _ = keyword;
+        todo!()
+    }
+
+    fn visit_variable_expr(&self, name: &Token<'a>) -> String {
+        let _ = name;
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +330,21 @@ mod tests {
 
         // Act
         ast_printer.print(&bin);
+    }
+
+    #[test]
+    fn rev_polish_test() {
+        // Arrange
+        let literal1 = Expr::Literal(Some(Token::Number(1.0)));
+        let literal2 = Expr::Literal(Some(Token::Number(2.0)));
+        let plus = Expr::Binary(Token::Plus, Box::new(literal1), Box::new(literal2));
+        let literal3 = Expr::Literal(Some(Token::Number(4.0)));
+        let literal4 = Expr::Literal(Some(Token::Number(3.0)));
+        let minus = Expr::Binary(Token::Minus, Box::new(literal3), Box::new(literal4));
+        let mul = Expr::Binary(Token::Star, Box::new(plus), Box::new(minus));
+        let ast_printer = ReversePolishPrinter {};
+
+        // Act
+        ast_printer.print(&mul);
     }
 }
