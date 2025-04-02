@@ -122,6 +122,31 @@ impl<'a> Parser<'a> {
             lexer: Lexer::new(content),
         }
     }
+
+    fn expression(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
+        self.equality()
+    }
+
+    fn equality(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
+        let expr = self.comparison()?;
+        while let Some(r) = self.lexer.next() {
+            match r {
+                Ok(t) => {
+                    if let Token::Bang | Token::BangEqual = t {
+                        todo!()
+                    } else {
+                        break;
+                    }
+                }
+                Err(e) => return Some(Err(e)),
+            }
+        }
+        Some(expr)
+    }
+
+    fn comparison(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
+        None
+    }
 }
 
 #[cfg(test)]
