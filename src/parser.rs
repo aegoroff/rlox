@@ -1,3 +1,5 @@
+use miette::miette;
+
 use crate::lexer::{Lexer, Token};
 
 // Expressions
@@ -17,6 +19,7 @@ pub trait ExprVisitor<'a, R> {
     fn visit_variable_expr(&self, name: &Token<'a>) -> R;
 }
 
+#[derive(Debug)]
 pub enum Expr<'a> {
     Literal(Option<Token<'a>>),
     Binary(Token<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
@@ -123,6 +126,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn parse(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        self.expression()
+    }
+
     fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
         self.equality()
     }
@@ -151,11 +158,130 @@ impl<'a> Parser<'a> {
     }
 
     fn comparison(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        None
+        let mut expr = match self.term()? {
+            Ok(e) => e,
+            Err(e) => return Some(Err(e)),
+        };
+        while let Some(r) = self.lexer.next() {
+            match r {
+                Ok(t) => {
+                    if let Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual = t
+                    {
+                        match self.term()? {
+                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                            Err(e) => return Some(Err(e)),
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                Err(e) => return Some(Err(e)),
+            }
+        }
+        Some(Ok(expr))
+    }
+
+    fn term(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.factor()? {
+            Ok(e) => e,
+            Err(e) => return Some(Err(e)),
+        };
+        while let Some(r) = self.lexer.next() {
+            match r {
+                Ok(t) => {
+                    if let Token::Plus | Token::Minus = t {
+                        match self.factor()? {
+                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                            Err(e) => return Some(Err(e)),
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                Err(e) => return Some(Err(e)),
+            }
+        }
+        Some(Ok(expr))
+    }
+
+    fn factor(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.unary()? {
+            Ok(e) => e,
+            Err(e) => return Some(Err(e)),
+        };
+        while let Some(r) = self.lexer.next() {
+            match r {
+                Ok(t) => {
+                    if let Token::Star | Token::Slash = t {
+                        match self.unary()? {
+                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                            Err(e) => return Some(Err(e)),
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                Err(e) => return Some(Err(e)),
+            }
+        }
+        Some(Ok(expr))
+    }
+
+    fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        if let Some(r) = self.lexer.next() {
+            match r {
+                Ok(t) => {
+                    if let Token::Bang | Token::Minus = t {
+                        match self.unary()? {
+                            Ok(r) => return Some(Ok(Expr::Unary(t, Box::new(r)))),
+                            Err(e) => return Some(Err(e)),
+                        }
+                    }
+                }
+                Err(e) => return Some(Err(e)),
+            }
+        }
+        self.primary()
+    }
+
+    fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        if let Ok(tok) = self.lexer.next()? {
+            match tok {
+                Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
+                    return Some(Ok(Expr::Literal(Some(tok))));
+                }
+                Token::LeftParen => match self.expression()? {
+                    Ok(expr) => {
+                        if let Ok(tok) = self.lexer.next()? {
+                            if let Token::RightParen = tok {
+                                let g = Expr::Grouping(Box::new(expr));
+                                return Some(Ok(g));
+                            }
+                            return Some(Err(miette!("Expect ')' after expression.")));
+                        }
+                    }
+                    Err(e) => return Some(Err(e)),
+                },
+                _ => {}
+            };
+        }
+        self.expression()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn positive_tests() {
+        // Arrange
+        let mut parser = Parser::new("1 + 2 * 3");
+
+        // Act
+        let actual = parser.parse();
+
+        // Assert
+        assert!(actual.is_some());
+    }
 }

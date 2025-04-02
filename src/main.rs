@@ -10,7 +10,7 @@ use bugreport::{
 };
 use clap::{ArgMatches, Command, command};
 use miette::{Context, IntoDiagnostic, miette};
-use rlox::lexer::Lexer;
+use rlox::parser::Parser;
 
 #[macro_use]
 extern crate clap;
@@ -48,7 +48,7 @@ fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
     let content = fs::read_to_string(path)
         .into_diagnostic()
         .wrap_err(format!("Failed to read: {path}"))?;
-    scan(content);
+    scan(content)?;
     Ok(())
 }
 
@@ -63,27 +63,19 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
         .read_to_string(&mut content)
         .into_diagnostic()
         .wrap_err("Failed to read stdin content")?;
-    scan(content);
+    scan(content)?;
     Ok(())
 }
 
-fn scan(content: String) {
-    let scanner = Lexer::new(&content);
-    let mut errors = vec![];
-    for t in scanner {
-        match t {
-            Ok(t) => println!("{t}"),
-            Err(e) => {
-                if let Some(l) = e.labels() {
-                    errors.extend(l);
-                }
-            }
+fn scan(content: String) -> miette::Result<()> {
+    let mut parser = Parser::new(&content);
+    if let Some(r) = parser.parse() {
+        match r {
+            Ok(expr) => println!("{expr:#?}"),
+            Err(e) => return Err(e.with_source_code(content)),
         }
     }
-    if !errors.is_empty() {
-        let report = miette!(labels = errors, "errors occured");
-        println!("{:?}", report.with_source_code(content));
-    }
+    Ok(())
 }
 
 fn print_bugreport(_matches: &ArgMatches) {
