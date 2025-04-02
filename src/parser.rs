@@ -128,12 +128,19 @@ impl<'a> Parser<'a> {
     }
 
     fn equality(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
-        let expr = self.comparison()?;
+        let mut expr = match self.comparison()? {
+            Ok(e) => e,
+            Err(e) => return Some(Err(e)),
+        };
         while let Some(r) = self.lexer.next() {
             match r {
                 Ok(t) => {
                     if let Token::Bang | Token::BangEqual = t {
-                        todo!()
+                        let right = self.comparison()?;
+                        match right {
+                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                            Err(e) => return Some(Err(e)),
+                        }
                     } else {
                         break;
                     }
@@ -141,7 +148,7 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             }
         }
-        Some(expr)
+        Some(Ok(expr))
     }
 
     fn comparison(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
