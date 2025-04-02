@@ -123,11 +123,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expression(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
         self.equality()
     }
 
-    fn equality(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn equality(&mut self) -> Option<miette::Result<Expr<'a>>> {
         let mut expr = match self.comparison()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -151,7 +151,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn comparison(&'a mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn comparison(&mut self) -> Option<miette::Result<Expr<'a>>> {
         None
     }
 }
