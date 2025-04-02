@@ -136,8 +136,7 @@ impl<'a> Parser<'a> {
             match r {
                 Ok(t) => {
                     if let Token::Bang | Token::BangEqual = t {
-                        let right = self.comparison()?;
-                        match right {
+                        match self.comparison()? {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
