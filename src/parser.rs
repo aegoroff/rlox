@@ -148,14 +148,14 @@ impl<'a> Parser<'a> {
         };
         if let Some(r) = self.lexer.next() {
             match r {
-                Ok(t) => {
-                    if let Token::Bang | Token::BangEqual = t {
+                Ok(tok) => {
+                    if let Token::Bang | Token::BangEqual = tok {
                         match self.comparison(None)? {
-                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
                     } else {
-                        return self.comparison(Some(Ok(t)));
+                        return self.comparison(Some(Ok(tok)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -174,15 +174,16 @@ impl<'a> Parser<'a> {
         };
         if let Some(r) = self.lexer.next() {
             match r {
-                Ok(t) => {
-                    if let Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual = t
+                Ok(tok) => {
+                    if let Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual =
+                        tok
                     {
                         match self.term(None)? {
-                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
                     } else {
-                        return self.term(Some(Ok(t)));
+                        return self.term(Some(Ok(tok)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -201,14 +202,14 @@ impl<'a> Parser<'a> {
         };
         if let Some(r) = self.lexer.next() {
             match r {
-                Ok(t) => {
-                    if let Token::Plus | Token::Minus = t {
+                Ok(tok) => {
+                    if let Token::Plus | Token::Minus = tok {
                         match self.factor(None)? {
-                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
                     } else {
-                        return self.factor(Some(Ok(t)));
+                        return self.factor(Some(Ok(tok)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -227,14 +228,15 @@ impl<'a> Parser<'a> {
         };
         if let Some(r) = self.lexer.next() {
             match r {
-                Ok(t) => {
-                    if let Token::Star | Token::Slash = t {
-                        match self.unary(None)? {
-                            Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
+                Ok(tok) => {
+                    if let Token::Star | Token::Slash = tok {
+                        let next = self.lexer.next();
+                        match self.unary(next)? {
+                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
                     } else {
-                        return self.unary(Some(Ok(t)));
+                        return self.unary(Some(Ok(tok)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -249,14 +251,15 @@ impl<'a> Parser<'a> {
     ) -> Option<miette::Result<Expr<'a>>> {
         if let Some(r) = current {
             match r {
-                Ok(t) => {
-                    if let Token::Bang | Token::Minus = t {
-                        match self.unary(None)? {
-                            Ok(r) => Some(Ok(Expr::Unary(t, Box::new(r)))),
+                Ok(tok) => {
+                    if let Token::Bang | Token::Minus = tok {
+                        let next = self.lexer.next();
+                        match self.unary(next)? {
+                            Ok(r) => Some(Ok(Expr::Unary(tok, Box::new(r)))),
                             Err(e) => Some(Err(e)),
                         }
                     } else {
-                        self.primary(Some(Ok(t)))
+                        self.primary(Some(Ok(tok)))
                     }
                 }
                 Err(e) => Some(Err(e)),
