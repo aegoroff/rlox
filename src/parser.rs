@@ -139,7 +139,7 @@ impl<'a> Parser<'a> {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        while let Some(r) = self.lexer.next() {
+        if let Some(r) = self.lexer.next() {
             match r {
                 Ok(t) => {
                     if let Token::Bang | Token::BangEqual = t {
@@ -147,8 +147,6 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
-                    } else {
-                        break;
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -162,7 +160,7 @@ impl<'a> Parser<'a> {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        while let Some(r) = self.lexer.next() {
+        if let Some(r) = self.lexer.next() {
             match r {
                 Ok(t) => {
                     if let Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual = t
@@ -171,8 +169,6 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
-                    } else {
-                        break;
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -186,7 +182,7 @@ impl<'a> Parser<'a> {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        while let Some(r) = self.lexer.next() {
+        if let Some(r) = self.lexer.next() {
             match r {
                 Ok(t) => {
                     if let Token::Plus | Token::Minus = t {
@@ -194,8 +190,6 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
-                    } else {
-                        break;
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -209,7 +203,7 @@ impl<'a> Parser<'a> {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        while let Some(r) = self.lexer.next() {
+        if let Some(r) = self.lexer.next() {
             match r {
                 Ok(t) => {
                     if let Token::Star | Token::Slash = t {
@@ -217,8 +211,6 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
-                    } else {
-                        break;
                     }
                 }
                 Err(e) => return Some(Err(e)),
