@@ -166,7 +166,6 @@ impl<'a> Lexer<'a> {
                 '0'..='9' => {
                     finish = *i;
                     self.chars.next();
-                    continue;
                 }
                 _ => break,
             }
