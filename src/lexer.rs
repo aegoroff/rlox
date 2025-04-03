@@ -143,7 +143,7 @@ impl<'a> Lexer<'a> {
                     finish = self.skip_digits(next_ix);
                 }
             }
-        };
+        }
         let result = self.whole[start..=finish].parse().map_err(|e| {
             miette::miette!(
                 labels = vec![LabeledSpan::at(
@@ -180,7 +180,6 @@ impl<'a> Lexer<'a> {
             match *next {
                 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' => {
                     self.chars.next();
-                    continue;
                 }
                 _ => {
                     finish -= 1;

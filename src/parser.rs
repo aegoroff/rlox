@@ -296,7 +296,7 @@ impl<'a> Parser<'a> {
                     Err(e) => return Some(Err(e)),
                 },
                 _ => return self.expression(Some(Ok(tok))),
-            };
+            }
         }
         self.expression(None)
     }
