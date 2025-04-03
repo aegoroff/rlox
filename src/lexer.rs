@@ -218,7 +218,7 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let (i, current) = self.chars.next()?;
-            return match current {
+            let t = match current {
                 '(' => Some(Ok(Token::LeftParen)),
                 ')' => Some(Ok(Token::RightParen)),
                 '{' => Some(Ok(Token::LeftBrace)),
@@ -260,6 +260,8 @@ impl<'a> Iterator for Lexer<'a> {
                     "Unexpected char"
                 ))),
             };
+            println!("{t:?}");
+            return t;
         }
     }
 }
