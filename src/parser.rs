@@ -127,15 +127,22 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        self.expression()
+        let current = self.lexer.next();
+        self.expression(current)
     }
 
-    fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        self.equality()
+    fn expression(
+        &mut self,
+        current: Option<miette::Result<Token<'a>>>,
+    ) -> Option<miette::Result<Expr<'a>>> {
+        self.equality(current)
     }
 
-    fn equality(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.comparison()? {
+    fn equality(
+        &mut self,
+        current: Option<miette::Result<Token<'a>>>,
+    ) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.comparison(current)? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
@@ -143,7 +150,7 @@ impl<'a> Parser<'a> {
             match r {
                 Ok(t) => {
                     if let Token::Bang | Token::BangEqual = t {
-                        match self.comparison()? {
+                        match self.comparison(None)? {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
@@ -155,8 +162,11 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn comparison(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.term()? {
+    fn comparison(
+        &mut self,
+        current: Option<miette::Result<Token<'a>>>,
+    ) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.term(current)? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
@@ -165,7 +175,7 @@ impl<'a> Parser<'a> {
                 Ok(t) => {
                     if let Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual = t
                     {
-                        match self.term()? {
+                        match self.term(None)? {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
@@ -177,8 +187,11 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn term(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.factor()? {
+    fn term(
+        &mut self,
+        current: Option<miette::Result<Token<'a>>>,
+    ) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.factor(current)? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
@@ -186,7 +199,7 @@ impl<'a> Parser<'a> {
             match r {
                 Ok(t) => {
                     if let Token::Plus | Token::Minus = t {
-                        match self.factor()? {
+                        match self.factor(None)? {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
@@ -198,8 +211,11 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn factor(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.unary()? {
+    fn factor(
+        &mut self,
+        current: Option<miette::Result<Token<'a>>>,
+    ) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.unary(current)? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
@@ -207,7 +223,7 @@ impl<'a> Parser<'a> {
             match r {
                 Ok(t) => {
                     if let Token::Star | Token::Slash = t {
-                        match self.unary()? {
+                        match self.unary(None)? {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
@@ -219,12 +235,21 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        if let Some(r) = self.lexer.next() {
+    fn unary(
+        &mut self,
+        current: Option<miette::Result<Token<'a>>>,
+    ) -> Option<miette::Result<Expr<'a>>> {
+        let next = if current.is_some() {
+            current
+        } else {
+            self.lexer.next()
+        };
+
+        if let Some(r) = next {
             match r {
                 Ok(t) => {
                     if let Token::Bang | Token::Minus = t {
-                        match self.unary()? {
+                        match self.unary(None)? {
                             Ok(r) => return Some(Ok(Expr::Unary(t, Box::new(r)))),
                             Err(e) => return Some(Err(e)),
                         }
@@ -233,16 +258,24 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             }
         }
-        self.primary()
+        self.primary(None)
     }
 
-    fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        if let Ok(tok) = self.lexer.next()? {
+    fn primary(
+        &mut self,
+        current: Option<miette::Result<Token<'a>>>,
+    ) -> Option<miette::Result<Expr<'a>>> {
+        let next = if current.is_some() {
+            current
+        } else {
+            self.lexer.next()
+        };
+        if let Ok(tok) = next? {
             match tok {
                 Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
                     return Some(Ok(Expr::Literal(Some(tok))));
                 }
-                Token::LeftParen => match self.expression()? {
+                Token::LeftParen => match self.expression(None)? {
                     Ok(expr) => {
                         if let Ok(tok) = self.lexer.next()? {
                             if let Token::RightParen = tok {
@@ -257,7 +290,7 @@ impl<'a> Parser<'a> {
                 _ => {}
             };
         }
-        self.expression()
+        self.expression(None)
     }
 }
 
