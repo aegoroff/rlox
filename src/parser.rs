@@ -239,26 +239,23 @@ impl<'a> Parser<'a> {
         &mut self,
         current: Option<miette::Result<Token<'a>>>,
     ) -> Option<miette::Result<Expr<'a>>> {
-        let next = if current.is_some() {
-            current
-        } else {
-            self.lexer.next()
-        };
-
-        if let Some(r) = next {
+        if let Some(r) = current {
             match r {
                 Ok(t) => {
                     if let Token::Bang | Token::Minus = t {
                         match self.unary(None)? {
-                            Ok(r) => return Some(Ok(Expr::Unary(t, Box::new(r)))),
-                            Err(e) => return Some(Err(e)),
+                            Ok(r) => Some(Ok(Expr::Unary(t, Box::new(r)))),
+                            Err(e) => Some(Err(e)),
                         }
+                    } else {
+                        self.primary(Some(Ok(t)))
                     }
                 }
-                Err(e) => return Some(Err(e)),
+                Err(e) => Some(Err(e)),
             }
+        } else {
+            self.primary(None)
         }
-        self.primary(None)
     }
 
     fn primary(
