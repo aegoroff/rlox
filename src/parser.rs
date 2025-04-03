@@ -154,6 +154,8 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
+                    } else {
+                        return self.comparison(Some(Ok(t)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -179,6 +181,8 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
+                    } else {
+                        return self.term(Some(Ok(t)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -203,6 +207,8 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
+                    } else {
+                        return self.factor(Some(Ok(t)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -227,6 +233,8 @@ impl<'a> Parser<'a> {
                             Ok(r) => expr = Expr::Binary(t, Box::new(expr), Box::new(r)),
                             Err(e) => return Some(Err(e)),
                         }
+                    } else {
+                        return self.unary(Some(Ok(t)));
                     }
                 }
                 Err(e) => return Some(Err(e)),
@@ -284,7 +292,7 @@ impl<'a> Parser<'a> {
                     }
                     Err(e) => return Some(Err(e)),
                 },
-                _ => {}
+                _ => return self.expression(Some(Ok(tok))),
             };
         }
         self.expression(None)
