@@ -238,30 +238,29 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let tok = match self.lexer.peek()? {
+        let tok = match self.lexer.next()? {
             Ok(t) => t,
-            Err(_e) => return Some(Err(miette!("Unexpected unary error"))), // TODO
+            Err(e) => return Some(Err(e)),
         };
         match tok {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
-                let t = self.lexer.next()?.unwrap(); // TODO
-                Some(Ok(Expr::Literal(Some(t))))
+                Some(Ok(Expr::Literal(Some(tok))))
             }
-            Token::LeftParen => {
-                self.lexer.next()?.unwrap(); // TODO: consume paren
-                match self.expression()? {
-                    Ok(expr) => {
-                        if let Ok(Token::RightParen) = self.lexer.next()? {
-                            let g = Expr::Grouping(Box::new(expr));
-                            Some(Ok(g))
-                        } else {
-                            Some(Err(miette!("Expect ')' after expression.")))
-                        }
+            Token::LeftParen => match self.expression()? {
+                Ok(expr) => {
+                    if let Ok(Token::RightParen) = self.lexer.next()? {
+                        let g = Expr::Grouping(Box::new(expr));
+                        Some(Ok(g))
+                    } else {
+                        Some(Err(miette!(
+                            "Expect '{}' after expression.",
+                            Token::RightParen
+                        )))
                     }
-                    Err(e) => Some(Err(e)),
                 }
-            }
-            _ => Some(Err(miette!("Unexpected primary token."))),
+                Err(e) => Some(Err(e)),
+            },
+            _ => Some(Err(miette!("Unexpected primary token: {tok}."))),
         }
     }
 }
