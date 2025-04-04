@@ -238,28 +238,31 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        if let Ok(tok) = self.lexer.peek()? {
-            match tok {
-                Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
-                    let t = self.lexer.next()?.unwrap(); // TODO
-                    return Some(Ok(Expr::Literal(Some(t))));
-                }
-                Token::LeftParen => match self.expression()? {
-                    Ok(expr) => {
-                        if let Ok(tok) = self.lexer.next()? {
-                            if let Token::RightParen = tok {
-                                let g = Expr::Grouping(Box::new(expr));
-                                return Some(Ok(g));
-                            }
-                            return Some(Err(miette!("Expect ')' after expression.")));
-                        }
-                    }
-                    Err(e) => return Some(Err(e)),
-                },
-                _ => return self.expression(),
+        let tok = match self.lexer.peek()? {
+            Ok(t) => t,
+            Err(_e) => return Some(Err(miette!("Unexpected unary error"))), // TODO
+        };
+        match tok {
+            Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
+                let t = self.lexer.next()?.unwrap(); // TODO
+                Some(Ok(Expr::Literal(Some(t))))
             }
+            Token::LeftParen => match self.expression()? {
+                Ok(expr) => {
+                    if let Ok(tok) = self.lexer.next()? {
+                        if let Token::RightParen = tok {
+                            let g = Expr::Grouping(Box::new(expr));
+                            return Some(Ok(g));
+                        }
+                        Some(Err(miette!("Expect ')' after expression.")))
+                    } else {
+                        Some(Err(miette!("Expect ')' after expression.")))
+                    }
+                }
+                Err(e) => Some(Err(e)),
+            },
+            _ => Some(Err(miette!("Unexpected primary token."))),
         }
-        self.expression()
     }
 }
 
