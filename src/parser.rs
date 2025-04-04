@@ -1,3 +1,5 @@
+use std::iter::Peekable;
+
 use miette::miette;
 
 use crate::lexer::{Lexer, Token};
@@ -115,167 +117,134 @@ pub trait StmtVisitor<'a, R> {
 }
 
 pub struct Parser<'a> {
-    lexer: Lexer<'a>,
+    lexer: Peekable<Lexer<'a>>,
 }
 
 impl<'a> Parser<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {
         Self {
-            lexer: Lexer::new(content),
+            lexer: Lexer::new(content).peekable(),
         }
     }
 
     pub fn parse(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let current = self.lexer.next();
-        self.expression(current)
+        self.expression()
     }
 
-    fn expression(
-        &mut self,
-        current: Option<miette::Result<Token<'a>>>,
-    ) -> Option<miette::Result<Expr<'a>>> {
-        self.equality(current)
+    fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        self.equality()
     }
 
-    fn equality(
-        &mut self,
-        current: Option<miette::Result<Token<'a>>>,
-    ) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.comparison(current)? {
+    fn equality(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let expr = match self.comparison()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        if let Some(r) = self.lexer.next() {
-            match r {
-                Ok(tok) => {
-                    if let Token::Bang | Token::BangEqual = tok {
-                        match self.comparison(None)? {
-                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
-                            Err(e) => return Some(Err(e)),
-                        }
+        match self.lexer.peek()? {
+            Ok(tok) => {
+                if let Token::Bang | Token::BangEqual = tok {
+                    let operator = self.lexer.next()?.unwrap(); // TODO
+                    match self.comparison()? {
+                        Ok(r) => Some(Ok(Expr::Binary(operator, Box::new(expr), Box::new(r)))),
+                        Err(e) => Some(Err(e)),
                     }
+                } else {
+                    Some(Ok(expr))
                 }
-                Err(e) => return Some(Err(e)),
             }
+            Err(_e) => Some(Err(miette!("Unexpected equality error"))), // TODO
         }
-        Some(Ok(expr))
     }
 
-    fn comparison(
-        &mut self,
-        current: Option<miette::Result<Token<'a>>>,
-    ) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.term(current)? {
+    fn comparison(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let expr = match self.term()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        if let Some(r) = self.lexer.next() {
-            match r {
-                Ok(tok) => {
-                    if let Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual =
-                        tok
-                    {
-                        match self.term(None)? {
-                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
-                            Err(e) => return Some(Err(e)),
-                        }
+        match self.lexer.peek()? {
+            Ok(tok) => {
+                if let Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual = tok {
+                    let operator = self.lexer.next()?.unwrap(); // TODO
+                    match self.term()? {
+                        Ok(r) => Some(Ok(Expr::Binary(operator, Box::new(expr), Box::new(r)))),
+                        Err(e) => Some(Err(e)),
                     }
+                } else {
+                    Some(Ok(expr))
                 }
-                Err(e) => return Some(Err(e)),
             }
+            Err(_e) => Some(Err(miette!("Unexpected comparison error"))), // TODO
         }
-        Some(Ok(expr))
     }
 
-    fn term(
-        &mut self,
-        current: Option<miette::Result<Token<'a>>>,
-    ) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.factor(current)? {
+    fn term(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let expr = match self.factor()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        if let Some(r) = self.lexer.next() {
-            match r {
-                Ok(tok) => {
-                    if let Token::Plus | Token::Minus = tok {
-                        match self.factor(None)? {
-                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
-                            Err(e) => return Some(Err(e)),
-                        }
+        match self.lexer.peek()? {
+            Ok(tok) => {
+                if let Token::Plus | Token::Minus = tok {
+                    let operator = self.lexer.next()?.unwrap(); // TODO
+                    match self.factor()? {
+                        Ok(r) => Some(Ok(Expr::Binary(operator, Box::new(expr), Box::new(r)))),
+                        Err(e) => Some(Err(e)),
                     }
+                } else {
+                    Some(Ok(expr))
                 }
-                Err(e) => return Some(Err(e)),
             }
+            Err(_e) => Some(Err(miette!("Unexpected term error"))), // TODO
         }
-        Some(Ok(expr))
     }
 
-    fn factor(
-        &mut self,
-        current: Option<miette::Result<Token<'a>>>,
-    ) -> Option<miette::Result<Expr<'a>>> {
-        let mut expr = match self.unary(current)? {
+    fn factor(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let expr = match self.unary()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        if let Some(r) = self.lexer.next() {
-            match r {
-                Ok(tok) => {
-                    if let Token::Star | Token::Slash = tok {
-                        let next = self.lexer.next();
-                        match self.unary(next)? {
-                            Ok(r) => expr = Expr::Binary(tok, Box::new(expr), Box::new(r)),
-                            Err(e) => return Some(Err(e)),
-                        }
+        match self.lexer.peek()? {
+            Ok(tok) => {
+                if let Token::Star | Token::Slash = tok {
+                    let operator = self.lexer.next()?.unwrap(); // TODO
+                    match self.unary()? {
+                        Ok(r) => Some(Ok(Expr::Binary(operator, Box::new(expr), Box::new(r)))),
+                        Err(e) => Some(Err(e)),
                     }
+                } else {
+                    Some(Ok(expr))
                 }
-                Err(e) => return Some(Err(e)),
             }
-        }
-        Some(Ok(expr))
-    }
-
-    fn unary(
-        &mut self,
-        current: Option<miette::Result<Token<'a>>>,
-    ) -> Option<miette::Result<Expr<'a>>> {
-        if let Some(r) = current {
-            match r {
-                Ok(tok) => {
-                    if let Token::Bang | Token::Minus = tok {
-                        let next = self.lexer.next();
-                        match self.unary(next)? {
-                            Ok(r) => Some(Ok(Expr::Unary(tok, Box::new(r)))),
-                            Err(e) => Some(Err(e)),
-                        }
-                    } else {
-                        self.primary(Some(Ok(tok)))
-                    }
-                }
-                Err(e) => Some(Err(e)),
-            }
-        } else {
-            self.primary(None)
+            Err(_e) => Some(Err(miette!("Unexpected factor error"))), // TODO
         }
     }
 
-    fn primary(
-        &mut self,
-        current: Option<miette::Result<Token<'a>>>,
-    ) -> Option<miette::Result<Expr<'a>>> {
-        let next = if current.is_some() {
-            current
-        } else {
-            self.lexer.next()
-        };
-        if let Ok(tok) = next? {
+    fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        match self.lexer.peek()? {
+            Ok(tok) => {
+                if let Token::Bang | Token::Minus = tok {
+                    let operator = self.lexer.next()?.unwrap(); // TODO
+                    match self.unary()? {
+                        Ok(r) => Some(Ok(Expr::Unary(operator, Box::new(r)))),
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    self.primary()
+                }
+            }
+            Err(_e) => Some(Err(miette!("Unexpected unary error"))), // TODO
+        }
+    }
+
+    fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        if let Ok(tok) = self.lexer.peek()? {
             match tok {
                 Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
-                    return Some(Ok(Expr::Literal(Some(tok))));
+                    let t = self.lexer.next()?.unwrap(); // TODO
+                    return Some(Ok(Expr::Literal(Some(t))));
                 }
-                Token::LeftParen => match self.expression(None)? {
+                Token::LeftParen => match self.expression()? {
                     Ok(expr) => {
                         if let Ok(tok) = self.lexer.next()? {
                             if let Token::RightParen = tok {
@@ -287,10 +256,10 @@ impl<'a> Parser<'a> {
                     }
                     Err(e) => return Some(Err(e)),
                 },
-                _ => return self.expression(Some(Ok(tok))),
+                _ => return self.expression(),
             }
         }
-        self.expression(None)
+        self.expression()
     }
 }
 
