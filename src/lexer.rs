@@ -258,7 +258,6 @@ impl<'a> Iterator for Lexer<'a> {
                     "Unexpected char"
                 ))),
             };
-            println!("{t:?}");
             return t;
         }
     }
