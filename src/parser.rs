@@ -143,7 +143,7 @@ impl<'a> Parser<'a> {
         };
         match self.lexer.peek()? {
             Ok(tok) => {
-                if let Token::Bang | Token::BangEqual = tok {
+                if let Token::EqualEqual | Token::BangEqual = tok {
                     let operator = self.lexer.next()?.unwrap(); // TODO
                     match self.comparison()? {
                         Ok(r) => Some(Ok(Expr::Binary(operator, Box::new(expr), Box::new(r)))),
@@ -274,6 +274,7 @@ mod tests {
     #[test_case("1 + 2 * 3")]
     #[test_case("1 + 2 - 4")]
     #[test_case("(1 + 2) * 5")]
+    #[test_case("2 == 3")]
     fn parser_tests(input: &str) {
         // Arrange
         let mut parser = Parser::new(input);
