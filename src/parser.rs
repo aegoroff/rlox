@@ -274,6 +274,7 @@ mod tests {
     #[test_case("1 + 2 - 4")]
     #[test_case("(1 + 2) * 5")]
     #[test_case("2 == 3")]
+    #[test_case("(1 + 0 + 1)")]
     fn parser_tests(input: &str) {
         // Arrange
         let mut parser = Parser::new(input);
