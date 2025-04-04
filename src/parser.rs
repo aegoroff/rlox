@@ -161,7 +161,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let right = match self.comparison()? {
+            let Some(comparison) = self.comparison() else {
+                return Some(Err(miette!(
+                    "Missing comparison expression in the right part of binary expression"
+                )));
+            };
+
+            let right = match comparison {
                 Ok(r) => r,
                 Err(e) => return Some(Err(e)),
             };
@@ -200,7 +206,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let right = match self.term()? {
+            let Some(term) = self.term() else {
+                return Some(Err(miette!(
+                    "Missing term expression in the right part of binary expression"
+                )));
+            };
+
+            let right = match term {
                 Ok(r) => r,
                 Err(e) => return Some(Err(e)),
             };
@@ -236,7 +248,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let right = match self.factor()? {
+            let Some(factor) = self.factor() else {
+                return Some(Err(miette!(
+                    "Missing factor expression in the right part of binary expression"
+                )));
+            };
+
+            let right = match factor {
                 Ok(r) => r,
                 Err(e) => return Some(Err(e)),
             };
@@ -271,7 +289,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let right = match self.unary()? {
+            let Some(unary) = self.unary() else {
+                return Some(Err(miette!(
+                    "Missing unary expression in the right part of binary expression"
+                )));
+            };
+
+            let right = match unary {
                 Ok(r) => r,
                 Err(e) => return Some(Err(e)),
             };
@@ -287,7 +311,14 @@ impl<'a> Parser<'a> {
             Ok(tok) => {
                 if let Token::Bang | Token::Minus = tok {
                     let operator = self.lexer.next()?.unwrap(); // TODO
-                    match self.unary()? {
+                    let Some(unary) = self.unary() else {
+                        return Some(Err(miette!(
+                            "Dangling {} operator in unary expression",
+                            operator
+                        )));
+                    };
+
+                    match unary {
                         Ok(r) => Some(Ok(Expr::Unary(operator, Box::new(r)))),
                         Err(e) => Some(Err(e)),
                     }
