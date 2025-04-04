@@ -249,12 +249,9 @@ impl<'a> Parser<'a> {
             }
             Token::LeftParen => match self.expression()? {
                 Ok(expr) => {
-                    if let Ok(tok) = self.lexer.next()? {
-                        if let Token::RightParen = tok {
-                            let g = Expr::Grouping(Box::new(expr));
-                            return Some(Ok(g));
-                        }
-                        Some(Err(miette!("Expect ')' after expression.")))
+                    if let Ok(Token::RightParen) = self.lexer.next()? {
+                        let g = Expr::Grouping(Box::new(expr));
+                        Some(Ok(g))
                     } else {
                         Some(Err(miette!("Expect ')' after expression.")))
                     }
