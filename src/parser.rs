@@ -143,7 +143,10 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let next_tok = match self.lexer.peek()? {
+            let Some(current) = self.lexer.peek() else {
+                return Some(Ok(expr));
+            };
+            let next_tok = match current {
                 Ok(tok) => tok,
                 Err(_e) => return Some(Err(miette!("Unexpected equality error"))), // TODO
             };
@@ -176,7 +179,10 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let next_tok = match self.lexer.peek()? {
+            let Some(current) = self.lexer.peek() else {
+                return Some(Ok(expr));
+            };
+            let next_tok = match current {
                 Ok(tok) => tok,
                 Err(_e) => return Some(Err(miette!("Unexpected comparison error"))), // TODO
             };
@@ -212,7 +218,10 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let next_tok = match self.lexer.peek()? {
+            let Some(current) = self.lexer.peek() else {
+                return Some(Ok(expr));
+            };
+            let next_tok = match current {
                 Ok(tok) => tok,
                 Err(_e) => return Some(Err(miette!("Unexpected term error"))), // TODO
             };
@@ -244,7 +253,10 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
         loop {
-            let next_tok = match self.lexer.peek()? {
+            let Some(current) = self.lexer.peek() else {
+                return Some(Ok(expr));
+            };
+            let next_tok = match current {
                 Ok(tok) => tok,
                 Err(_e) => return Some(Err(miette!("Unexpected factor error"))), // TODO
             };
@@ -336,6 +348,6 @@ mod tests {
         let actual = parser.parse();
 
         // Assert
-        assert!(actual.is_none());
+        assert!(actual.is_some());
     }
 }
