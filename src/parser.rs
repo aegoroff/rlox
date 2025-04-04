@@ -179,21 +179,20 @@ impl<'a> Parser<'a> {
     }
 
     fn term(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let expr = match self.factor()? {
+        let mut expr = match self.factor()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
         match self.lexer.peek()? {
             Ok(tok) => {
-                if let Token::Plus | Token::Minus = tok {
+                while let Token::Plus | Token::Minus = tok {
                     let operator = self.lexer.next()?.unwrap(); // TODO
-                    match self.factor()? {
-                        Ok(r) => Some(Ok(Expr::Binary(operator, Box::new(expr), Box::new(r)))),
-                        Err(e) => Some(Err(e)),
-                    }
-                } else {
-                    Some(Ok(expr))
+                    expr = match self.factor()? {
+                        Ok(r) => Expr::Binary(operator, Box::new(expr), Box::new(r)),
+                        Err(e) => return Some(Err(e)),
+                    };
                 }
+                Some(Ok(expr))
             }
             Err(_e) => Some(Err(miette!("Unexpected term error"))), // TODO
         }
