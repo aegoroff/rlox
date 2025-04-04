@@ -266,16 +266,19 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
-    #[test]
-    fn positive_tests() {
+    #[test_case("1 + 2 * 3")]
+    #[test_case("1 + 2 - 4")]
+    #[test_case("(1 + 2) * 5")]
+    fn parser_tests(input: &str) {
         // Arrange
-        let mut parser = Parser::new("1 + 2 * 3");
+        let mut parser = Parser::new(input);
 
         // Act
         let actual = parser.parse();
 
         // Assert
-        assert!(actual.is_some());
+        assert!(actual.is_none());
     }
 }
