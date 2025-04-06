@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use miette::miette;
+use miette::{LabeledSpan, miette};
 
 use crate::lexer::{Lexer, Token};
 
@@ -373,29 +373,35 @@ impl<'a> Parser<'a> {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
                 Some(Ok(Expr::Literal(Some(tok))))
             }
-            Token::LeftParen => {
+            Token::LeftParen(range) => {
                 let Some(expr) = self.expression() else {
                     return Some(Err(miette!(
-                        "Expect expression after '{}'",
-                        Token::LeftParen
+                        labels = vec![LabeledSpan::at(range, "Expect expression after '('")],
+                        "Expect expression after '('"
                     )));
                 };
                 match expr {
                     Ok(expr) => {
                         let Some(next) = self.tokens.next() else {
                             return Some(Err(miette!(
-                                "Expect '{}' after expression.",
-                                Token::RightParen
+                                labels = vec![LabeledSpan::at(
+                                    range,
+                                    "Expect ')' after grouping expression that starts here."
+                                )],
+                                "Expect ')' after expression."
                             )));
                         };
 
-                        if let Ok(Token::RightParen) = next {
+                        if let Ok(Token::RightParen(_)) = next {
                             let g = Expr::Grouping(Box::new(expr));
                             Some(Ok(g))
                         } else {
                             Some(Err(miette!(
-                                "Expect '{}' after expression.",
-                                Token::RightParen
+                                labels = vec![LabeledSpan::at(
+                                    range,
+                                    "Expect ')' after grouping expression that starts here."
+                                )],
+                                "Expect ')' after expression."
                             )))
                         }
                     }

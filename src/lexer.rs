@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::CharIndices};
+use std::{fmt::Display, ops::RangeInclusive, str::CharIndices};
 
 use miette::LabeledSpan;
 
@@ -9,8 +9,8 @@ pub struct Lexer<'a> {
 
 #[derive(PartialEq, Debug)]
 pub enum Token<'a> {
-    LeftParen,
-    RightParen,
+    LeftParen(RangeInclusive<usize>),
+    RightParen(RangeInclusive<usize>),
     LeftBrace,
     RightBrace,
     Comma,
@@ -217,8 +217,8 @@ impl<'a> Iterator for Lexer<'a> {
         loop {
             let (i, current) = self.chars.next()?;
             let t = match current {
-                '(' => Some(Ok(Token::LeftParen)),
-                ')' => Some(Ok(Token::RightParen)),
+                '(' => Some(Ok(Token::LeftParen(i..=i))),
+                ')' => Some(Ok(Token::RightParen(i..=i))),
                 '{' => Some(Ok(Token::LeftBrace)),
                 '}' => Some(Ok(Token::RightBrace)),
                 ',' => Some(Ok(Token::Comma)),
@@ -267,8 +267,8 @@ impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::String(s) => write!(f, "STRING \"{s}\""),
-            Token::LeftParen => write!(f, "("),
-            Token::RightParen => write!(f, ")"),
+            Token::LeftParen(_) => write!(f, "("),
+            Token::RightParen(_) => write!(f, ")"),
             Token::LeftBrace => write!(f, "{{"),
             Token::RightBrace => write!(f, "}}"),
             Token::Comma => write!(f, ","),
@@ -313,13 +313,13 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case("(", vec![Token::LeftParen] ; "Left paren")]
+    #[test_case("(", vec![Token::LeftParen(0..=0)] ; "Left paren")]
     #[test_case("!!=", vec![Token::Bang, Token::BangEqual] ; "Bang tests")]
     #[test_case(">>=", vec![Token::Greater, Token::GreaterEqual] ; "Greater tests")]
     #[test_case("<<=", vec![Token::Less, Token::LessEqual] ; "Less tests")]
     #[test_case("===", vec![Token::EqualEqual, Token::Equal] ; "Equal tests")]
-    #[test_case(")", vec![Token::RightParen] ; "Right paren")]
-    #[test_case("()", vec![Token::LeftParen, Token::RightParen] ; "Both paren")]
+    #[test_case(")", vec![Token::RightParen(0..=0)] ; "Right paren")]
+    #[test_case("()", vec![Token::LeftParen(0..=0), Token::RightParen(1..=1)] ; "Both paren")]
     #[test_case("var x = 2+3;", vec![Token::Var, Token::Identifier("x"), Token::Equal, Token::Number(2.0), Token::Plus, Token::Number(3.0), Token::Semicolon] ; "Expression")]
     #[test_case(r#""str""#, vec![Token::String("str")] ; "String")]
     #[test_case(r#""str" // Comment"#, vec![Token::String("str")] ; "String + Comment")]
