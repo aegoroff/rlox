@@ -371,6 +371,8 @@ mod tests {
     #[test_case("(1 + 0 + 1)")]
     #[test_case("(1 == 2 == 17)")]
     #[test_case("(1 <= 2 > 10)")]
+    #[test_case("--1")]
+    #[test_case("!!2")]
     fn parser_tests(input: &str) {
         // Arrange
         let mut parser = Parser::new(input);
