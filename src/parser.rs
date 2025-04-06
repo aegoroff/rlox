@@ -146,18 +146,15 @@ impl<'a> Parser<'a> {
             let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
-            let next_tok = match current {
-                Ok(tok) => tok,
-                Err(_) => {
-                    // Consume token if it's not a valid
-                    match self.tokens.next()? {
-                        Ok(_) => unreachable!(),
-                        Err(e) => return Some(Err(e)),
-                    }
+            let Ok(next_tok) = current else {
+                // Consume token if it's not a valid
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => return Some(Err(e)),
                 }
             };
 
-            if !matches!(next_tok, Token::EqualEqual | Token::BangEqual) {
+            if !matches!(next_tok, Token::EqualEqual(_) | Token::BangEqual(_)) {
                 break;
             }
 
@@ -194,20 +191,17 @@ impl<'a> Parser<'a> {
             let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
-            let next_tok = match current {
-                Ok(tok) => tok,
-                Err(_) => {
-                    // Consume token if it's not a valid
-                    match self.tokens.next()? {
-                        Ok(_) => unreachable!(),
-                        Err(e) => return Some(Err(e)),
-                    }
+            let Ok(next_tok) = current else {
+                // Consume token if it's not a valid
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => return Some(Err(e)),
                 }
             };
 
             if !matches!(
                 next_tok,
-                Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual
+                Token::Greater(_) | Token::GreaterEqual(_) | Token::Less(_) | Token::LessEqual(_)
             ) {
                 break;
             }
@@ -245,18 +239,15 @@ impl<'a> Parser<'a> {
             let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
-            let next_tok = match current {
-                Ok(tok) => tok,
-                Err(_) => {
-                    // Consume token if it's not a valid
-                    match self.tokens.next()? {
-                        Ok(_) => unreachable!(),
-                        Err(e) => return Some(Err(e)),
-                    }
+            let Ok(next_tok) = current else {
+                // Consume token if it's not a valid
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => return Some(Err(e)),
                 }
             };
 
-            if !matches!(next_tok, Token::Plus | Token::Minus) {
+            if !matches!(next_tok, Token::Plus(_) | Token::Minus(_)) {
                 break;
             }
 
@@ -292,18 +283,15 @@ impl<'a> Parser<'a> {
             let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
-            let next_tok = match current {
-                Ok(tok) => tok,
-                Err(_) => {
-                    // Consume token if it's not a valid
-                    match self.tokens.next()? {
-                        Ok(_) => unreachable!(),
-                        Err(e) => return Some(Err(e)),
-                    }
+            let Ok(next_tok) = current else {
+                // Consume token if it's not a valid
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => return Some(Err(e)),
                 }
             };
 
-            if !matches!(next_tok, Token::Star | Token::Slash) {
+            if !matches!(next_tok, Token::Star(_) | Token::Slash(_)) {
                 break;
             }
 
@@ -333,7 +321,7 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
         match self.tokens.peek()? {
             Ok(tok) => {
-                if let Token::Bang | Token::Minus = tok {
+                if let Token::Bang(_) | Token::Minus(_) = tok {
                     // Consume operator
                     let operator = match self.tokens.next()? {
                         Ok(tok) => tok,
@@ -370,9 +358,11 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
         match tok {
-            Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
-                Some(Ok(Expr::Literal(Some(tok))))
-            }
+            Token::String(_, _)
+            | Token::Number(_, _)
+            | Token::False(_)
+            | Token::Nil(_)
+            | Token::True(_) => Some(Ok(Expr::Literal(Some(tok)))),
             Token::LeftParen(range) => {
                 let Some(expr) = self.expression() else {
                     return Some(Err(miette!(

@@ -11,42 +11,42 @@ pub struct Lexer<'a> {
 pub enum Token<'a> {
     LeftParen(RangeInclusive<usize>),
     RightParen(RangeInclusive<usize>),
-    LeftBrace,
-    RightBrace,
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    Semicolon,
-    Slash,
-    Star,
-    Bang,
-    BangEqual,
-    Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    Identifier(&'a str),
-    String(&'a str),
-    Number(f64),
-    And,
-    Class,
-    Else,
-    False,
-    Fun,
-    For,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
+    LeftBrace(RangeInclusive<usize>),
+    RightBrace(RangeInclusive<usize>),
+    Comma(RangeInclusive<usize>),
+    Dot(RangeInclusive<usize>),
+    Minus(RangeInclusive<usize>),
+    Plus(RangeInclusive<usize>),
+    Semicolon(RangeInclusive<usize>),
+    Slash(RangeInclusive<usize>),
+    Star(RangeInclusive<usize>),
+    Bang(RangeInclusive<usize>),
+    BangEqual(RangeInclusive<usize>),
+    Equal(RangeInclusive<usize>),
+    EqualEqual(RangeInclusive<usize>),
+    Greater(RangeInclusive<usize>),
+    GreaterEqual(RangeInclusive<usize>),
+    Less(RangeInclusive<usize>),
+    LessEqual(RangeInclusive<usize>),
+    Identifier(RangeInclusive<usize>, &'a str),
+    String(RangeInclusive<usize>, &'a str),
+    Number(RangeInclusive<usize>, f64),
+    And(RangeInclusive<usize>),
+    Class(RangeInclusive<usize>),
+    Else(RangeInclusive<usize>),
+    False(RangeInclusive<usize>),
+    Fun(RangeInclusive<usize>),
+    For(RangeInclusive<usize>),
+    If(RangeInclusive<usize>),
+    Nil(RangeInclusive<usize>),
+    Or(RangeInclusive<usize>),
+    Print(RangeInclusive<usize>),
+    Return(RangeInclusive<usize>),
+    Super(RangeInclusive<usize>),
+    This(RangeInclusive<usize>),
+    True(RangeInclusive<usize>),
+    Var(RangeInclusive<usize>),
+    While(RangeInclusive<usize>),
 }
 
 impl<'a> Lexer<'a> {
@@ -122,7 +122,10 @@ impl<'a> Lexer<'a> {
         for (finish, next) in self.chars.by_ref() {
             problem_ix = finish;
             if next == '"' {
-                return Ok(Token::String(&self.whole[start + 1..finish]));
+                return Ok(Token::String(
+                    start..=finish,
+                    &self.whole[start + 1..finish],
+                ));
             }
         }
         let report = miette::miette!(
@@ -154,7 +157,7 @@ impl<'a> Lexer<'a> {
             )
         });
         match result {
-            Ok(value) => Ok(Token::Number(value)),
+            Ok(value) => Ok(Token::Number(start..=finish, value)),
             Err(e) => Err(e),
         }
     }
@@ -187,25 +190,26 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
-        let id = &self.whole[start..=finish];
+        let range = start..=finish;
+        let id = &self.whole[range.clone()];
         match id {
-            "and" => Token::And,
-            "class" => Token::Class,
-            "else" => Token::Else,
-            "false" => Token::False,
-            "fun" => Token::Fun,
-            "for" => Token::For,
-            "if" => Token::If,
-            "nil" => Token::Nil,
-            "or" => Token::Or,
-            "print" => Token::Print,
-            "return" => Token::Return,
-            "super" => Token::Super,
-            "this" => Token::This,
-            "true" => Token::True,
-            "var" => Token::Var,
-            "while" => Token::While,
-            _ => Token::Identifier(id),
+            "and" => Token::And(range),
+            "class" => Token::Class(range),
+            "else" => Token::Else(range),
+            "false" => Token::False(range),
+            "fun" => Token::Fun(range),
+            "for" => Token::For(range),
+            "if" => Token::If(range),
+            "nil" => Token::Nil(range),
+            "or" => Token::Or(range),
+            "print" => Token::Print(range),
+            "return" => Token::Return(range),
+            "super" => Token::Super(range),
+            "this" => Token::This(range),
+            "true" => Token::True(range),
+            "var" => Token::Var(range),
+            "while" => Token::While(range),
+            _ => Token::Identifier(range, id),
         }
     }
 }
@@ -219,28 +223,36 @@ impl<'a> Iterator for Lexer<'a> {
             let t = match current {
                 '(' => Some(Ok(Token::LeftParen(i..=i))),
                 ')' => Some(Ok(Token::RightParen(i..=i))),
-                '{' => Some(Ok(Token::LeftBrace)),
-                '}' => Some(Ok(Token::RightBrace)),
-                ',' => Some(Ok(Token::Comma)),
-                '.' => Some(Ok(Token::Dot)),
-                '-' => Some(Ok(Token::Minus)),
-                '+' => Some(Ok(Token::Plus)),
-                ';' => Some(Ok(Token::Semicolon)),
-                '*' => Some(Ok(Token::Star)),
+                '{' => Some(Ok(Token::LeftBrace(i..=i))),
+                '}' => Some(Ok(Token::RightBrace(i..=i))),
+                ',' => Some(Ok(Token::Comma(i..=i))),
+                '.' => Some(Ok(Token::Dot(i..=i))),
+                '-' => Some(Ok(Token::Minus(i..=i))),
+                '+' => Some(Ok(Token::Plus(i..=i))),
+                ';' => Some(Ok(Token::Semicolon(i..=i))),
+                '*' => Some(Ok(Token::Star(i..=i))),
                 '=' => Some(Ok(self.two_char_token(
                     '=',
-                    Token::EqualEqual,
-                    Token::Equal,
+                    Token::EqualEqual(i..=(i + 1)),
+                    Token::Equal(i..=i),
                 ))),
                 '>' => Some(Ok(self.two_char_token(
                     '=',
-                    Token::GreaterEqual,
-                    Token::Greater,
+                    Token::GreaterEqual(i..=(i + 1)),
+                    Token::Greater(i..=i),
                 ))),
-                '<' => Some(Ok(self.two_char_token('=', Token::LessEqual, Token::Less))),
-                '!' => Some(Ok(self.two_char_token('=', Token::BangEqual, Token::Bang))),
+                '<' => Some(Ok(self.two_char_token(
+                    '=',
+                    Token::LessEqual(i..=(i + 1)),
+                    Token::Less(i..=i),
+                ))),
+                '!' => Some(Ok(self.two_char_token(
+                    '=',
+                    Token::BangEqual(i..=(i + 1)),
+                    Token::Bang(i..=i),
+                ))),
                 '/' => {
-                    if let Some(t) = self.skip_comment_or(i, Token::Slash) {
+                    if let Some(t) = self.skip_comment_or(i, Token::Slash(i..=i)) {
                         Some(t)
                     } else {
                         continue;
@@ -266,44 +278,44 @@ impl<'a> Iterator for Lexer<'a> {
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Token::String(s) => write!(f, "STRING \"{s}\""),
+            Token::String(_, s) => write!(f, "STRING \"{s}\""),
             Token::LeftParen(_) => write!(f, "("),
             Token::RightParen(_) => write!(f, ")"),
-            Token::LeftBrace => write!(f, "{{"),
-            Token::RightBrace => write!(f, "}}"),
-            Token::Comma => write!(f, ","),
-            Token::Dot => write!(f, "."),
-            Token::Minus => write!(f, "-"),
-            Token::Plus => write!(f, "+"),
-            Token::Semicolon => write!(f, ";"),
-            Token::Slash => write!(f, "/"),
-            Token::Star => write!(f, "*"),
-            Token::Bang => write!(f, "!"),
-            Token::BangEqual => write!(f, "!="),
-            Token::Equal => write!(f, "="),
-            Token::EqualEqual => write!(f, "=="),
-            Token::Greater => write!(f, ">"),
-            Token::GreaterEqual => write!(f, ">="),
-            Token::Less => write!(f, "<"),
-            Token::LessEqual => write!(f, "<="),
-            Token::Identifier(s) => write!(f, "IDENTIFIER \"{s}\""),
-            Token::Number(n) => write!(f, "NUMBER {n}"),
-            Token::And => write!(f, "AND"),
-            Token::Class => write!(f, "CLASS"),
-            Token::Else => write!(f, "ELSE"),
-            Token::False => write!(f, "FALSE"),
-            Token::Fun => write!(f, "FUN"),
-            Token::For => write!(f, "FOR"),
-            Token::If => write!(f, "IF"),
-            Token::Nil => write!(f, "NIL"),
-            Token::Or => write!(f, "OR"),
-            Token::Print => write!(f, "PRINT"),
-            Token::Return => write!(f, "RETURN"),
-            Token::Super => write!(f, "SUPER"),
-            Token::This => write!(f, "THIS"),
-            Token::True => write!(f, "TRUE"),
-            Token::Var => write!(f, "VAR"),
-            Token::While => write!(f, "WHILE"),
+            Token::LeftBrace(_) => write!(f, "{{"),
+            Token::RightBrace(_) => write!(f, "}}"),
+            Token::Comma(_) => write!(f, ","),
+            Token::Dot(_) => write!(f, "."),
+            Token::Minus(_) => write!(f, "-"),
+            Token::Plus(_) => write!(f, "+"),
+            Token::Semicolon(_) => write!(f, ";"),
+            Token::Slash(_) => write!(f, "/"),
+            Token::Star(_) => write!(f, "*"),
+            Token::Bang(_) => write!(f, "!"),
+            Token::BangEqual(_) => write!(f, "!="),
+            Token::Equal(_) => write!(f, "="),
+            Token::EqualEqual(_) => write!(f, "=="),
+            Token::Greater(_) => write!(f, ">"),
+            Token::GreaterEqual(_) => write!(f, ">="),
+            Token::Less(_) => write!(f, "<"),
+            Token::LessEqual(_) => write!(f, "<="),
+            Token::Identifier(_, s) => write!(f, "IDENTIFIER \"{s}\""),
+            Token::Number(_, n) => write!(f, "NUMBER {n}"),
+            Token::And(_) => write!(f, "AND"),
+            Token::Class(_) => write!(f, "CLASS"),
+            Token::Else(_) => write!(f, "ELSE"),
+            Token::False(_) => write!(f, "FALSE"),
+            Token::Fun(_) => write!(f, "FUN"),
+            Token::For(_) => write!(f, "FOR"),
+            Token::If(_) => write!(f, "IF"),
+            Token::Nil(_) => write!(f, "NIL"),
+            Token::Or(_) => write!(f, "OR"),
+            Token::Print(_) => write!(f, "PRINT"),
+            Token::Return(_) => write!(f, "RETURN"),
+            Token::Super(_) => write!(f, "SUPER"),
+            Token::This(_) => write!(f, "THIS"),
+            Token::True(_) => write!(f, "TRUE"),
+            Token::Var(_) => write!(f, "VAR"),
+            Token::While(_) => write!(f, "WHILE"),
         }
     }
 }
@@ -314,24 +326,24 @@ mod tests {
     use test_case::test_case;
 
     #[test_case("(", vec![Token::LeftParen(0..=0)] ; "Left paren")]
-    #[test_case("!!=", vec![Token::Bang, Token::BangEqual] ; "Bang tests")]
-    #[test_case(">>=", vec![Token::Greater, Token::GreaterEqual] ; "Greater tests")]
-    #[test_case("<<=", vec![Token::Less, Token::LessEqual] ; "Less tests")]
-    #[test_case("===", vec![Token::EqualEqual, Token::Equal] ; "Equal tests")]
+    #[test_case("!!=", vec![Token::Bang(0..=0), Token::BangEqual(1..=2)] ; "Bang tests")]
+    #[test_case(">>=", vec![Token::Greater(0..=0), Token::GreaterEqual(1..=2)] ; "Greater tests")]
+    #[test_case("<<=", vec![Token::Less(0..=0), Token::LessEqual(1..=2)] ; "Less tests")]
+    #[test_case("===", vec![Token::EqualEqual(0..=1), Token::Equal(2..=2)] ; "Equal tests")]
     #[test_case(")", vec![Token::RightParen(0..=0)] ; "Right paren")]
     #[test_case("()", vec![Token::LeftParen(0..=0), Token::RightParen(1..=1)] ; "Both paren")]
-    #[test_case("var x = 2+3;", vec![Token::Var, Token::Identifier("x"), Token::Equal, Token::Number(2.0), Token::Plus, Token::Number(3.0), Token::Semicolon] ; "Expression")]
-    #[test_case(r#""str""#, vec![Token::String("str")] ; "String")]
-    #[test_case(r#""str" // Comment"#, vec![Token::String("str")] ; "String + Comment")]
-    #[test_case(r#"1.2.3 4"#, vec![Token::Number(1.2), Token::Dot, Token::Number(3.0), Token::Number(4.0)] ; "Bad number")]
-    #[test_case(r#"id"#, vec![Token::Identifier("id")] ; "Single identifier")]
-    #[test_case(r#"var"#, vec![Token::Var] ; "Single var")]
-    #[test_case(r#"1.2"#, vec![Token::Number(1.2)] ; "Single number")]
-    #[test_case(r#"3 4"#, vec![Token::Number(3.0), Token::Number(4.0)] ; "Couple nums separated space")]
-    #[test_case(r#"3 45"#, vec![Token::Number(3.0), Token::Number(45.0)] ; "Couple nums separated space second above 10")]
-    #[test_case(r#"123."#, vec![Token::Number(123.0), Token::Dot] ; "Number with trailing dot")]
-    #[test_case(r#" .456 123. "#, vec![Token::Dot, Token::Number(456.0), Token::Number(123.0),
-        Token::Dot] ; "Number with starting dot and number with trailing dot")]
+    #[test_case("var x = 2+3;", vec![Token::Var(0..=2), Token::Identifier(4..=4, "x"), Token::Equal(6..=6), Token::Number(8..=8, 2.0), Token::Plus(9..=9), Token::Number(10..=10, 3.0), Token::Semicolon(11..=11)] ; "Expression")]
+    #[test_case(r#""str""#, vec![Token::String(0..=4, "str")] ; "String")]
+    #[test_case(r#""str" // Comment"#, vec![Token::String(0..=4, "str")] ; "String + Comment")]
+    #[test_case(r#"1.2.3 4"#, vec![Token::Number(0..=2, 1.2), Token::Dot(3..=3), Token::Number(4..=4, 3.0), Token::Number(6..=6, 4.0)] ; "Bad number")]
+    #[test_case(r#"id"#, vec![Token::Identifier(0..=1, "id")] ; "Single identifier")]
+    #[test_case(r#"var"#, vec![Token::Var(0..=2)] ; "Single var")]
+    #[test_case(r#"1.2"#, vec![Token::Number(0..=2, 1.2)] ; "Single number")]
+    #[test_case(r#"3 4"#, vec![Token::Number(0..=0, 3.0), Token::Number(2..=2, 4.0)] ; "Couple nums separated space")]
+    #[test_case(r#"3 45"#, vec![Token::Number(0..=0, 3.0), Token::Number(2..=3, 45.0)] ; "Couple nums separated space second above 10")]
+    #[test_case(r#"123."#, vec![Token::Number(0..=2, 123.0), Token::Dot(3..=3)] ; "Number with trailing dot")]
+    #[test_case(r#" .456 123. "#, vec![Token::Dot(1..=1), Token::Number(2..=4, 456.0), Token::Number(6..=8, 123.0),
+        Token::Dot(9..=9)] ; "Number with starting dot and number with trailing dot")]
     fn positive_tests(input: &str, expected: Vec<Token>) {
         // Arrange
         let lexer = Lexer::new(input);
