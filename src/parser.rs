@@ -117,14 +117,14 @@ pub trait StmtVisitor<'a, R> {
 }
 
 pub struct Parser<'a> {
-    lexer: Peekable<Lexer<'a>>,
+    tokens: Peekable<Lexer<'a>>,
 }
 
 impl<'a> Parser<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {
         Self {
-            lexer: Lexer::new(content).peekable(),
+            tokens: Lexer::new(content).peekable(),
         }
     }
 
@@ -143,7 +143,7 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.lexer.peek() else {
+            let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
             let next_tok = match current {
@@ -156,7 +156,7 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let operator = match self.lexer.next()? {
+            let operator = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -185,7 +185,7 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.lexer.peek() else {
+            let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
             let next_tok = match current {
@@ -201,7 +201,7 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let operator = match self.lexer.next()? {
+            let operator = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -230,7 +230,7 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.lexer.peek() else {
+            let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
             let next_tok = match current {
@@ -243,7 +243,7 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let operator = match self.lexer.next()? {
+            let operator = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -271,7 +271,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
         loop {
-            let Some(current) = self.lexer.peek() else {
+            let Some(current) = self.tokens.peek() else {
                 return Some(Ok(expr));
             };
             let next_tok = match current {
@@ -284,7 +284,7 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let operator = match self.lexer.next()? {
+            let operator = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -307,10 +307,10 @@ impl<'a> Parser<'a> {
     }
 
     fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        match self.lexer.peek()? {
+        match self.tokens.peek()? {
             Ok(tok) => {
                 if let Token::Bang | Token::Minus = tok {
-                    let operator = self.lexer.next()?.unwrap(); // TODO
+                    let operator = self.tokens.next()?.unwrap(); // TODO
                     let Some(unary) = self.unary() else {
                         return Some(Err(miette!(
                             "Dangling {} operator in unary expression",
@@ -331,7 +331,7 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let tok = match self.lexer.next()? {
+        let tok = match self.tokens.next()? {
             Ok(t) => t,
             Err(e) => return Some(Err(e)),
         };
@@ -348,7 +348,7 @@ impl<'a> Parser<'a> {
                 };
                 match expr {
                     Ok(expr) => {
-                        let Some(next) = self.lexer.next() else {
+                        let Some(next) = self.tokens.next() else {
                             return Some(Err(miette!(
                                 "Expect '{}' after expression.",
                                 Token::RightParen
