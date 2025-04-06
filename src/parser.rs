@@ -339,27 +339,35 @@ impl<'a> Parser<'a> {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
                 Some(Ok(Expr::Literal(Some(tok))))
             }
-            Token::LeftParen => match self.expression()? {
-                Ok(expr) => {
-                    let Some(next) = self.lexer.next() else {
-                        return Some(Err(miette!(
-                            "Expect '{}' after expression.",
-                            Token::RightParen
-                        )));
-                    };
+            Token::LeftParen => {
+                let Some(expr) = self.expression() else {
+                    return Some(Err(miette!(
+                        "Expect expression after '{}'",
+                        Token::LeftParen
+                    )));
+                };
+                match expr {
+                    Ok(expr) => {
+                        let Some(next) = self.lexer.next() else {
+                            return Some(Err(miette!(
+                                "Expect '{}' after expression.",
+                                Token::RightParen
+                            )));
+                        };
 
-                    if let Ok(Token::RightParen) = next {
-                        let g = Expr::Grouping(Box::new(expr));
-                        Some(Ok(g))
-                    } else {
-                        Some(Err(miette!(
-                            "Expect '{}' after expression.",
-                            Token::RightParen
-                        )))
+                        if let Ok(Token::RightParen) = next {
+                            let g = Expr::Grouping(Box::new(expr));
+                            Some(Ok(g))
+                        } else {
+                            Some(Err(miette!(
+                                "Expect '{}' after expression.",
+                                Token::RightParen
+                            )))
+                        }
                     }
+                    Err(e) => Some(Err(e)),
                 }
-                Err(e) => Some(Err(e)),
-            },
+            }
             _ => Some(Err(miette!("Unexpected primary token: {tok}."))),
         }
     }
