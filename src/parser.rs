@@ -148,7 +148,13 @@ impl<'a> Parser<'a> {
             };
             let next_tok = match current {
                 Ok(tok) => tok,
-                Err(_e) => return Some(Err(miette!("Unexpected equality error"))), // TODO
+                Err(_) => {
+                    // Consume token if it's not a valid
+                    match self.tokens.next()? {
+                        Ok(_) => unreachable!(),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
             };
 
             if !matches!(next_tok, Token::EqualEqual | Token::BangEqual) {
@@ -190,7 +196,13 @@ impl<'a> Parser<'a> {
             };
             let next_tok = match current {
                 Ok(tok) => tok,
-                Err(_e) => return Some(Err(miette!("Unexpected comparison error"))), // TODO
+                Err(_) => {
+                    // Consume token if it's not a valid
+                    match self.tokens.next()? {
+                        Ok(_) => unreachable!(),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
             };
 
             if !matches!(
@@ -235,7 +247,13 @@ impl<'a> Parser<'a> {
             };
             let next_tok = match current {
                 Ok(tok) => tok,
-                Err(_e) => return Some(Err(miette!("Unexpected term error"))), // TODO
+                Err(_) => {
+                    // Consume token if it's not a valid
+                    match self.tokens.next()? {
+                        Ok(_) => unreachable!(),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
             };
 
             if !matches!(next_tok, Token::Plus | Token::Minus) {
@@ -276,7 +294,13 @@ impl<'a> Parser<'a> {
             };
             let next_tok = match current {
                 Ok(tok) => tok,
-                Err(_e) => return Some(Err(miette!("Unexpected factor error"))), // TODO
+                Err(_) => {
+                    // Consume token if it's not a valid
+                    match self.tokens.next()? {
+                        Ok(_) => unreachable!(),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
             };
 
             if !matches!(next_tok, Token::Star | Token::Slash) {
@@ -310,7 +334,11 @@ impl<'a> Parser<'a> {
         match self.tokens.peek()? {
             Ok(tok) => {
                 if let Token::Bang | Token::Minus = tok {
-                    let operator = self.tokens.next()?.unwrap(); // TODO
+                    // Consume operator
+                    let operator = match self.tokens.next()? {
+                        Ok(tok) => tok,
+                        Err(e) => return Some(Err(e)),
+                    };
                     let Some(unary) = self.unary() else {
                         return Some(Err(miette!(
                             "Dangling {} operator in unary expression",
@@ -326,7 +354,13 @@ impl<'a> Parser<'a> {
                     self.primary()
                 }
             }
-            Err(_e) => Some(Err(miette!("Unexpected unary error"))), // TODO
+            Err(_) => {
+                // Consume token if it's not a valid unary operator
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => Some(Err(e)),
+                }
+            }
         }
     }
 
