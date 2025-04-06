@@ -341,7 +341,14 @@ impl<'a> Parser<'a> {
             }
             Token::LeftParen => match self.expression()? {
                 Ok(expr) => {
-                    if let Ok(Token::RightParen) = self.lexer.next()? {
+                    let Some(next) = self.lexer.next() else {
+                        return Some(Err(miette!(
+                            "Expect '{}' after expression.",
+                            Token::RightParen
+                        )));
+                    };
+
+                    if let Ok(Token::RightParen) = next {
                         let g = Expr::Grouping(Box::new(expr));
                         Some(Ok(g))
                     } else {
