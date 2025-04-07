@@ -10,7 +10,7 @@ use bugreport::{
 };
 use clap::{ArgMatches, Command, command};
 use miette::{Context, IntoDiagnostic, miette};
-use rlox::parser::Parser;
+use rlox::parser::{AstPrinter, Parser};
 
 #[macro_use]
 extern crate clap;
@@ -71,7 +71,10 @@ fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     if let Some(r) = parser.parse() {
         match r {
-            Ok(expr) => println!("{expr:?}"),
+            Ok(expr) => {
+                let printer = AstPrinter {};
+                printer.print(&expr);
+            }
             Err(e) => return Err(e.with_source_code(content)),
         }
     }

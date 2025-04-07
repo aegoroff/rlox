@@ -116,6 +116,104 @@ pub trait StmtVisitor<'a, R> {
     fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> R;
 }
 
+pub struct AstPrinter {}
+
+impl AstPrinter {
+    fn parenthesize(&self, name: &str, expressions: &[&Expr<'_>]) -> String {
+        let expressions = expressions
+            .iter()
+            .map(|e| e.accept(&self))
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        format!("({name} {expressions})")
+    }
+
+    pub fn print(&self, expr: &Expr<'_>) {
+        println!("{}", expr.accept(&self));
+    }
+}
+
+impl<'a> ExprVisitor<'a, String> for &AstPrinter {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> String {
+        match token {
+            Some(t) => format!("{t}"),
+            None => "null".to_owned(),
+        }
+    }
+
+    fn visit_binary_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> String {
+        let op = format!("{operator}");
+        self.parenthesize(&op, &[left, right])
+    }
+
+    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> String {
+        let op = format!("{operator}");
+        self.parenthesize(&op, &[expr])
+    }
+
+    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> String {
+        let _ = value;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_call_expr(
+        &self,
+        paren: &Token<'a>,
+        callee: &Expr<'a>,
+        args: &[Box<Expr<'a>>],
+    ) -> String {
+        let _ = args;
+        let _ = callee;
+        let _ = paren;
+        todo!()
+    }
+
+    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> String {
+        let _ = object;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> String {
+        self.parenthesize("group", &[grouping])
+    }
+
+    fn visit_logical_expr(
+        &self,
+        operator: &Token<'a>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+    ) -> String {
+        let op = format!("{operator}");
+        self.parenthesize(&op, &[left, right])
+    }
+
+    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> String {
+        let _ = val;
+        let _ = obj;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> String {
+        let _ = method;
+        let _ = keyword;
+        todo!()
+    }
+
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> String {
+        let _ = keyword;
+        todo!()
+    }
+
+    fn visit_variable_expr(&self, name: &Token<'a>) -> String {
+        let _ = name;
+        todo!()
+    }
+}
+
 pub struct Parser<'a> {
     tokens: Peekable<Lexer<'a>>,
 }
