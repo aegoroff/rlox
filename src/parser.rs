@@ -252,12 +252,15 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            if !matches!(next_tok, Token::EqualEqual(_) | Token::BangEqual(_)) {
+            if !matches!(
+                next_tok,
+                (_, Token::EqualEqual, _) | (_, Token::BangEqual, _)
+            ) {
                 break;
             }
 
             // Consume operator
-            let operator = match self.tokens.next()? {
+            let (_, operator, _) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -299,13 +302,16 @@ impl<'a> Parser<'a> {
 
             if !matches!(
                 next_tok,
-                Token::Greater(_) | Token::GreaterEqual(_) | Token::Less(_) | Token::LessEqual(_)
+                (_, Token::Greater, _)
+                    | (_, Token::GreaterEqual, _)
+                    | (_, Token::Less, _)
+                    | (_, Token::LessEqual, _)
             ) {
                 break;
             }
 
             // Consume operator
-            let operator = match self.tokens.next()? {
+            let (_, operator, _) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -345,12 +351,12 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            if !matches!(next_tok, Token::Plus(_) | Token::Minus(_)) {
+            if !matches!(next_tok, (_, Token::Plus, _) | (_, Token::Minus, _)) {
                 break;
             }
 
             // Consume operator
-            let operator = match self.tokens.next()? {
+            let (_, operator, _) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -389,12 +395,12 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            if !matches!(next_tok, Token::Star(_) | Token::Slash(_)) {
+            if !matches!(next_tok, (_, Token::Star, _) | (_, Token::Slash, _)) {
                 break;
             }
 
             // Consume operator
-            let operator = match self.tokens.next()? {
+            let (_, operator, _) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -419,9 +425,9 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
         match self.tokens.peek()? {
             Ok(tok) => {
-                if let Token::Bang(_) | Token::Minus(_) = tok {
+                if let (_, Token::Bang, _) | (_, Token::Minus, _) = tok {
                     // Consume operator
-                    let operator = match self.tokens.next()? {
+                    let (_, operator, _) = match self.tokens.next()? {
                         Ok(tok) => tok,
                         Err(e) => return Some(Err(e)),
                     };
@@ -451,20 +457,21 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let tok = match self.tokens.next()? {
+        let (start, tok, finish) = match self.tokens.next()? {
             Ok(t) => t,
             Err(e) => return Some(Err(e)),
         };
         match tok {
-            Token::String(_, _)
-            | Token::Number(_, _)
-            | Token::False(_)
-            | Token::Nil(_)
-            | Token::True(_) => Some(Ok(Expr::Literal(Some(tok)))),
-            Token::LeftParen(range) => {
+            Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
+                Some(Ok(Expr::Literal(Some(tok))))
+            }
+            Token::LeftParen => {
                 let Some(expr) = self.expression() else {
                     return Some(Err(miette!(
-                        labels = vec![LabeledSpan::at(range, "Expect expression after '('")],
+                        labels = vec![LabeledSpan::at(
+                            start..=finish,
+                            "Expect expression after '('"
+                        )],
                         "Expect expression after '('"
                     )));
                 };
@@ -473,20 +480,20 @@ impl<'a> Parser<'a> {
                         let Some(next) = self.tokens.next() else {
                             return Some(Err(miette!(
                                 labels = vec![LabeledSpan::at(
-                                    range,
+                                    start..=finish,
                                     "Expect ')' after grouping expression that starts here."
                                 )],
                                 "Expect ')' after expression."
                             )));
                         };
 
-                        if let Ok(Token::RightParen(_)) = next {
+                        if let Ok((_, Token::RightParen, _)) = next {
                             let g = Expr::Grouping(Box::new(expr));
                             Some(Ok(g))
                         } else {
                             Some(Err(miette!(
                                 labels = vec![LabeledSpan::at(
-                                    range,
+                                    start..=finish,
                                     "Expect ')' after grouping expression that starts here."
                                 )],
                                 "Expect ')' after expression."
