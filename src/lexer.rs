@@ -66,17 +66,17 @@ impl<'a> Lexer<'a> {
         next: char,
         success: Token<'a>,
         failure: Token<'a>,
-    ) -> Option<Spanned<Token<'a>, usize>> {
+    ) -> (usize, Token<'a>, usize) {
         if let Some((i, peek)) = self.chars.peek() {
             if next == *peek {
                 let start = *i;
                 self.chars.next(); // if match advance iterator
-                Some(Ok((start, success, start + 1)))
+                (start, success, start + 1)
             } else {
-                Some(Ok((*i, failure, *i)))
+                (*i, failure, *i)
             }
         } else {
-            Some(Ok((start, failure, start)))
+            (start, failure, start)
         }
     }
 
@@ -164,7 +164,7 @@ impl<'a> Lexer<'a> {
             )
         });
         match result {
-            Ok(value) => Ok((start, Token::Number(value), finish)),
+            Ok(value) => Ok((start, Token::Number(value), finish + 1)),
             Err(e) => Err(e),
         }
     }
@@ -183,7 +183,7 @@ impl<'a> Lexer<'a> {
         finish
     }
 
-    fn identifier_or_keyword(&mut self, start: usize) -> Spanned<Token<'a>, usize> {
+    fn identifier_or_keyword(&mut self, start: usize) -> (usize, Token<'a>, usize) {
         let mut finish = start;
         while let Some((i, next)) = self.chars.peek() {
             finish = *i;
@@ -217,7 +217,7 @@ impl<'a> Lexer<'a> {
             "while" => Token::While,
             _ => Token::Identifier(id),
         };
-        Ok((start, tok, finish))
+        (start, tok, finish + 1)
     }
 }
 
@@ -238,10 +238,30 @@ impl<'a> Iterator for Lexer<'a> {
                 '+' => Some(Ok((i, Token::Plus, i))),
                 ';' => Some(Ok((i, Token::Semicolon, i))),
                 '*' => Some(Ok((i, Token::Star, i))),
-                '=' => self.two_char_token(i, '=', Token::EqualEqual, Token::Equal),
-                '>' => self.two_char_token(i, '=', Token::GreaterEqual, Token::Greater),
-                '<' => self.two_char_token(i, '=', Token::LessEqual, Token::Less),
-                '!' => self.two_char_token(i, '=', Token::BangEqual, Token::Bang),
+                '=' => Some(Ok(self.two_char_token(
+                    i,
+                    '=',
+                    Token::EqualEqual,
+                    Token::Equal,
+                ))),
+                '>' => Some(Ok(self.two_char_token(
+                    i,
+                    '=',
+                    Token::GreaterEqual,
+                    Token::Greater,
+                ))),
+                '<' => Some(Ok(self.two_char_token(
+                    i,
+                    '=',
+                    Token::LessEqual,
+                    Token::Less,
+                ))),
+                '!' => Some(Ok(self.two_char_token(
+                    i,
+                    '=',
+                    Token::BangEqual,
+                    Token::Bang,
+                ))),
                 '/' => {
                     if let Some(t) = self.skip_comment_or(i, Token::Slash) {
                         Some(t)
@@ -250,7 +270,7 @@ impl<'a> Iterator for Lexer<'a> {
                     }
                 }
                 '"' => Some(self.string(i)),
-                'a'..='z' | 'A'..='Z' | '_' => Some(self.identifier_or_keyword(i)),
+                'a'..='z' | 'A'..='Z' | '_' => Some(Ok(self.identifier_or_keyword(i))),
                 '0'..='9' => Some(self.number(i)),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
                 _ => Some(Err(miette::miette!(

@@ -252,10 +252,7 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            if !matches!(
-                next_tok,
-                (_, Token::EqualEqual, _) | (_, Token::BangEqual, _)
-            ) {
+            if !matches!(next_tok, (_, Token::EqualEqual | Token::BangEqual, _)) {
                 break;
             }
 
@@ -302,10 +299,11 @@ impl<'a> Parser<'a> {
 
             if !matches!(
                 next_tok,
-                (_, Token::Greater, _)
-                    | (_, Token::GreaterEqual, _)
-                    | (_, Token::Less, _)
-                    | (_, Token::LessEqual, _)
+                (
+                    _,
+                    Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual,
+                    _
+                )
             ) {
                 break;
             }
@@ -351,7 +349,7 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            if !matches!(next_tok, (_, Token::Plus, _) | (_, Token::Minus, _)) {
+            if !matches!(next_tok, (_, Token::Plus | Token::Minus, _)) {
                 break;
             }
 
@@ -395,7 +393,7 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            if !matches!(next_tok, (_, Token::Star, _) | (_, Token::Slash, _)) {
+            if !matches!(next_tok, (_, Token::Star | Token::Slash, _)) {
                 break;
             }
 
@@ -425,7 +423,7 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
         match self.tokens.peek()? {
             Ok(tok) => {
-                if let (_, Token::Bang, _) | (_, Token::Minus, _) = tok {
+                if let (_, Token::Bang | Token::Minus, _) = tok {
                     // Consume operator
                     let (_, operator, _) = match self.tokens.next()? {
                         Ok(tok) => tok,
