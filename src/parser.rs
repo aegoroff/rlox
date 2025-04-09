@@ -257,14 +257,18 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let (_, operator, _) = match self.tokens.next()? {
+            let (s, operator, f) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
 
             let Some(comparison) = self.comparison() else {
                 return Some(Err(miette!(
-                    "Missing comparison expression in the right part of binary expression"
+                    labels = vec![LabeledSpan::at(
+                        s..=f,
+                        "Missing comparison expression in the right part of binary expression"
+                    )],
+                    "Invalid syntax"
                 )));
             };
 
@@ -309,14 +313,18 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let (_, operator, _) = match self.tokens.next()? {
+            let (s, operator, f) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
 
             let Some(term) = self.term() else {
                 return Some(Err(miette!(
-                    "Missing term expression in the right part of binary expression"
+                    labels = vec![LabeledSpan::at(
+                        s..=f,
+                        "Missing term expression in the right part of binary expression"
+                    )],
+                    "Invalid syntax"
                 )));
             };
 
@@ -354,14 +362,18 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let (_, operator, _) = match self.tokens.next()? {
+            let (s, operator, f) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
 
             let Some(factor) = self.factor() else {
                 return Some(Err(miette!(
-                    "Missing factor expression in the right part of binary expression"
+                    labels = vec![LabeledSpan::at(
+                        s..=f,
+                        "Missing factor expression in the right part of binary expression"
+                    )],
+                    "Invalid syntax"
                 )));
             };
 
@@ -398,14 +410,18 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let (_, operator, _) = match self.tokens.next()? {
+            let (s, operator, f) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
 
             let Some(unary) = self.unary() else {
                 return Some(Err(miette!(
-                    "Missing unary expression in the right part of binary expression"
+                    labels = vec![LabeledSpan::at(
+                        s..=f,
+                        "Missing unary expression in the right part of binary expression"
+                    )],
+                    "Invalid syntax"
                 )));
             };
 
@@ -425,14 +441,17 @@ impl<'a> Parser<'a> {
             Ok(tok) => {
                 if let (_, Token::Bang | Token::Minus, _) = tok {
                     // Consume operator
-                    let (_, operator, _) = match self.tokens.next()? {
+                    let (s, operator, f) = match self.tokens.next()? {
                         Ok(tok) => tok,
                         Err(e) => return Some(Err(e)),
                     };
                     let Some(unary) = self.unary() else {
                         return Some(Err(miette!(
-                            "Dangling {} operator in unary expression",
-                            operator
+                            labels = vec![LabeledSpan::at(
+                                s..=f,
+                                format!("Dangling {} operator in unary expression", operator)
+                            )],
+                            "Invalid syntax"
                         )));
                     };
 
@@ -501,7 +520,13 @@ impl<'a> Parser<'a> {
                     Err(e) => Some(Err(e)),
                 }
             }
-            _ => Some(Err(miette!("Unexpected primary token: {tok}."))),
+            _ => Some(Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..finish,
+                    format!("Unexpected primary token: {tok}.")
+                )],
+                "Invalid syntax"
+            ))),
         }
     }
 }
