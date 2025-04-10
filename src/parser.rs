@@ -218,14 +218,35 @@ pub enum LoxValue<'a> {
     String(&'a str),
     Number(f64),
     Bool(bool),
+    Nil,
 }
 
 pub struct Evaluator {}
 
-impl<'a> ExprVisitor<'a, LoxValue<'a>> for Evaluator {
+impl Evaluator {
+    pub fn print(&self, expr: &Expr<'_>) {
+        let expr = expr.accept(&self);
+        match expr {
+            LoxValue::String(s) => println!("{s}"),
+            LoxValue::Number(n) => println!("{n}"),
+            LoxValue::Bool(b) => println!("{b}"),
+            LoxValue::Nil => println!("Null"),
+        }
+    }
+}
+
+impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> LoxValue<'a> {
-        let _ = token;
-        todo!()
+        match token {
+            Some(t) => match t {
+                Token::String(s) => LoxValue::String(s),
+                Token::Number(n) => LoxValue::Number(*n),
+                Token::False => LoxValue::Bool(false),
+                Token::True => LoxValue::Bool(true),
+                _ => todo!(),
+            },
+            None => LoxValue::Nil,
+        }
     }
 
     fn visit_binary_expr(
@@ -234,16 +255,100 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for Evaluator {
         left: &Expr<'a>,
         right: &Expr<'a>,
     ) -> LoxValue<'a> {
-        let _ = right;
-        let _ = left;
-        let _ = operator;
-        todo!()
+        let lhs = left.accept(self);
+        let rhs = right.accept(self);
+        match operator {
+            Token::Minus => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let result = l - r;
+                LoxValue::Number(result)
+            }
+            Token::Plus => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let result = l + r;
+                LoxValue::Number(result)
+            }
+            Token::Slash => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let result = l / r;
+                LoxValue::Number(result)
+            }
+            Token::Star => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let result = l * r;
+                LoxValue::Number(result)
+            }
+            Token::BangEqual => todo!(),
+            Token::EqualEqual => todo!(),
+            Token::Greater => todo!(),
+            Token::GreaterEqual => todo!(),
+            Token::Less => todo!(),
+            Token::LessEqual => todo!(),
+            _ => todo!(),
+        }
     }
 
     fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> LoxValue<'a> {
-        let _ = operator;
-        let _ = expr;
-        todo!()
+        let val = expr.accept(self);
+        match operator {
+            Token::Minus => match val {
+                LoxValue::String(_) => todo!(),
+                LoxValue::Number(n) => LoxValue::Number(-n),
+                LoxValue::Bool(_) => todo!(),
+                LoxValue::Nil => LoxValue::Nil,
+            },
+            Token::Bang => match val {
+                LoxValue::String(_) => todo!(),
+                LoxValue::Number(_) => todo!(),
+                LoxValue::Bool(b) => LoxValue::Bool(!b),
+                LoxValue::Nil => LoxValue::Nil,
+            },
+            _ => todo!(),
+        }
     }
 
     fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> LoxValue<'a> {
@@ -271,8 +376,7 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for Evaluator {
     }
 
     fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> LoxValue<'a> {
-        let _ = grouping;
-        todo!()
+        grouping.accept(self)
     }
 
     fn visit_logical_expr(
