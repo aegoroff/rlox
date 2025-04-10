@@ -322,12 +322,96 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                 let result = l * r;
                 LoxValue::Number(result)
             }
-            Token::BangEqual => todo!(),
-            Token::EqualEqual => todo!(),
-            Token::Greater => todo!(),
-            Token::GreaterEqual => todo!(),
-            Token::Less => todo!(),
-            Token::LessEqual => todo!(),
+            Token::BangEqual => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                LoxValue::Bool(l != r)
+            }
+            Token::EqualEqual => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                LoxValue::Bool(l == r)
+            }
+            Token::Greater => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                LoxValue::Bool(l > r)
+            }
+            Token::GreaterEqual => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                LoxValue::Bool(l >= r)
+            }
+            Token::Less => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                LoxValue::Bool(l < r)
+            }
+            Token::LessEqual => {
+                let l = match lhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                let r = match rhs {
+                    LoxValue::String(_) => todo!(),
+                    LoxValue::Number(n) => n,
+                    LoxValue::Bool(_) => todo!(),
+                    LoxValue::Nil => todo!(),
+                };
+                LoxValue::Bool(l <= r)
+            }
             _ => todo!(),
         }
     }
