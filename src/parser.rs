@@ -214,6 +214,103 @@ impl<'a> ExprVisitor<'a, String> for &AstPrinter {
     }
 }
 
+pub enum LoxValue<'a> {
+    String(&'a str),
+    Number(f64),
+    Bool(bool),
+}
+
+pub struct Evaluator {}
+
+impl<'a> ExprVisitor<'a, LoxValue<'a>> for Evaluator {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> LoxValue<'a> {
+        let _ = token;
+        todo!()
+    }
+
+    fn visit_binary_expr(
+        &self,
+        operator: &Token<'a>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+    ) -> LoxValue<'a> {
+        let _ = right;
+        let _ = left;
+        let _ = operator;
+        todo!()
+    }
+
+    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> LoxValue<'a> {
+        let _ = operator;
+        let _ = expr;
+        todo!()
+    }
+
+    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> LoxValue<'a> {
+        let _ = value;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_call_expr(
+        &self,
+        paren: &Token<'a>,
+        callee: &Expr<'a>,
+        args: &[Box<Expr<'a>>],
+    ) -> LoxValue<'a> {
+        let _ = args;
+        let _ = callee;
+        let _ = paren;
+        todo!()
+    }
+
+    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> LoxValue<'a> {
+        let _ = object;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> LoxValue<'a> {
+        let _ = grouping;
+        todo!()
+    }
+
+    fn visit_logical_expr(
+        &self,
+        operator: &Token<'a>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+    ) -> LoxValue<'a> {
+        let _ = right;
+        let _ = left;
+        let _ = operator;
+        todo!()
+    }
+
+    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> LoxValue<'a> {
+        let _ = val;
+        let _ = obj;
+        let _ = name;
+        todo!()
+    }
+
+    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> LoxValue<'a> {
+        let _ = method;
+        let _ = keyword;
+        todo!()
+    }
+
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> LoxValue<'a> {
+        let _ = keyword;
+        todo!()
+    }
+
+    fn visit_variable_expr(&self, name: &Token<'a>) -> LoxValue<'a> {
+        let _ = name;
+        todo!()
+    }
+}
+
 pub struct Parser<'a> {
     tokens: Peekable<Lexer<'a>>,
 }
