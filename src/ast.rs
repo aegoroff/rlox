@@ -237,10 +237,10 @@ impl LoxValue {
     }
 
     pub fn try_bool(&self) -> miette::Result<bool> {
-        if let LoxValue::Bool(b) = self {
-            Ok(*b)
-        } else {
-            Err(miette!("Boolean expected"))
+        match self {
+            LoxValue::Bool(b) => Ok(*b),
+            LoxValue::Nil => Ok(false),
+            _ => Err(miette!("Boolean expected or Nil")),
         }
     }
 }
