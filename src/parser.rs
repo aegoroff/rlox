@@ -225,7 +225,14 @@ pub struct Evaluator {}
 
 impl Evaluator {
     pub fn print(&self, expr: &Expr<'_>) {
-        let expr = expr.accept(&self);
+        let expr = self.evaluate(expr);
+        let expr = match expr {
+            Ok(e) => e,
+            Err(e) => {
+                println!("{e}");
+                return;
+            }
+        };
         match expr {
             LoxValue::String(s) => println!("{s}"),
             LoxValue::Number(n) => println!("{n}"),
@@ -233,19 +240,23 @@ impl Evaluator {
             LoxValue::Nil => println!("Null"),
         }
     }
+
+    pub fn evaluate<'a>(&self, expr: &Expr<'a>) -> miette::Result<LoxValue<'a>> {
+        expr.accept(&self)
+    }
 }
 
-impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
-    fn visit_literal(&self, token: &Option<Token<'a>>) -> LoxValue<'a> {
+impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue<'a>> {
         match token {
             Some(t) => match t {
-                Token::String(s) => LoxValue::String(s),
-                Token::Number(n) => LoxValue::Number(*n),
-                Token::False => LoxValue::Bool(false),
-                Token::True => LoxValue::Bool(true),
-                _ => todo!(),
+                Token::String(s) => Ok(LoxValue::String(s)),
+                Token::Number(n) => Ok(LoxValue::Number(*n)),
+                Token::False => Ok(LoxValue::Bool(false)),
+                Token::True => Ok(LoxValue::Bool(true)),
+                _ => Err(miette!("Invalid literal")),
             },
-            None => LoxValue::Nil,
+            None => Ok(LoxValue::Nil),
         }
     }
 
@@ -254,25 +265,26 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> LoxValue<'a> {
-        let lhs = left.accept(self);
-        let rhs = right.accept(self);
+    ) -> miette::Result<LoxValue<'a>> {
+        let lhs = self.evaluate(left)?;
+        let rhs = self.evaluate(right)?;
+
         match operator {
             Token::Minus => {
                 let l = match lhs {
-                    LoxValue::String(_) => todo!(),
+                    LoxValue::String(_) => return Err(miette!("Minus not defined for strings")),
                     LoxValue::Number(n) => n,
                     LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
+                    LoxValue::Nil => 0.0,
                 };
                 let r = match rhs {
-                    LoxValue::String(_) => todo!(),
+                    LoxValue::String(_) => return Err(miette!("Minus not defined for strings")),
                     LoxValue::Number(n) => n,
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
                 let result = l - r;
-                LoxValue::Number(result)
+                Ok(LoxValue::Number(result))
             }
             Token::Plus => {
                 let l = match lhs {
@@ -288,39 +300,43 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                     LoxValue::Nil => todo!(),
                 };
                 let result = l + r;
-                LoxValue::Number(result)
+                Ok(LoxValue::Number(result))
             }
             Token::Slash => {
                 let l = match lhs {
-                    LoxValue::String(_) => todo!(),
+                    LoxValue::String(_) => return Err(miette!("Division not defined for strings")),
                     LoxValue::Number(n) => n,
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
                 let r = match rhs {
-                    LoxValue::String(_) => todo!(),
+                    LoxValue::String(_) => return Err(miette!("Division not defined for strings")),
                     LoxValue::Number(n) => n,
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
                 let result = l / r;
-                LoxValue::Number(result)
+                Ok(LoxValue::Number(result))
             }
             Token::Star => {
                 let l = match lhs {
-                    LoxValue::String(_) => todo!(),
+                    LoxValue::String(_) => {
+                        return Err(miette!("Multiplication not defined for strings"));
+                    }
                     LoxValue::Number(n) => n,
                     LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
+                    LoxValue::Nil => return Err(miette!("Multiplication not defined for nil")),
                 };
                 let r = match rhs {
-                    LoxValue::String(_) => todo!(),
+                    LoxValue::String(_) => {
+                        return Err(miette!("Multiplication not defined for strings"));
+                    }
                     LoxValue::Number(n) => n,
                     LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
+                    LoxValue::Nil => return Err(miette!("Multiplication not defined for nil")),
                 };
                 let result = l * r;
-                LoxValue::Number(result)
+                Ok(LoxValue::Number(result))
             }
             Token::BangEqual => {
                 let l = match lhs {
@@ -335,7 +351,7 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                LoxValue::Bool(l != r)
+                Ok(LoxValue::Bool(l != r))
             }
             Token::EqualEqual => {
                 let l = match lhs {
@@ -350,7 +366,7 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                LoxValue::Bool(l == r)
+                Ok(LoxValue::Bool(l == r))
             }
             Token::Greater => {
                 let l = match lhs {
@@ -365,7 +381,7 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                LoxValue::Bool(l > r)
+                Ok(LoxValue::Bool(l > r))
             }
             Token::GreaterEqual => {
                 let l = match lhs {
@@ -380,7 +396,7 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                LoxValue::Bool(l >= r)
+                Ok(LoxValue::Bool(l >= r))
             }
             Token::Less => {
                 let l = match lhs {
@@ -395,7 +411,7 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                LoxValue::Bool(l < r)
+                Ok(LoxValue::Bool(l < r))
             }
             Token::LessEqual => {
                 let l = match lhs {
@@ -410,32 +426,40 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                LoxValue::Bool(l <= r)
+                Ok(LoxValue::Bool(l <= r))
             }
             _ => todo!(),
         }
     }
 
-    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> LoxValue<'a> {
-        let val = expr.accept(self);
+    fn visit_unary_expr(
+        &self,
+        operator: &Token<'a>,
+        expr: &Expr<'a>,
+    ) -> miette::Result<LoxValue<'a>> {
+        let val = self.evaluate(expr)?;
         match operator {
             Token::Minus => match val {
                 LoxValue::String(_) => todo!(),
-                LoxValue::Number(n) => LoxValue::Number(-n),
+                LoxValue::Number(n) => Ok(LoxValue::Number(-n)),
                 LoxValue::Bool(_) => todo!(),
-                LoxValue::Nil => LoxValue::Nil,
+                LoxValue::Nil => Ok(LoxValue::Nil),
             },
             Token::Bang => match val {
                 LoxValue::String(_) => todo!(),
                 LoxValue::Number(_) => todo!(),
-                LoxValue::Bool(b) => LoxValue::Bool(!b),
-                LoxValue::Nil => LoxValue::Nil,
+                LoxValue::Bool(b) => Ok(LoxValue::Bool(!b)),
+                LoxValue::Nil => Ok(LoxValue::Nil),
             },
             _ => todo!(),
         }
     }
 
-    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> LoxValue<'a> {
+    fn visit_assign_expr(
+        &self,
+        name: &Token<'a>,
+        value: &Expr<'a>,
+    ) -> miette::Result<LoxValue<'a>> {
         let _ = value;
         let _ = name;
         todo!()
@@ -446,21 +470,21 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
         paren: &Token<'a>,
         callee: &Expr<'a>,
         args: &[Box<Expr<'a>>],
-    ) -> LoxValue<'a> {
+    ) -> miette::Result<LoxValue<'a>> {
         let _ = args;
         let _ = callee;
         let _ = paren;
         todo!()
     }
 
-    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> LoxValue<'a> {
+    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue<'a>> {
         let _ = object;
         let _ = name;
         todo!()
     }
 
-    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> LoxValue<'a> {
-        grouping.accept(self)
+    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> miette::Result<LoxValue<'a>> {
+        self.evaluate(grouping)
     }
 
     fn visit_logical_expr(
@@ -468,32 +492,41 @@ impl<'a> ExprVisitor<'a, LoxValue<'a>> for &Evaluator {
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> LoxValue<'a> {
+    ) -> miette::Result<LoxValue<'a>> {
         let _ = right;
         let _ = left;
         let _ = operator;
         todo!()
     }
 
-    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> LoxValue<'a> {
+    fn visit_set_expr(
+        &self,
+        name: &Token<'a>,
+        obj: &Expr<'a>,
+        val: &Expr<'a>,
+    ) -> miette::Result<LoxValue<'a>> {
         let _ = val;
         let _ = obj;
         let _ = name;
         todo!()
     }
 
-    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> LoxValue<'a> {
+    fn visit_super_expr(
+        &self,
+        keyword: &Token<'a>,
+        method: &Token<'a>,
+    ) -> miette::Result<LoxValue<'a>> {
         let _ = method;
         let _ = keyword;
         todo!()
     }
 
-    fn visit_this_expr(&self, keyword: &Token<'a>) -> LoxValue<'a> {
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> miette::Result<LoxValue<'a>> {
         let _ = keyword;
         todo!()
     }
 
-    fn visit_variable_expr(&self, name: &Token<'a>) -> LoxValue<'a> {
+    fn visit_variable_expr(&self, name: &Token<'a>) -> miette::Result<LoxValue<'a>> {
         let _ = name;
         todo!()
     }
@@ -840,5 +873,39 @@ mod tests {
 
         // Assert
         assert!(actual.is_some());
+    }
+
+    #[test_case("--1", 1.0)]
+    #[test_case("1 - 1", 0.0)]
+    #[test_case("1 - 2", -1.0)]
+    #[test_case("2 - 1", 1.0)]
+    #[test_case("2 + 3", 5.0)]
+    #[test_case("2 + 3 - 1", 4.0)]
+    #[test_case("3 + 3 / 3", 4.0)]
+    #[test_case("(3 + 3) / 3", 2.0)]
+    #[test_case("4 / 2", 2.0)]
+    #[test_case("4 / 1", 4.0)]
+    #[test_case("5 / -1", -5.0)]
+    #[test_case("(5 - (3-1)) + -1", 2.0)]
+    #[test_case("(5 - (3-1)) * -1", -3.0)]
+    #[test_case("((5 - (3-1)) * -2) / 4", -1.5)]
+    #[test_case("((5 - (3-1) + 3) * -2) / 4", -3.0)]
+    fn evaluator_numeric_positive_tests(input: &str, expected: f64) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let expr = parser.parse().unwrap().unwrap();
+        let eval = Evaluator {};
+
+        // Act
+        let actual = eval.evaluate(&expr);
+
+        // Assert
+        assert!(actual.is_ok());
+        let actual = actual.unwrap();
+        if let LoxValue::Number(actual) = actual {
+            assert_eq!(actual, expected)
+        } else {
+            todo!()
+        }
     }
 }
