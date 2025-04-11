@@ -479,9 +479,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
     }
 
     fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
-        let _ = object;
         let _ = name;
-        todo!()
+        self.evaluate(object)
     }
 
     fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {
