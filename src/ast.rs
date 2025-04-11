@@ -219,6 +219,32 @@ pub enum LoxValue<'a> {
     Nil,
 }
 
+impl<'a> LoxValue<'a> {
+    pub fn try_num(&self) -> miette::Result<f64> {
+        if let LoxValue::Number(n) = self {
+            Ok(*n)
+        } else {
+            Err(miette!("Number expected"))
+        }
+    }
+
+    pub fn try_str(&self) -> miette::Result<&'a str> {
+        if let LoxValue::String(s) = self {
+            Ok(*s)
+        } else {
+            Err(miette!("String expected"))
+        }
+    }
+
+    pub fn try_bool(&self) -> miette::Result<bool> {
+        if let LoxValue::Bool(b) = self {
+            Ok(*b)
+        } else {
+            Err(miette!("Boolean expected"))
+        }
+    }
+}
+
 pub struct Evaluator {}
 
 impl Evaluator {
@@ -271,162 +297,107 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
 
         match operator {
             Token::Minus => {
-                let l = match lhs {
-                    LoxValue::String(_) => return Err(miette!("Minus not defined for strings")),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => 0.0,
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => return Err(miette!("Minus not defined for strings")),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
+                let l = lhs.try_num()?;
+                let r = rhs.try_num()?;
                 let result = l - r;
                 Ok(LoxValue::Number(result))
             }
             Token::Plus => {
-                let l = match lhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let result = l + r;
-                Ok(LoxValue::Number(result))
+                if let Ok(l) = lhs.try_num() {
+                    let r = rhs.try_num()?;
+                    let result = l + r;
+                    Ok(LoxValue::Number(result))
+                // } else if let Ok(l) = lhs.try_str() { // TODO: implement string concat
+                //     let r = rhs.try_str()?;
+                //     let result = l + r;
+                //     Ok(LoxValue::String(result))
+                } else {
+                    Err(miette!("Invalid operands types for plus"))
+                }
             }
             Token::Slash => {
-                let l = match lhs {
-                    LoxValue::String(_) => return Err(miette!("Division not defined for strings")),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => return Err(miette!("Division not defined for strings")),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
+                let l = lhs.try_num()?;
+                let r = rhs.try_num()?;
                 let result = l / r;
                 Ok(LoxValue::Number(result))
             }
             Token::Star => {
-                let l = match lhs {
-                    LoxValue::String(_) => {
-                        return Err(miette!("Multiplication not defined for strings"));
-                    }
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => return Err(miette!("Multiplication not defined for nil")),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => {
-                        return Err(miette!("Multiplication not defined for strings"));
-                    }
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => return Err(miette!("Multiplication not defined for nil")),
-                };
+                let l = lhs.try_num()?;
+                let r = rhs.try_num()?;
                 let result = l * r;
                 Ok(LoxValue::Number(result))
             }
             Token::BangEqual => {
-                let l = match lhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                Ok(LoxValue::Bool((l - r).abs() > ERROR_MARGIN))
+                if let Ok(l) = lhs.try_num() {
+                    let r = rhs.try_num()?;
+                    Ok(LoxValue::Bool((l - r).abs() > ERROR_MARGIN))
+                } else if let Ok(l) = lhs.try_bool() {
+                    let r = rhs.try_bool()?;
+                    let result = l != r;
+                    Ok(LoxValue::Bool(result))
+                } else {
+                    Err(miette!("Invalid operands types for not equal"))
+                }
             }
             Token::EqualEqual => {
-                let l = match lhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                Ok(LoxValue::Bool((l - r).abs() < ERROR_MARGIN))
+                if let Ok(l) = lhs.try_num() {
+                    let r = rhs.try_num()?;
+                    Ok(LoxValue::Bool((l - r).abs() < ERROR_MARGIN))
+                } else if let Ok(l) = lhs.try_bool() {
+                    let r = rhs.try_bool()?;
+                    let result = l == r;
+                    Ok(LoxValue::Bool(result))
+                } else {
+                    Err(miette!("Invalid operands types for equal"))
+                }
             }
             Token::Greater => {
-                let l = match lhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                Ok(LoxValue::Bool(l > r))
+                if let Ok(l) = lhs.try_num() {
+                    let r = rhs.try_num()?;
+                    Ok(LoxValue::Bool(l > r))
+                } else if let Ok(l) = lhs.try_bool() {
+                    let r = rhs.try_bool()?;
+                    let result = l & !r;
+                    Ok(LoxValue::Bool(result))
+                } else {
+                    Err(miette!("Invalid operands types for greater"))
+                }
             }
             Token::GreaterEqual => {
-                let l = match lhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                Ok(LoxValue::Bool(l >= r))
+                if let Ok(l) = lhs.try_num() {
+                    let r = rhs.try_num()?;
+                    Ok(LoxValue::Bool(l >= r))
+                } else if let Ok(l) = lhs.try_bool() {
+                    let r = rhs.try_bool()?;
+                    let result = l >= r;
+                    Ok(LoxValue::Bool(result))
+                } else {
+                    Err(miette!("Invalid operands types for greater or equal"))
+                }
             }
             Token::Less => {
-                let l = match lhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                Ok(LoxValue::Bool(l < r))
+                if let Ok(l) = lhs.try_num() {
+                    let r = rhs.try_num()?;
+                    Ok(LoxValue::Bool(l < r))
+                } else if let Ok(l) = lhs.try_bool() {
+                    let r = rhs.try_bool()?;
+                    let result = !l & r;
+                    Ok(LoxValue::Bool(result))
+                } else {
+                    Err(miette!("Invalid operands types for less"))
+                }
             }
             Token::LessEqual => {
-                let l = match lhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                let r = match rhs {
-                    LoxValue::String(_) => todo!(),
-                    LoxValue::Number(n) => n,
-                    LoxValue::Bool(_) => todo!(),
-                    LoxValue::Nil => todo!(),
-                };
-                Ok(LoxValue::Bool(l <= r))
+                if let Ok(l) = lhs.try_num() {
+                    let r = rhs.try_num()?;
+                    Ok(LoxValue::Bool(l <= r))
+                } else if let Ok(l) = lhs.try_bool() {
+                    let r = rhs.try_bool()?;
+                    let result = l <= r;
+                    Ok(LoxValue::Bool(result))
+                } else {
+                    Err(miette!("Invalid operands types for less or equal"))
+                }
             }
             _ => todo!(),
         }
@@ -439,19 +410,9 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
     ) -> miette::Result<LoxValue<'a>> {
         let val = self.evaluate(expr)?;
         match operator {
-            Token::Minus => match val {
-                LoxValue::String(_) => todo!(),
-                LoxValue::Number(n) => Ok(LoxValue::Number(-n)),
-                LoxValue::Bool(_) => todo!(),
-                LoxValue::Nil => Ok(LoxValue::Nil),
-            },
-            Token::Bang => match val {
-                LoxValue::String(_) => todo!(),
-                LoxValue::Number(_) => todo!(),
-                LoxValue::Bool(b) => Ok(LoxValue::Bool(!b)),
-                LoxValue::Nil => Ok(LoxValue::Nil),
-            },
-            _ => todo!(),
+            Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
+            Token::Bang => Ok(LoxValue::Bool(!val.try_bool()?)),
+            _ => Err(miette!("Invalid unary operator")),
         }
     }
 
