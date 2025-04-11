@@ -242,7 +242,7 @@ impl<'a> Parser<'a> {
                         return Some(Err(miette!(
                             labels = vec![LabeledSpan::at(
                                 s..=f,
-                                format!("Dangling {} operator in unary expression", operator)
+                                format!("Dangling {operator} operator in unary expression")
                             )],
                             "Invalid syntax"
                         )));

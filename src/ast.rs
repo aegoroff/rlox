@@ -244,6 +244,8 @@ impl Evaluator {
     }
 }
 
+const ERROR_MARGIN: f64 = 0.00001;
+
 impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue<'a>> {
         match token {
@@ -349,7 +351,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                Ok(LoxValue::Bool(l != r))
+                Ok(LoxValue::Bool((l - r).abs() > ERROR_MARGIN))
             }
             Token::EqualEqual => {
                 let l = match lhs {
@@ -364,7 +366,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     LoxValue::Bool(_) => todo!(),
                     LoxValue::Nil => todo!(),
                 };
-                Ok(LoxValue::Bool(l == r))
+                Ok(LoxValue::Bool((l - r).abs() < ERROR_MARGIN))
             }
             Token::Greater => {
                 let l = match lhs {
