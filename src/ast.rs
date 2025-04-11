@@ -339,6 +339,18 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                     let r = rhs.try_str()?;
                     let result = l != r;
                     Ok(LoxValue::Bool(result))
+                } else if let LoxValue::Nil = lhs {
+                    if let LoxValue::Nil = rhs {
+                        Ok(LoxValue::Bool(false))
+                    } else {
+                        Ok(LoxValue::Bool(true))
+                    }
+                } else if let LoxValue::Nil = rhs {
+                    if let LoxValue::Nil = lhs {
+                        Ok(LoxValue::Bool(false))
+                    } else {
+                        Ok(LoxValue::Bool(true))
+                    }
                 } else {
                     Err(miette!("Invalid operands types for not equal"))
                 }
@@ -355,6 +367,18 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                     let r = rhs.try_str()?;
                     let result = l == r;
                     Ok(LoxValue::Bool(result))
+                } else if let LoxValue::Nil = lhs {
+                    if let LoxValue::Nil = rhs {
+                        Ok(LoxValue::Bool(true))
+                    } else {
+                        Ok(LoxValue::Bool(false))
+                    }
+                } else if let LoxValue::Nil = rhs {
+                    if let LoxValue::Nil = lhs {
+                        Ok(LoxValue::Bool(true))
+                    } else {
+                        Ok(LoxValue::Bool(false))
+                    }
                 } else {
                     Err(miette!("Invalid operands types for equal"))
                 }
