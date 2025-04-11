@@ -212,14 +212,14 @@ impl<'a> ExprVisitor<'a, String> for &AstPrinter {
     }
 }
 
-pub enum LoxValue<'a> {
-    String(&'a str),
+pub enum LoxValue {
+    String(String),
     Number(f64),
     Bool(bool),
     Nil,
 }
 
-impl<'a> LoxValue<'a> {
+impl LoxValue {
     pub fn try_num(&self) -> miette::Result<f64> {
         if let LoxValue::Number(n) = self {
             Ok(*n)
@@ -228,9 +228,9 @@ impl<'a> LoxValue<'a> {
         }
     }
 
-    pub fn try_str(&self) -> miette::Result<&'a str> {
+    pub fn try_str(&self) -> miette::Result<&String> {
         if let LoxValue::String(s) = self {
-            Ok(*s)
+            Ok(s)
         } else {
             Err(miette!("String expected"))
         }
@@ -265,18 +265,18 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate<'a>(&self, expr: &Expr<'a>) -> miette::Result<LoxValue<'a>> {
+    pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
         expr.accept(&self)
     }
 }
 
 const ERROR_MARGIN: f64 = 0.00001;
 
-impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
-    fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue<'a>> {
+impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
-                Token::String(s) => Ok(LoxValue::String(s)),
+                Token::String(s) => Ok(LoxValue::String(s.to_string())),
                 Token::Number(n) => Ok(LoxValue::Number(*n)),
                 Token::False => Ok(LoxValue::Bool(false)),
                 Token::True => Ok(LoxValue::Bool(true)),
@@ -291,7 +291,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> miette::Result<LoxValue<'a>> {
+    ) -> miette::Result<LoxValue> {
         let lhs = self.evaluate(left)?;
         let rhs = self.evaluate(right)?;
 
@@ -307,10 +307,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     let r = rhs.try_num()?;
                     let result = l + r;
                     Ok(LoxValue::Number(result))
-                // } else if let Ok(l) = lhs.try_str() { // TODO: implement string concat
-                //     let r = rhs.try_str()?;
-                //     let result = l + r;
-                //     Ok(LoxValue::String(result))
+                } else if let Ok(l) = lhs.try_str() {
+                    let r = rhs.try_str()?;
+                    let result = l.to_owned() + r;
+                    Ok(LoxValue::String(result))
                 } else {
                     Err(miette!("Invalid operands types for plus"))
                 }
@@ -335,6 +335,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     let r = rhs.try_bool()?;
                     let result = l != r;
                     Ok(LoxValue::Bool(result))
+                } else if let Ok(l) = lhs.try_str() {
+                    let r = rhs.try_str()?;
+                    let result = l != r;
+                    Ok(LoxValue::Bool(result))
                 } else {
                     Err(miette!("Invalid operands types for not equal"))
                 }
@@ -345,6 +349,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     Ok(LoxValue::Bool((l - r).abs() < ERROR_MARGIN))
                 } else if let Ok(l) = lhs.try_bool() {
                     let r = rhs.try_bool()?;
+                    let result = l == r;
+                    Ok(LoxValue::Bool(result))
+                } else if let Ok(l) = lhs.try_str() {
+                    let r = rhs.try_str()?;
                     let result = l == r;
                     Ok(LoxValue::Bool(result))
                 } else {
@@ -359,6 +367,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     let r = rhs.try_bool()?;
                     let result = l & !r;
                     Ok(LoxValue::Bool(result))
+                } else if let Ok(l) = lhs.try_str() {
+                    let r = rhs.try_str()?;
+                    let result = l > r;
+                    Ok(LoxValue::Bool(result))
                 } else {
                     Err(miette!("Invalid operands types for greater"))
                 }
@@ -369,6 +381,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     Ok(LoxValue::Bool(l >= r))
                 } else if let Ok(l) = lhs.try_bool() {
                     let r = rhs.try_bool()?;
+                    let result = l >= r;
+                    Ok(LoxValue::Bool(result))
+                } else if let Ok(l) = lhs.try_str() {
+                    let r = rhs.try_str()?;
                     let result = l >= r;
                     Ok(LoxValue::Bool(result))
                 } else {
@@ -383,6 +399,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     let r = rhs.try_bool()?;
                     let result = !l & r;
                     Ok(LoxValue::Bool(result))
+                } else if let Ok(l) = lhs.try_str() {
+                    let r = rhs.try_str()?;
+                    let result = l < r;
+                    Ok(LoxValue::Bool(result))
                 } else {
                     Err(miette!("Invalid operands types for less"))
                 }
@@ -395,19 +415,19 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
                     let r = rhs.try_bool()?;
                     let result = l <= r;
                     Ok(LoxValue::Bool(result))
+                } else if let Ok(l) = lhs.try_str() {
+                    let r = rhs.try_str()?;
+                    let result = l <= r;
+                    Ok(LoxValue::Bool(result))
                 } else {
                     Err(miette!("Invalid operands types for less or equal"))
                 }
             }
-            _ => todo!(),
+            _ => Err(miette!("Invalid binary operator")),
         }
     }
 
-    fn visit_unary_expr(
-        &self,
-        operator: &Token<'a>,
-        expr: &Expr<'a>,
-    ) -> miette::Result<LoxValue<'a>> {
+    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> miette::Result<LoxValue> {
         let val = self.evaluate(expr)?;
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
@@ -416,11 +436,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
         }
     }
 
-    fn visit_assign_expr(
-        &self,
-        name: &Token<'a>,
-        value: &Expr<'a>,
-    ) -> miette::Result<LoxValue<'a>> {
+    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> miette::Result<LoxValue> {
         let _ = value;
         let _ = name;
         todo!()
@@ -431,20 +447,20 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
         paren: &Token<'a>,
         callee: &Expr<'a>,
         args: &[Box<Expr<'a>>],
-    ) -> miette::Result<LoxValue<'a>> {
+    ) -> miette::Result<LoxValue> {
         let _ = args;
         let _ = callee;
         let _ = paren;
         todo!()
     }
 
-    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue<'a>> {
+    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
         let _ = object;
         let _ = name;
         todo!()
     }
 
-    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> miette::Result<LoxValue<'a>> {
+    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {
         self.evaluate(grouping)
     }
 
@@ -453,7 +469,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> miette::Result<LoxValue<'a>> {
+    ) -> miette::Result<LoxValue> {
         let _ = right;
         let _ = left;
         let _ = operator;
@@ -465,7 +481,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
         name: &Token<'a>,
         obj: &Expr<'a>,
         val: &Expr<'a>,
-    ) -> miette::Result<LoxValue<'a>> {
+    ) -> miette::Result<LoxValue> {
         let _ = val;
         let _ = obj;
         let _ = name;
@@ -476,18 +492,18 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue<'a>>> for &Evaluator {
         &self,
         keyword: &Token<'a>,
         method: &Token<'a>,
-    ) -> miette::Result<LoxValue<'a>> {
+    ) -> miette::Result<LoxValue> {
         let _ = method;
         let _ = keyword;
         todo!()
     }
 
-    fn visit_this_expr(&self, keyword: &Token<'a>) -> miette::Result<LoxValue<'a>> {
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> miette::Result<LoxValue> {
         let _ = keyword;
         todo!()
     }
 
-    fn visit_variable_expr(&self, name: &Token<'a>) -> miette::Result<LoxValue<'a>> {
+    fn visit_variable_expr(&self, name: &Token<'a>) -> miette::Result<LoxValue> {
         let _ = name;
         todo!()
     }
@@ -528,6 +544,59 @@ mod tests {
         assert!(actual.is_ok());
         let actual = actual.unwrap();
         if let LoxValue::Number(actual) = actual {
+            assert_eq!(actual, expected)
+        } else {
+            todo!()
+        }
+    }
+
+    #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
+    fn evaluator_string_positive_tests(input: &str, expected: &str) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let expr = parser.parse().unwrap().unwrap();
+        let eval = Evaluator {};
+
+        // Act
+        let actual = eval.evaluate(&expr);
+
+        // Assert
+        assert!(actual.is_ok());
+        let actual = actual.unwrap();
+        if let LoxValue::String(actual) = actual {
+            assert_eq!(actual, expected)
+        } else {
+            todo!()
+        }
+    }
+
+    #[test_case("(\"a\" == \"b\")", false)]
+    #[test_case("(\"a\" != \"c\")", true)]
+    #[test_case("(\"ab\" == \"ab\")", true)]
+    #[test_case("(\"aa\" > \"bb\")", false)]
+    #[test_case("(\"bb\" > \"aa\")", true)]
+    #[test_case("(\"bba\" >= \"aaa\")", true)]
+    #[test_case("(\"bba\" <= \"aaa\")", false)]
+    #[test_case("1 == 2", false)]
+    #[test_case("2 == 2", true)]
+    #[test_case("3 >= 3", true)]
+    #[test_case("3 >= 2", true)]
+    #[test_case("3 <= 1", false)]
+    #[test_case("(3 - 1) * 200 <= 1", false)]
+    #[test_case("3 > 1 == true", true)]
+    fn evaluator_predicates_tests(input: &str, expected: bool) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let expr = parser.parse().unwrap().unwrap();
+        let eval = Evaluator {};
+
+        // Act
+        let actual = eval.evaluate(&expr);
+
+        // Assert
+        assert!(actual.is_ok());
+        let actual = actual.unwrap();
+        if let LoxValue::Bool(actual) = actual {
             assert_eq!(actual, expected)
         } else {
             todo!()
