@@ -280,6 +280,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 Token::Number(n) => Ok(LoxValue::Number(*n)),
                 Token::False => Ok(LoxValue::Bool(false)),
                 Token::True => Ok(LoxValue::Bool(true)),
+                Token::Nil => Ok(LoxValue::Nil),
                 _ => Err(miette!("Invalid literal")),
             },
             None => Ok(LoxValue::Nil),
