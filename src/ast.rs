@@ -276,7 +276,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
-                Token::String(s) => Ok(LoxValue::String(s.to_string())),
+                Token::String(s) => Ok(LoxValue::String((*s).to_string())),
                 Token::Number(n) => Ok(LoxValue::Number(*n)),
                 Token::False => Ok(LoxValue::Bool(false)),
                 Token::True => Ok(LoxValue::Bool(true)),
