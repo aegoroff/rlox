@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use miette::miette;
 
 use crate::lexer::Token;
@@ -20,7 +22,7 @@ pub trait ExprVisitor<'a, R> {
 }
 
 #[derive(Debug)]
-pub enum Expr<'a> {
+pub enum ExprKind<'a> {
     Literal(Option<Token<'a>>),
     Binary(Token<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
     Unary(Token<'a>, Box<Expr<'a>>),
@@ -38,21 +40,29 @@ pub enum Expr<'a> {
     Variable(Token<'a>),
 }
 
+#[derive(Debug)]
+pub struct Expr<'a> {
+    pub kind: ExprKind<'a>,
+    pub location: RangeInclusive<usize>,
+}
+
 impl<'a> Expr<'a> {
     pub fn accept<R>(&self, visitor: &impl ExprVisitor<'a, R>) -> R {
-        match self {
-            Expr::Literal(token) => visitor.visit_literal(token),
-            Expr::Binary(operator, left, right) => visitor.visit_binary_expr(operator, left, right),
-            Expr::Unary(operator, expr) => visitor.visit_unary_expr(operator, expr),
-            Expr::Assign(name, value) => visitor.visit_assign_expr(name, value),
-            Expr::Call(paren, callee, args) => visitor.visit_call_expr(paren, callee, args),
-            Expr::Get(name, object) => visitor.visit_get_expr(name, object),
-            Expr::Grouping(grouping) => visitor.visit_grouping_expr(grouping),
-            Expr::Logical(token, left, right) => visitor.visit_logical_expr(token, left, right),
-            Expr::Set(name, obj, val) => visitor.visit_set_expr(name, obj, val),
-            Expr::Super(keyword, method) => visitor.visit_super_expr(keyword, method),
-            Expr::This(keyword) => visitor.visit_this_expr(keyword),
-            Expr::Variable(name) => visitor.visit_variable_expr(name),
+        match &self.kind {
+            ExprKind::Literal(token) => visitor.visit_literal(token),
+            ExprKind::Binary(operator, left, right) => {
+                visitor.visit_binary_expr(operator, left, right)
+            }
+            ExprKind::Unary(operator, expr) => visitor.visit_unary_expr(operator, expr),
+            ExprKind::Assign(name, value) => visitor.visit_assign_expr(name, value),
+            ExprKind::Call(paren, callee, args) => visitor.visit_call_expr(paren, callee, args),
+            ExprKind::Get(name, object) => visitor.visit_get_expr(name, object),
+            ExprKind::Grouping(grouping) => visitor.visit_grouping_expr(grouping),
+            ExprKind::Logical(token, left, right) => visitor.visit_logical_expr(token, left, right),
+            ExprKind::Set(name, obj, val) => visitor.visit_set_expr(name, obj, val),
+            ExprKind::Super(keyword, method) => visitor.visit_super_expr(keyword, method),
+            ExprKind::This(keyword) => visitor.visit_this_expr(keyword),
+            ExprKind::Variable(name) => visitor.visit_variable_expr(name),
         }
     }
 }
@@ -63,15 +73,15 @@ pub enum Stmt<'a> {
     Block(Vec<Box<Stmt<'a>>>),
     /// name, superclass, methods
     Class(Token<'a>, Box<Stmt<'a>>, Vec<Box<Stmt<'a>>>),
-    Expression(Expr<'a>),
+    Expression(ExprKind<'a>),
     /// token, params, body
     Function(Token<'a>, Vec<Box<Stmt<'a>>>, Vec<Box<Stmt<'a>>>),
     /// condition, then, else
-    If(Expr<'a>, Box<Stmt<'a>>, Box<Stmt<'a>>),
-    Print(Expr<'a>),
-    Return(Token<'a>, Expr<'a>),
-    Variable(Token<'a>, Expr<'a>),
-    While(Expr<'a>, Box<Stmt<'a>>),
+    If(ExprKind<'a>, Box<Stmt<'a>>, Box<Stmt<'a>>),
+    Print(ExprKind<'a>),
+    Return(Token<'a>, ExprKind<'a>),
+    Variable(Token<'a>, ExprKind<'a>),
+    While(ExprKind<'a>, Box<Stmt<'a>>),
 }
 
 impl<'a> Stmt<'a> {
@@ -100,116 +110,18 @@ pub trait StmtVisitor<'a, R> {
         superclass: &Stmt<'a>,
         methods: &[Box<Stmt<'a>>],
     ) -> R;
-    fn visit_expression_stmt(&self, expr: &Expr<'a>) -> R;
+    fn visit_expression_stmt(&self, expr: &ExprKind<'a>) -> R;
     fn visit_function_stmt(
         &self,
         token: &Token<'a>,
         params: &[Box<Stmt<'a>>],
         body: &[Box<Stmt<'a>>],
     ) -> R;
-    fn visit_if_stmt(&self, cond: &Expr<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> R;
-    fn visit_print_stmt(&self, expr: &Expr<'a>) -> R;
-    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
-    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &Expr<'a>) -> R;
-    fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> R;
-}
-
-pub struct AstPrinter {}
-
-impl AstPrinter {
-    fn parenthesize(&self, name: &str, expressions: &[&Expr<'_>]) -> String {
-        let expressions = expressions
-            .iter()
-            .map(|e| e.accept(&self))
-            .collect::<Vec<String>>()
-            .join(" ");
-
-        format!("({name} {expressions})")
-    }
-
-    pub fn print(&self, expr: &Expr<'_>) {
-        println!("{}", expr.accept(&self));
-    }
-}
-
-impl<'a> ExprVisitor<'a, String> for &AstPrinter {
-    fn visit_literal(&self, token: &Option<Token<'a>>) -> String {
-        match token {
-            Some(t) => format!("{t}"),
-            None => "null".to_owned(),
-        }
-    }
-
-    fn visit_binary_expr(&self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> String {
-        let op = format!("{operator}");
-        self.parenthesize(&op, &[left, right])
-    }
-
-    fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> String {
-        let op = format!("{operator}");
-        self.parenthesize(&op, &[expr])
-    }
-
-    fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> String {
-        let _ = value;
-        let _ = name;
-        todo!()
-    }
-
-    fn visit_call_expr(
-        &self,
-        paren: &Token<'a>,
-        callee: &Expr<'a>,
-        args: &[Box<Expr<'a>>],
-    ) -> String {
-        let _ = args;
-        let _ = callee;
-        let _ = paren;
-        todo!()
-    }
-
-    fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> String {
-        let _ = object;
-        let _ = name;
-        todo!()
-    }
-
-    fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> String {
-        self.parenthesize("group", &[grouping])
-    }
-
-    fn visit_logical_expr(
-        &self,
-        operator: &Token<'a>,
-        left: &Expr<'a>,
-        right: &Expr<'a>,
-    ) -> String {
-        let op = format!("{operator}");
-        self.parenthesize(&op, &[left, right])
-    }
-
-    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> String {
-        let _ = val;
-        let _ = obj;
-        let _ = name;
-        todo!()
-    }
-
-    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> String {
-        let _ = method;
-        let _ = keyword;
-        todo!()
-    }
-
-    fn visit_this_expr(&self, keyword: &Token<'a>) -> String {
-        let _ = keyword;
-        todo!()
-    }
-
-    fn visit_variable_expr(&self, name: &Token<'a>) -> String {
-        let _ = name;
-        todo!()
-    }
+    fn visit_if_stmt(&self, cond: &ExprKind<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> R;
+    fn visit_print_stmt(&self, expr: &ExprKind<'a>) -> R;
+    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &ExprKind<'a>) -> R;
+    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &ExprKind<'a>) -> R;
+    fn visit_while_stmt(&self, cond: &ExprKind<'a>, body: &Stmt<'a>) -> R;
 }
 
 pub enum LoxValue {
@@ -291,15 +203,14 @@ pub struct Evaluator {}
 
 impl Evaluator {
     pub fn print(&self, expr: &Expr<'_>) {
-        let expr = self.evaluate(expr);
-        let expr = match expr {
+        let value = match self.evaluate(expr) {
             Ok(e) => e,
             Err(e) => {
                 println!("{e}");
                 return;
             }
         };
-        match expr {
+        match value {
             LoxValue::String(s) => println!("{s}"),
             LoxValue::Number(n) => println!("{n}"),
             LoxValue::Bool(b) => println!("{b}"),

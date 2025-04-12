@@ -3,7 +3,7 @@ use std::iter::Peekable;
 use miette::{LabeledSpan, miette};
 
 use crate::{
-    ast::Expr,
+    ast::{Expr, ExprKind},
     lexer::{Lexer, Token},
 };
 
@@ -70,7 +70,14 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            expr = Expr::Binary(operator, Box::new(expr), Box::new(right));
+            let start = *expr.location.start();
+            let end = *right.location.end();
+            let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
+
+            expr = Expr {
+                kind,
+                location: start..=end,
+            };
         }
 
         Some(Ok(expr))
@@ -126,7 +133,14 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            expr = Expr::Binary(operator, Box::new(expr), Box::new(right));
+            let start = *expr.location.start();
+            let end = *right.location.end();
+            let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
+
+            expr = Expr {
+                kind,
+                location: start..=end,
+            };
         }
 
         Some(Ok(expr))
@@ -175,7 +189,14 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            expr = Expr::Binary(operator, Box::new(expr), Box::new(right));
+            let start = *expr.location.start();
+            let end = *right.location.end();
+            let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
+
+            expr = Expr {
+                kind,
+                location: start..=end,
+            };
         }
 
         Some(Ok(expr))
@@ -223,7 +244,14 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            expr = Expr::Binary(operator, Box::new(expr), Box::new(right));
+            let start = *expr.location.start();
+            let end = *right.location.end();
+            let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
+
+            expr = Expr {
+                kind,
+                location: start..=end,
+            };
         }
 
         Some(Ok(expr))
@@ -249,7 +277,14 @@ impl<'a> Parser<'a> {
                     };
 
                     match unary {
-                        Ok(r) => Some(Ok(Expr::Unary(operator, Box::new(r)))),
+                        Ok(r) => {
+                            let end = *r.location.end();
+                            let kind = ExprKind::Unary(operator, Box::new(r));
+                            Some(Ok(Expr {
+                                kind,
+                                location: s..=end,
+                            }))
+                        }
                         Err(e) => Some(Err(e)),
                     }
                 } else {
@@ -273,7 +308,10 @@ impl<'a> Parser<'a> {
         };
         match tok {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
-                Some(Ok(Expr::Literal(Some(tok))))
+                Some(Ok(Expr {
+                    kind: ExprKind::Literal(Some(tok)),
+                    location: start..=finish,
+                }))
             }
             Token::LeftParen => {
                 let Some(expr) = self.expression() else {
@@ -297,9 +335,11 @@ impl<'a> Parser<'a> {
                             )));
                         };
 
-                        if let Ok((_, Token::RightParen, _)) = next {
-                            let g = Expr::Grouping(Box::new(expr));
-                            Some(Ok(g))
+                        if let Ok((_, Token::RightParen, finish)) = next {
+                            Some(Ok(Expr {
+                                kind: ExprKind::Grouping(Box::new(expr)),
+                                location: start..=finish,
+                            }))
                         } else {
                             Some(Err(miette!(
                                 labels = vec![LabeledSpan::at(
