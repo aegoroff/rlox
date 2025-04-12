@@ -372,9 +372,14 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                     let result = l + r;
                     Ok(LoxValue::Number(result))
                 } else if let Ok(l) = lhs.try_str() {
-                    let r = rhs.try_str()?;
-                    let result = l.to_owned() + r;
-                    Ok(LoxValue::String(result))
+                    if let Ok(n) = rhs.try_num() {
+                        let result = l.to_owned() + &n.to_string();
+                        Ok(LoxValue::String(result))
+                    } else {
+                        let r = rhs.try_str()?;
+                        let result = l.to_owned() + r;
+                        Ok(LoxValue::String(result))
+                    }
                 } else {
                     Err(miette!("Invalid operands types for plus"))
                 }
@@ -545,6 +550,7 @@ mod tests {
     }
 
     #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
+    #[test_case("(\"a\" + 4) + \"c\"", "a4c")]
     fn evaluator_string_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
