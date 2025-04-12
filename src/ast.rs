@@ -275,6 +275,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 let lr = lhs.try_str();
                 let rr = rhs.try_str();
                 if lr.is_ok() || rr.is_ok() {
+                    // concat strings here if any of operands is a string
                     if let Ok(l) = lr {
                         let result = l.to_owned() + &rhs.to_string();
                         return Ok(LoxValue::String(result));
@@ -297,7 +298,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
             Token::Slash => {
                 let l = map_operand_err(lhs.try_num(), left)?;
                 let r = map_operand_err(rhs.try_num(), right)?;
-                if r == 0.0 {
+
+                if !r.is_normal() && !r.is_infinite() {
                     Err(miette!(
                         labels = vec![LabeledSpan::at(
                             right.location.clone(),
