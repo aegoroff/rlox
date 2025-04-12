@@ -266,27 +266,37 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 Ok(LoxValue::Number(result))
             }
             Token::Plus => {
-                if let Ok(l) = lhs.try_num() {
+                let lr = lhs.try_str();
+                let rr = rhs.try_str();
+                if lr.is_ok() || rr.is_ok() {
+                    if let Ok(l) = lr {
+                        if let Ok(r) = rr {
+                            let result = l.to_owned() + r;
+                            return Ok(LoxValue::String(result));
+                        } else if let Ok(n) = rhs.try_num() {
+                            let result = l.to_owned() + &n.to_string();
+                            return Ok(LoxValue::String(result));
+                        }
+                    } else if let Ok(r) = rr {
+                        if let Ok(l) = lr {
+                            let result = l.to_owned() + r;
+                            return Ok(LoxValue::String(result));
+                        } else if let Ok(n) = lhs.try_num() {
+                            let result = n.to_string() + r;
+                            return Ok(LoxValue::String(result));
+                        }
+                    }
+                } else if let Ok(l) = lhs.try_num() {
                     let r = map_operand_err(rhs.try_num(), right)?;
                     let result = l + r;
-                    Ok(LoxValue::Number(result))
-                } else if let Ok(l) = lhs.try_str() {
-                    if let Ok(n) = rhs.try_num() {
-                        let result = l.to_owned() + &n.to_string();
-                        Ok(LoxValue::String(result))
-                    } else {
-                        let r = map_operand_err(rhs.try_str(), right)?;
-                        let result = l.to_owned() + r;
-                        Ok(LoxValue::String(result))
-                    }
-                } else {
-                    let start = *left.location.start();
-                    let end = *right.location.end();
-                    Err(miette!(
-                        labels = vec![LabeledSpan::at(start..=end, "Problem expression")],
-                        "Invalid operands types for plus"
-                    ))
+                    return Ok(LoxValue::Number(result));
                 }
+                let start = *left.location.start();
+                let end = *right.location.end();
+                Err(miette!(
+                    labels = vec![LabeledSpan::at(start..=end, "Problem expression")],
+                    "Invalid operands types for plus"
+                ))
             }
             Token::Slash => {
                 let l = map_operand_err(lhs.try_num(), left)?;
@@ -471,6 +481,7 @@ mod tests {
 
     #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
     #[test_case("(\"a\" + 4) + \"c\"", "a4c")]
+    #[test_case("(4 + \"a\") + \"c\"", "4ac")]
     fn evaluator_string_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
