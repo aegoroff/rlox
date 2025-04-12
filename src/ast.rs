@@ -224,13 +224,10 @@ impl Evaluator {
 
 const ERROR_MARGIN: f64 = 0.00001;
 
-fn map_operand_err<T>(err: miette::Result<T>, operand: &Expr<'_>) -> miette::Result<T> {
+fn map_operand_err<T>(err: miette::Result<T>, op: &Expr<'_>) -> miette::Result<T> {
     err.map_err(|e| {
         miette!(
-            labels = vec![LabeledSpan::at(
-                operand.location.clone(),
-                "Problem expression"
-            )],
+            labels = vec![LabeledSpan::at(op.location.clone(), "Problem expression")],
             "Invalid operand"
         )
         .wrap_err(e)
