@@ -224,6 +224,16 @@ impl Evaluator {
 
 const ERROR_MARGIN: f64 = 0.00001;
 
+fn map_err<T>(err: miette::Result<T>, expr: &Expr<'_>) -> miette::Result<T> {
+    err.map_err(|e| {
+        miette!(
+            labels = vec![LabeledSpan::at(expr.location.clone(), "Problem expression")],
+            "Invalid operand"
+        )
+        .wrap_err(e)
+    })
+}
+
 impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
@@ -245,34 +255,19 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
         left: &Expr<'a>,
         right: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
-        let lhs = self.evaluate(left).map_err(|e| {
-            miette!(
-                labels = vec![LabeledSpan::at(left.location.clone(), "Problem expression")],
-                "Invalid left operand"
-            )
-            .wrap_err(e)
-        })?;
-        let rhs = self.evaluate(right).map_err(|e| {
-            miette!(
-                labels = vec![LabeledSpan::at(
-                    right.location.clone(),
-                    "Problem expression"
-                )],
-                "Invalid right operand"
-            )
-            .wrap_err(e)
-        })?;
+        let lhs = self.evaluate(left)?;
+        let rhs = self.evaluate(right)?;
 
         match operator {
             Token::Minus => {
-                let l = lhs.try_num()?;
-                let r = rhs.try_num()?;
+                let l = map_err(lhs.try_num(), left)?;
+                let r = map_err(rhs.try_num(), right)?;
                 let result = l - r;
                 Ok(LoxValue::Number(result))
             }
             Token::Plus => {
                 if let Ok(l) = lhs.try_num() {
-                    let r = rhs.try_num()?;
+                    let r = map_err(rhs.try_num(), right)?;
                     let result = l + r;
                     Ok(LoxValue::Number(result))
                 } else if let Ok(l) = lhs.try_str() {
@@ -280,7 +275,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                         let result = l.to_owned() + &n.to_string();
                         Ok(LoxValue::String(result))
                     } else {
-                        let r = rhs.try_str()?;
+                        let r = map_err(rhs.try_str(), right)?;
                         let result = l.to_owned() + r;
                         Ok(LoxValue::String(result))
                     }
@@ -294,8 +289,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 }
             }
             Token::Slash => {
-                let l = lhs.try_num()?;
-                let r = rhs.try_num()?;
+                let l = map_err(lhs.try_num(), left)?;
+                let r = map_err(rhs.try_num(), right)?;
                 if r == 0.0 {
                     Err(miette!(
                         labels = vec![LabeledSpan::at(
@@ -310,8 +305,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 }
             }
             Token::Star => {
-                let l = lhs.try_num()?;
-                let r = rhs.try_num()?;
+                let l = map_err(lhs.try_num(), left)?;
+                let r = map_err(rhs.try_num(), right)?;
                 let result = l * r;
                 Ok(LoxValue::Number(result))
             }
