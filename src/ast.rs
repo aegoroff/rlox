@@ -244,64 +244,43 @@ impl LoxValue {
         }
     }
 
-    pub fn equal(&self, other: &LoxValue) -> miette::Result<LoxValue> {
+    pub fn equal(&self, other: &LoxValue) -> miette::Result<bool> {
         if let Ok(l) = self.try_num() {
             let r = other.try_num()?;
-            Ok(LoxValue::Bool((l - r).abs() < ERROR_MARGIN))
+            Ok((l - r).abs() < ERROR_MARGIN)
         } else if let Ok(l) = self.try_bool() {
             let r = other.try_bool()?;
-            let result = l == r;
-            Ok(LoxValue::Bool(result))
+            Ok(l == r)
         } else if let Ok(l) = self.try_str() {
             let r = other.try_str()?;
-            let result = l == r;
-            Ok(LoxValue::Bool(result))
+            Ok(l == r)
         } else if let LoxValue::Nil = self {
             if let LoxValue::Nil = other {
-                Ok(LoxValue::Bool(true))
+                Ok(true)
             } else {
-                Ok(LoxValue::Bool(false))
+                Ok(false)
             }
         } else if let LoxValue::Nil = other {
             if let LoxValue::Nil = self {
-                Ok(LoxValue::Bool(true))
+                Ok(true)
             } else {
-                Ok(LoxValue::Bool(false))
+                Ok(false)
             }
         } else {
             Err(miette!("Invalid operands types for equality"))
         }
     }
 
-    pub fn greater(&self, other: &LoxValue) -> miette::Result<LoxValue> {
+    pub fn less(&self, other: &LoxValue) -> miette::Result<bool> {
         if let Ok(l) = self.try_num() {
             let r = other.try_num()?;
-            Ok(LoxValue::Bool(l > r))
+            Ok(l < r)
         } else if let Ok(l) = self.try_bool() {
             let r = other.try_bool()?;
-            let result = l & !r;
-            Ok(LoxValue::Bool(result))
+            Ok(!l & r)
         } else if let Ok(l) = self.try_str() {
             let r = other.try_str()?;
-            let result = l > r;
-            Ok(LoxValue::Bool(result))
-        } else {
-            Err(miette!("Invalid operands types for greater"))
-        }
-    }
-
-    pub fn less(&self, other: &LoxValue) -> miette::Result<LoxValue> {
-        if let Ok(l) = self.try_num() {
-            let r = other.try_num()?;
-            Ok(LoxValue::Bool(l < r))
-        } else if let Ok(l) = self.try_bool() {
-            let r = other.try_bool()?;
-            let result = !l & r;
-            Ok(LoxValue::Bool(result))
-        } else if let Ok(l) = self.try_str() {
-            let r = other.try_str()?;
-            let result = l < r;
-            Ok(LoxValue::Bool(result))
+            Ok(l < r)
         } else {
             Err(miette!("Invalid operands types for less"))
         }
@@ -387,8 +366,12 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
             Token::Slash => {
                 let l = lhs.try_num()?;
                 let r = rhs.try_num()?;
-                let result = l / r;
-                Ok(LoxValue::Number(result))
+                if r == 0.0 {
+                    Err(miette!("Zero division detected"))
+                } else {
+                    let result = l / r;
+                    Ok(LoxValue::Number(result))
+                }
             }
             Token::Star => {
                 let l = lhs.try_num()?;
@@ -396,33 +379,30 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 let result = l * r;
                 Ok(LoxValue::Number(result))
             }
-            Token::BangEqual => match lhs.equal(&rhs)? {
-                LoxValue::Bool(r) => Ok(LoxValue::Bool(!r)),
-                _ => Err(miette!("Invalid equality result")),
-            },
-            Token::EqualEqual => lhs.equal(&rhs),
-            Token::Greater => lhs.greater(&rhs),
-            Token::GreaterEqual => match lhs.greater(&rhs)? {
-                LoxValue::Bool(r) => {
-                    if r {
-                        Ok(LoxValue::Bool(r))
-                    } else {
-                        lhs.equal(&rhs)
-                    }
-                }
-                _ => Err(miette!("Invalid greater or equal result")),
-            },
-            Token::Less => lhs.less(&rhs),
-            Token::LessEqual => match lhs.less(&rhs)? {
-                LoxValue::Bool(r) => {
-                    if r {
-                        Ok(LoxValue::Bool(r))
-                    } else {
-                        lhs.equal(&rhs)
-                    }
-                }
-                _ => Err(miette!("Invalid less or equal result")),
-            },
+            Token::BangEqual => {
+                let eq = lhs.equal(&rhs)?;
+                Ok(LoxValue::Bool(!eq))
+            }
+            Token::EqualEqual => {
+                let eq = lhs.equal(&rhs)?;
+                Ok(LoxValue::Bool(eq))
+            }
+            Token::Greater => {
+                let gt = !lhs.less(&rhs)? && !lhs.equal(&rhs)?;
+                Ok(LoxValue::Bool(gt))
+            }
+            Token::GreaterEqual => {
+                let ge = !lhs.less(&rhs)? || lhs.equal(&rhs)?;
+                Ok(LoxValue::Bool(ge))
+            }
+            Token::Less => {
+                let lt = lhs.less(&rhs)?;
+                Ok(LoxValue::Bool(lt))
+            }
+            Token::LessEqual => {
+                let le = lhs.less(&rhs)? || lhs.equal(&rhs)?;
+                Ok(LoxValue::Bool(le))
+            }
             _ => Err(miette!("Invalid binary operator")),
         }
     }
