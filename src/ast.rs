@@ -224,10 +224,13 @@ impl Evaluator {
 
 const ERROR_MARGIN: f64 = 0.00001;
 
-fn map_err<T>(err: miette::Result<T>, expr: &Expr<'_>) -> miette::Result<T> {
+fn map_operand_err<T>(err: miette::Result<T>, operand: &Expr<'_>) -> miette::Result<T> {
     err.map_err(|e| {
         miette!(
-            labels = vec![LabeledSpan::at(expr.location.clone(), "Problem expression")],
+            labels = vec![LabeledSpan::at(
+                operand.location.clone(),
+                "Problem expression"
+            )],
             "Invalid operand"
         )
         .wrap_err(e)
@@ -260,14 +263,14 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
 
         match operator {
             Token::Minus => {
-                let l = map_err(lhs.try_num(), left)?;
-                let r = map_err(rhs.try_num(), right)?;
+                let l = map_operand_err(lhs.try_num(), left)?;
+                let r = map_operand_err(rhs.try_num(), right)?;
                 let result = l - r;
                 Ok(LoxValue::Number(result))
             }
             Token::Plus => {
                 if let Ok(l) = lhs.try_num() {
-                    let r = map_err(rhs.try_num(), right)?;
+                    let r = map_operand_err(rhs.try_num(), right)?;
                     let result = l + r;
                     Ok(LoxValue::Number(result))
                 } else if let Ok(l) = lhs.try_str() {
@@ -275,7 +278,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                         let result = l.to_owned() + &n.to_string();
                         Ok(LoxValue::String(result))
                     } else {
-                        let r = map_err(rhs.try_str(), right)?;
+                        let r = map_operand_err(rhs.try_str(), right)?;
                         let result = l.to_owned() + r;
                         Ok(LoxValue::String(result))
                     }
@@ -289,8 +292,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 }
             }
             Token::Slash => {
-                let l = map_err(lhs.try_num(), left)?;
-                let r = map_err(rhs.try_num(), right)?;
+                let l = map_operand_err(lhs.try_num(), left)?;
+                let r = map_operand_err(rhs.try_num(), right)?;
                 if r == 0.0 {
                     Err(miette!(
                         labels = vec![LabeledSpan::at(
@@ -305,33 +308,39 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 }
             }
             Token::Star => {
-                let l = map_err(lhs.try_num(), left)?;
-                let r = map_err(rhs.try_num(), right)?;
+                let l = map_operand_err(lhs.try_num(), left)?;
+                let r = map_operand_err(rhs.try_num(), right)?;
                 let result = l * r;
                 Ok(LoxValue::Number(result))
             }
             Token::BangEqual => {
-                let eq = lhs.equal(&rhs)?;
+                let eq = map_operand_err(lhs.equal(&rhs), right)?;
                 Ok(LoxValue::Bool(!eq))
             }
             Token::EqualEqual => {
-                let eq = lhs.equal(&rhs)?;
+                let eq = map_operand_err(lhs.equal(&rhs), right)?;
                 Ok(LoxValue::Bool(eq))
             }
             Token::Greater => {
-                let gt = !lhs.less(&rhs)? && !lhs.equal(&rhs)?;
+                let lt = map_operand_err(lhs.less(&rhs), right)?;
+                let eq = map_operand_err(lhs.equal(&rhs), right)?;
+                let gt = !lt && !eq;
                 Ok(LoxValue::Bool(gt))
             }
             Token::GreaterEqual => {
-                let ge = !lhs.less(&rhs)? || lhs.equal(&rhs)?;
+                let lt = map_operand_err(lhs.less(&rhs), right)?;
+                let eq = map_operand_err(lhs.equal(&rhs), right)?;
+                let ge = !lt || eq;
                 Ok(LoxValue::Bool(ge))
             }
             Token::Less => {
-                let lt = lhs.less(&rhs)?;
+                let lt = map_operand_err(lhs.less(&rhs), right)?;
                 Ok(LoxValue::Bool(lt))
             }
             Token::LessEqual => {
-                let le = lhs.less(&rhs)? || lhs.equal(&rhs)?;
+                let lt = map_operand_err(lhs.less(&rhs), right)?;
+                let eq = map_operand_err(lhs.equal(&rhs), right)?;
+                let le = lt || eq;
                 Ok(LoxValue::Bool(le))
             }
             _ => Err(miette!("Invalid binary operator")),
