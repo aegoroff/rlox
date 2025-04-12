@@ -308,9 +308,10 @@ impl<'a> Parser<'a> {
         };
         match tok {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
+                let end = finish - 1;
                 Some(Ok(Expr {
                     kind: ExprKind::Literal(Some(tok)),
-                    location: start..=(finish - 1),
+                    location: start..=end,
                 }))
             }
             Token::LeftParen => {
@@ -336,9 +337,10 @@ impl<'a> Parser<'a> {
                         };
 
                         if let Ok((_, Token::RightParen, finish)) = next {
+                            let end = finish - 1;
                             Some(Ok(Expr {
                                 kind: ExprKind::Grouping(Box::new(expr)),
-                                location: start..=(finish - 1),
+                                location: start..=end,
                             }))
                         } else {
                             Some(Err(miette!(
