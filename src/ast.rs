@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use miette::miette;
+use miette::{LabeledSpan, miette};
 
 use crate::lexer::Token;
 
@@ -202,20 +202,19 @@ impl LoxValue {
 pub struct Evaluator {}
 
 impl Evaluator {
-    pub fn print(&self, expr: &Expr<'_>) {
-        let value = match self.evaluate(expr) {
-            Ok(e) => e,
+    pub fn print(&self, expr: &Expr<'_>) -> miette::Result<()> {
+        match self.evaluate(expr) {
+            Ok(e) => match e {
+                LoxValue::String(s) => println!("{s}"),
+                LoxValue::Number(n) => println!("{n}"),
+                LoxValue::Bool(b) => println!("{b}"),
+                LoxValue::Nil => println!("Null"),
+            },
             Err(e) => {
-                println!("{e}");
-                return;
+                return Err(e);
             }
-        };
-        match value {
-            LoxValue::String(s) => println!("{s}"),
-            LoxValue::Number(n) => println!("{n}"),
-            LoxValue::Bool(b) => println!("{b}"),
-            LoxValue::Nil => println!("Null"),
         }
+        Ok(())
     }
 
     pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
@@ -246,8 +245,23 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
         left: &Expr<'a>,
         right: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
-        let lhs = self.evaluate(left)?;
-        let rhs = self.evaluate(right)?;
+        let lhs = self.evaluate(left).map_err(|e| {
+            miette!(
+                labels = vec![LabeledSpan::at(left.location.clone(), "Problem expression")],
+                "Invalid left operand"
+            )
+            .wrap_err(e)
+        })?;
+        let rhs = self.evaluate(right).map_err(|e| {
+            miette!(
+                labels = vec![LabeledSpan::at(
+                    right.location.clone(),
+                    "Problem expression"
+                )],
+                "Invalid right operand"
+            )
+            .wrap_err(e)
+        })?;
 
         match operator {
             Token::Minus => {
@@ -271,14 +285,25 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                         Ok(LoxValue::String(result))
                     }
                 } else {
-                    Err(miette!("Invalid operands types for plus"))
+                    let start = *left.location.start();
+                    let end = *right.location.end();
+                    Err(miette!(
+                        labels = vec![LabeledSpan::at(start..=end, "Problem expression")],
+                        "Invalid operands types for plus"
+                    ))
                 }
             }
             Token::Slash => {
                 let l = lhs.try_num()?;
                 let r = rhs.try_num()?;
                 if r == 0.0 {
-                    Err(miette!("Zero division detected"))
+                    Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            right.location.clone(),
+                            "Zero division detected here"
+                        )],
+                        "Zero division detected"
+                    ))
                 } else {
                     let result = l / r;
                     Ok(LoxValue::Number(result))
@@ -323,7 +348,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
             Token::Bang => Ok(LoxValue::Bool(!val.try_bool()?)),
-            _ => Err(miette!("Invalid unary operator")),
+            _ => Err(miette!(
+                labels = vec![LabeledSpan::at(expr.location.clone(), "Problem expression")],
+                "Invalid unary operator"
+            )),
         }
     }
 

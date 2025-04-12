@@ -71,7 +71,7 @@ impl<'a> Parser<'a> {
             };
 
             let start = *expr.location.start();
-            let end = *right.location.end();
+            let end = *right.location.end() - 1;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
             expr = Expr {
@@ -278,7 +278,7 @@ impl<'a> Parser<'a> {
 
                     match unary {
                         Ok(r) => {
-                            let end = *r.location.end();
+                            let end = *r.location.end() - 1;
                             let kind = ExprKind::Unary(operator, Box::new(r));
                             Some(Ok(Expr {
                                 kind,
@@ -310,7 +310,7 @@ impl<'a> Parser<'a> {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
                 Some(Ok(Expr {
                     kind: ExprKind::Literal(Some(tok)),
-                    location: start..=finish,
+                    location: start..=(finish - 1),
                 }))
             }
             Token::LeftParen => {
@@ -338,7 +338,7 @@ impl<'a> Parser<'a> {
                         if let Ok((_, Token::RightParen, finish)) = next {
                             Some(Ok(Expr {
                                 kind: ExprKind::Grouping(Box::new(expr)),
-                                location: start..=finish,
+                                location: start..=(finish - 1),
                             }))
                         } else {
                             Some(Err(miette!(

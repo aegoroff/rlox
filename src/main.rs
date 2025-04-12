@@ -73,7 +73,9 @@ fn scan(content: String) -> miette::Result<()> {
         match r {
             Ok(expr) => {
                 let printer = Evaluator {};
-                printer.print(&expr);
+                if let Err(e) = printer.print(&expr) {
+                    return Err(e.with_source_code(content));
+                }
             }
             Err(e) => return Err(e.with_source_code(content)),
         }
