@@ -1,4 +1,4 @@
-use std::ops::RangeInclusive;
+use std::{fmt::Display, ops::RangeInclusive};
 
 use miette::{LabeledSpan, miette};
 
@@ -131,6 +131,17 @@ pub enum LoxValue {
     Nil,
 }
 
+impl Display for LoxValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoxValue::String(s) => write!(f, "{s}"),
+            LoxValue::Number(n) => write!(f, "{n}"),
+            LoxValue::Bool(b) => write!(f, "{b}"),
+            LoxValue::Nil => write!(f, ""),
+        }
+    }
+}
+
 impl LoxValue {
     pub fn try_num(&self) -> miette::Result<f64> {
         if let LoxValue::Number(n) = self {
@@ -204,12 +215,7 @@ pub struct Evaluator {}
 impl Evaluator {
     pub fn print(&self, expr: &Expr<'_>) -> miette::Result<()> {
         match self.evaluate(expr) {
-            Ok(e) => match e {
-                LoxValue::String(s) => println!("{s}"),
-                LoxValue::Number(n) => println!("{n}"),
-                LoxValue::Bool(b) => println!("{b}"),
-                LoxValue::Nil => println!("Null"),
-            },
+            Ok(e) => println!("{e}"),
             Err(e) => {
                 return Err(e);
             }
@@ -270,21 +276,11 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
                 let rr = rhs.try_str();
                 if lr.is_ok() || rr.is_ok() {
                     if let Ok(l) = lr {
-                        if let Ok(r) = rr {
-                            let result = l.to_owned() + r;
-                            return Ok(LoxValue::String(result));
-                        } else if let Ok(n) = rhs.try_num() {
-                            let result = l.to_owned() + &n.to_string();
-                            return Ok(LoxValue::String(result));
-                        }
+                        let result = l.to_owned() + &rhs.to_string();
+                        return Ok(LoxValue::String(result));
                     } else if let Ok(r) = rr {
-                        if let Ok(l) = lr {
-                            let result = l.to_owned() + r;
-                            return Ok(LoxValue::String(result));
-                        } else if let Ok(n) = lhs.try_num() {
-                            let result = n.to_string() + r;
-                            return Ok(LoxValue::String(result));
-                        }
+                        let result = lhs.to_string() + r;
+                        return Ok(LoxValue::String(result));
                     }
                 } else if let Ok(l) = lhs.try_num() {
                     let r = map_operand_err(rhs.try_num(), right)?;
@@ -482,6 +478,8 @@ mod tests {
     #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
     #[test_case("(\"a\" + 4) + \"c\"", "a4c")]
     #[test_case("(4 + \"a\") + \"c\"", "4ac")]
+    #[test_case("(true + \"a\") + \"c\"", "trueac")]
+    #[test_case("(nil + \"a\") + \"c\"", "ac")]
     fn evaluator_string_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
