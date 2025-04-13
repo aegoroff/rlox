@@ -249,7 +249,7 @@ impl LoxValue {
 #[diagnostic()]
 pub struct ProgramError {
     #[related]
-    others: Vec<miette::Report>,
+    errors: Vec<miette::Report>,
 }
 
 const ERROR_MARGIN: f64 = 0.00001;
@@ -261,11 +261,14 @@ impl Interpreter {
         expr.accept(&self)
     }
 
-    pub fn interpret(&self, statments: Vec<miette::Result<Stmt<'_>>>) -> miette::Result<()> {
+    pub fn interpret<'a>(
+        &self,
+        statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
+    ) -> miette::Result<()> {
         let mut errors = vec![];
 
-        for r in statments {
-            match r {
+        for stmt in statements {
+            match stmt {
                 Ok(s) => {
                     if let Err(e) = s.accept(&self) {
                         errors.push(e);
@@ -277,7 +280,7 @@ impl Interpreter {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(ProgramError { others: errors }.into())
+            Err(ProgramError { errors }.into())
         }
     }
 }

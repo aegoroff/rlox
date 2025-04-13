@@ -11,21 +11,20 @@ pub struct Parser<'a> {
     tokens: Peekable<Lexer<'a>>,
 }
 
+impl<'a> Iterator for Parser<'a> {
+    type Item = miette::Result<Stmt<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.statement()
+    }
+}
+
 impl<'a> Parser<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {
         Self {
             tokens: Lexer::new(content).peekable(),
         }
-    }
-
-    pub fn parse(&mut self) -> Option<Vec<miette::Result<Stmt<'a>>>> {
-        let mut result = vec![];
-
-        while let Some(stmt) = self.statement() {
-            result.push(stmt);
-        }
-        Some(result)
     }
 
     fn statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
@@ -429,25 +428,25 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case("1 + 2 * 3")]
-    #[test_case("1 + 2 - 4")]
-    #[test_case("1 * 2 * 6")]
-    #[test_case("(1 + 2) * 5")]
-    #[test_case("2 == 3")]
-    #[test_case("(1 + 0 + 1)")]
-    #[test_case("(1 == 2 == 17)")]
-    #[test_case("(1 <= 2 > 10)")]
-    #[test_case("--1")]
-    #[test_case("!!2")]
+    #[test_case("1 + 2 * 3;")]
+    #[test_case("1 + 2 - 4;")]
+    #[test_case("1 * 2 * 6;")]
+    #[test_case("(1 + 2) * 5;")]
+    #[test_case("2 == 3;")]
+    #[test_case("(1 + 0 + 1);")]
+    #[test_case("(1 == 2 == 17);")]
+    #[test_case("(1 <= 2 > 10);")]
+    #[test_case("--1;")]
+    #[test_case("!!2;")]
     fn parser_tests(input: &str) {
         // Arrange
-        let mut parser = Parser::new(input);
+        let parser = Parser::new(input);
 
         // Act
-        let actual = parser.parse();
-
-        // Assert
-        assert!(actual.is_some());
+        for stmt in parser {
+            // Assert
+            assert!(stmt.is_ok());
+        }
     }
 
     #[test_case("--1", 1.0)]

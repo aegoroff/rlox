@@ -68,13 +68,11 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 }
 
 fn scan(content: String) -> miette::Result<()> {
-    let mut parser = Parser::new(&content);
-    if let Some(r) = parser.parse() {
-        let interpreter = Interpreter {};
-        interpreter
-            .interpret(r)
-            .map_err(|err| err.with_source_code(content))?;
-    }
+    let parser = Parser::new(&content);
+    let interpreter = Interpreter {};
+    interpreter
+        .interpret(parser)
+        .map_err(|err| err.with_source_code(content))?;
     Ok(())
 }
 
