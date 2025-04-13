@@ -563,7 +563,7 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter {};
+        let eval = Interpreter::new();
 
         // Act
         let actual = eval.evaluate(&expr);
@@ -587,7 +587,7 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter {};
+        let eval = Interpreter::new();
 
         // Act
         let actual = eval.evaluate(&expr);
@@ -626,7 +626,7 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter {};
+        let eval = Interpreter::new();
 
         // Act
         let actual = eval.evaluate(&expr);

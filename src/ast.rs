@@ -1,6 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{fmt::Display, ops::RangeInclusive};
+use std::{collections::HashMap, fmt::Display, ops::RangeInclusive};
 
 use miette::{Diagnostic, LabeledSpan, miette};
 use thiserror::Error;
@@ -79,7 +79,7 @@ pub struct Stmt<'a> {
 }
 
 impl<'a> Stmt<'a> {
-    pub fn accept<R>(&self, visitor: &impl StmtVisitor<'a, R>) -> R {
+    pub fn accept<R>(&'a self, visitor: &mut impl StmtVisitor<'a, R>) -> R {
         match &self.kind {
             StmtKind::Block(stmts) => visitor.visit_block_stmt(stmts),
             StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, stmt, stmts),
@@ -114,28 +114,6 @@ pub enum StmtKind<'a> {
     While(Box<Expr<'a>>, Box<Stmt<'a>>),
 }
 
-impl<'a> StmtKind<'a> {
-    pub fn accept<R>(&self, visitor: &impl StmtVisitor<'a, R>) -> R {
-        match self {
-            StmtKind::Block(body) => visitor.visit_block_stmt(body),
-            StmtKind::Class(name, superclass, methods) => {
-                visitor.visit_class_stmt(name, superclass, methods)
-            }
-            StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
-            StmtKind::Function(token, params, body) => {
-                visitor.visit_function_stmt(token, params, body)
-            }
-            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
-            StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
-            StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
-            StmtKind::Variable(name, initializer) => {
-                visitor.visit_variable_stmt(name, initializer.as_deref())
-            }
-            StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
-        }
-    }
-}
-
 pub trait StmtVisitor<'a, R> {
     fn visit_block_stmt(&self, body: &[Box<Stmt<'a>>]) -> R;
     fn visit_class_stmt(
@@ -154,7 +132,7 @@ pub trait StmtVisitor<'a, R> {
     fn visit_if_stmt(&self, cond: &Expr<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> R;
     fn visit_print_stmt(&self, expr: &Expr<'a>) -> R;
     fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
-    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: Option<&Expr<'a>>) -> R;
+    fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: Option<&'a Expr<'a>>) -> R;
     fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> R;
 }
 
@@ -258,15 +236,24 @@ pub struct ProgramError {
 
 const ERROR_MARGIN: f64 = 0.00001;
 
-pub struct Interpreter {}
+#[derive(Default)]
+pub struct Interpreter<'a> {
+    globals: HashMap<&'a str, Option<&'a Expr<'a>>>,
+}
 
-impl Interpreter {
+impl<'a> Interpreter<'a> {
+    pub fn new() -> Self {
+        Self {
+            globals: HashMap::new(),
+        }
+    }
+
     pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
         expr.accept(&self)
     }
 
-    pub fn interpret<'a>(
-        &self,
+    pub fn interpret(
+        mut self,
         statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
     ) -> miette::Result<()> {
         let mut errors = vec![];
@@ -274,8 +261,8 @@ impl Interpreter {
         for stmt in statements {
             match stmt {
                 Ok(s) => {
-                    if let Err(e) = s.accept(&self) {
-                        errors.push(e);
+                    if let Err(e) = s.accept(&mut self) {
+                        errors.push(e)
                     }
                 }
                 Err(e) => errors.push(e),
@@ -299,7 +286,7 @@ fn map_operand_err<T>(err: miette::Result<T>, op: &Expr<'_>) -> miette::Result<T
     })
 }
 
-impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
+impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter<'a> {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
@@ -497,7 +484,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
     }
 }
 
-impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
+impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
     fn visit_block_stmt(&self, body: &[Box<Stmt<'a>>]) -> miette::Result<()> {
         let _ = body;
         todo!()
@@ -561,12 +548,15 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
     }
 
     fn visit_variable_stmt(
-        &self,
+        &mut self,
         name: &Token<'a>,
-        initializer: Option<&Expr<'a>>,
+        initializer: Option<&'a Expr<'a>>,
     ) -> miette::Result<()> {
-        let _ = name;
-        let _ = initializer;
+        if let Token::Identifier(id) = name {
+            self.globals.entry(id).or_insert(initializer);
+        } else {
+            todo!()
+        }
         // TODO: add var into scope
         Ok(())
     }
