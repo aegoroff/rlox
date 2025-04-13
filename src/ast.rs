@@ -242,17 +242,45 @@ impl LoxValue {
     }
 }
 
-// Evaluator
+// Interpreter
 
-pub struct Evaluator {}
-
-impl Evaluator {
-    pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
-        expr.accept(&self)
-    }
+#[derive(Debug, Error, Diagnostic)]
+#[error("Program completed with errors")]
+#[diagnostic()]
+pub struct ProgramError {
+    #[related]
+    others: Vec<miette::Report>,
 }
 
 const ERROR_MARGIN: f64 = 0.00001;
+
+pub struct Interpreter {}
+
+impl Interpreter {
+    pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
+        expr.accept(&self)
+    }
+
+    pub fn interpret(&self, statments: Vec<miette::Result<Stmt<'_>>>) -> miette::Result<()> {
+        let mut errors = vec![];
+
+        for r in statments {
+            match r {
+                Ok(s) => {
+                    if let Err(e) = s.accept(&self) {
+                        errors.push(e);
+                    }
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(ProgramError { others: errors }.into())
+        }
+    }
+}
 
 fn map_operand_err<T>(err: miette::Result<T>, op: &Expr<'_>) -> miette::Result<T> {
     err.map_err(|e| {
@@ -264,7 +292,7 @@ fn map_operand_err<T>(err: miette::Result<T>, op: &Expr<'_>) -> miette::Result<T
     })
 }
 
-impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
+impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
@@ -460,40 +488,6 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
     }
 }
 
-// Interpreter
-
-#[derive(Debug, Error, Diagnostic)]
-#[error("Program completed with errors")]
-#[diagnostic()]
-pub struct ProgramError {
-    #[related]
-    others: Vec<miette::Report>,
-}
-
-pub struct Interpreter {}
-
-impl Interpreter {
-    pub fn interpret(&self, statments: Vec<miette::Result<Stmt<'_>>>) -> miette::Result<()> {
-        let mut errors = vec![];
-
-        for r in statments {
-            match r {
-                Ok(s) => {
-                    if let Err(e) = s.accept(&self) {
-                        errors.push(e);
-                    }
-                }
-                Err(e) => errors.push(e),
-            }
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(ProgramError { others: errors }.into())
-        }
-    }
-}
-
 impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
     fn visit_block_stmt(&self, body: &[Box<Stmt<'a>>]) -> miette::Result<()> {
         let _ = body;
@@ -513,8 +507,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
     }
 
     fn visit_expression_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
-        let evaluator = Evaluator {};
-        evaluator.evaluate(expr)?;
+        self.evaluate(expr)?;
         Ok(())
     }
 
@@ -543,8 +536,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
     }
 
     fn visit_print_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
-        let evaluator = Evaluator {};
-        match evaluator.evaluate(expr) {
+        match self.evaluate(expr) {
             Ok(e) => println!("{e}"),
             Err(e) => {
                 return Err(e);
