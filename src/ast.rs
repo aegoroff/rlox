@@ -562,7 +562,11 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
         initializer: Option<Box<Expr<'a>>>,
     ) -> miette::Result<()> {
         if let Token::Identifier(id) = name {
-            self.globals.entry(id).or_insert(initializer);
+            if self.globals.contains_key(id) {
+                self.globals.entry(id).and_modify(|e| *e = initializer);
+            } else {
+                self.globals.entry(id).or_insert(initializer);
+            }
             Ok(())
         } else {
             Err(miette!("Invalid identifier"))
