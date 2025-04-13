@@ -2,7 +2,8 @@
 
 use std::{fmt::Display, ops::RangeInclusive};
 
-use miette::{LabeledSpan, miette};
+use miette::{Diagnostic, LabeledSpan, miette};
+use thiserror::Error;
 
 use crate::lexer::Token;
 
@@ -461,17 +462,34 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
 
 // Interpreter
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Program completed with errors")]
+#[diagnostic()]
+pub struct ProgramError {
+    #[related]
+    others: Vec<miette::Report>,
+}
+
 pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn interpret(&self, statments: Vec<miette::Result<Stmt<'_>>>) {
+    pub fn interpret(&self, statments: Vec<miette::Result<Stmt<'_>>>) -> miette::Result<()> {
+        let mut errors = vec![];
+
         for r in statments {
             match r {
                 Ok(s) => {
-                    s.accept(&self);
+                    if let Err(e) = s.accept(&self) {
+                        errors.push(e);
+                    }
                 }
-                _ => (),
+                Err(e) => errors.push(e),
             }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(ProgramError { others: errors }.into())
         }
     }
 }

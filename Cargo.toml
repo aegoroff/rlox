@@ -10,6 +10,7 @@ repository = "https://git.egoroff.spb.ru/root/rlox"
 bugreport = "0.5.1"
 clap = { version = "4.5.34", features = ["std", "color", "suggestions", "cargo"] }
 miette = { version = "7.5.0", features = ["fancy"] }
+thiserror = "2.0.12"
 
 [dev-dependencies]
 test-case = "3.3.1"

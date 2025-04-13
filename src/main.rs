@@ -71,7 +71,9 @@ fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     if let Some(r) = parser.parse() {
         let interpreter = Interpreter {};
-        interpreter.interpret(r);
+        interpreter
+            .interpret(r)
+            .map_err(|err| err.with_source_code(content))?;
     }
     Ok(())
 }
