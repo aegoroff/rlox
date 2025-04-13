@@ -10,7 +10,10 @@ use bugreport::{
 };
 use clap::{ArgMatches, Command, command};
 use miette::{Context, IntoDiagnostic, miette};
-use rlox::{ast::Interpreter, parser::Parser};
+use rlox::{
+    ast::{Interpreter, StmtKind},
+    parser::Parser,
+};
 
 #[macro_use]
 extern crate clap;
@@ -70,14 +73,18 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     if let Some(r) = parser.parse() {
-        match r {
-            Ok(expr) => {
-                let printer = Interpreter {};
-                if let Err(e) = printer.print(&expr) {
-                    return Err(e.with_source_code(content));
+        for stmt in r {
+            match stmt {
+                Ok(stmt) => {
+                    let iterpreter = Interpreter {};
+                    if let StmtKind::Expression(expr) = stmt.kind {
+                        if let Err(e) = iterpreter.print(&expr) {
+                            return Err(e.with_source_code(content));
+                        }
+                    }
                 }
+                Err(e) => return Err(e.with_source_code(content)),
             }
-            Err(e) => return Err(e.with_source_code(content)),
         }
     }
     Ok(())

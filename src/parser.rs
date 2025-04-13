@@ -3,7 +3,7 @@ use std::iter::Peekable;
 use miette::{LabeledSpan, miette};
 
 use crate::{
-    ast::{Expr, ExprKind},
+    ast::{Expr, ExprKind, Stmt, StmtKind},
     lexer::{Lexer, Token},
 };
 
@@ -19,8 +19,38 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        self.expression()
+    pub fn parse(&mut self) -> Option<Vec<miette::Result<Stmt<'a>>>> {
+        let mut result = vec![];
+
+        while let Some(stmt) = self.statement() {
+            result.push(stmt);
+        }
+        Some(result)
+    }
+
+    fn statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        let current = self.tokens.peek()?;
+        if let Ok((_, Token::Print, _)) = current {
+            self.tokens.next(); // consume print token
+            self.print_statement()
+        } else {
+            self.expr_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        todo!()
+    }
+
+    fn expr_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        match self.expression()? {
+            Ok(expr) => {
+                let location = expr.location.clone();
+                let kind = StmtKind::Expression(Box::new(expr));
+                Some(Ok(Stmt { kind, location }))
+            }
+            Err(e) => Some(Err(e)),
+        }
     }
 
     fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
@@ -368,6 +398,8 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::{Interpreter, LoxValue};
+
     use super::*;
     use test_case::test_case;
 
@@ -390,5 +422,102 @@ mod tests {
 
         // Assert
         assert!(actual.is_some());
+    }
+
+    #[test_case("--1", 1.0)]
+    #[test_case("1 - 1", 0.0)]
+    #[test_case("1 - 2", -1.0)]
+    #[test_case("2 - 1", 1.0)]
+    #[test_case("2 + 3", 5.0)]
+    #[test_case("2 + 3 - 1", 4.0)]
+    #[test_case("3 + 3 / 3", 4.0)]
+    #[test_case("(3 + 3) / 3", 2.0)]
+    #[test_case("4 / 2", 2.0)]
+    #[test_case("4 / 1", 4.0)]
+    #[test_case("5 / -1", -5.0)]
+    #[test_case("(5 - (3-1)) + -1", 2.0)]
+    #[test_case("(5 - (3-1)) * -1", -3.0)]
+    #[test_case("((5 - (3-1)) * -2) / 4", -1.5)]
+    #[test_case("((5 - (3-1) + 3) * -2) / 4", -3.0)]
+    fn iterpreter_numeric_positive_tests(input: &str, expected: f64) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap().unwrap();
+        let eval = Interpreter {};
+
+        // Act
+        let actual = eval.interpret(&expr);
+
+        // Assert
+        assert!(actual.is_ok());
+        let actual = actual.unwrap();
+        if let LoxValue::Number(actual) = actual {
+            assert_eq!(actual, expected)
+        } else {
+            todo!()
+        }
+    }
+
+    #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
+    #[test_case("(\"a\" + 4) + \"c\"", "a4c")]
+    #[test_case("(4 + \"a\") + \"c\"", "4ac")]
+    #[test_case("(true + \"a\") + \"c\"", "trueac")]
+    #[test_case("(nil + \"a\") + \"c\"", "ac")]
+    fn iterpreter_string_positive_tests(input: &str, expected: &str) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap().unwrap();
+        let eval = Interpreter {};
+
+        // Act
+        let actual = eval.interpret(&expr);
+
+        // Assert
+        assert!(actual.is_ok());
+        let actual = actual.unwrap();
+        if let LoxValue::String(actual) = actual {
+            assert_eq!(actual, expected)
+        } else {
+            todo!()
+        }
+    }
+
+    #[test_case("(\"a\" == \"b\")", false)]
+    #[test_case("(\"a\" != \"c\")", true)]
+    #[test_case("(\"ab\" == \"ab\")", true)]
+    #[test_case("(\"aa\" > \"bb\")", false)]
+    #[test_case("(\"bb\" > \"aa\")", true)]
+    #[test_case("(\"bba\" >= \"aaa\")", true)]
+    #[test_case("(\"bba\" <= \"aaa\")", false)]
+    #[test_case("1 == 2", false)]
+    #[test_case("2 == 2", true)]
+    #[test_case("3 >= 3", true)]
+    #[test_case("3 >= 2", true)]
+    #[test_case("3 <= 1", false)]
+    #[test_case("(3 - 1) * 200 <= 1", false)]
+    #[test_case("3 > 1 == true", true)]
+    #[test_case("20 <= 20", true)]
+    #[test_case("40 <= 50", true)]
+    #[test_case("nil <= false", true ; "nil lrs less or equal")]
+    #[test_case("nil < false", false ; "nil lrs less")]
+    #[test_case("nil == false", true ; "nil lrs equal")]
+    #[test_case("!nil", true ; "not nil")]
+    fn iterpreter_predicates_tests(input: &str, expected: bool) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap().unwrap();
+        let eval = Interpreter {};
+
+        // Act
+        let actual = eval.interpret(&expr);
+
+        // Assert
+        assert!(actual.is_ok());
+        let actual = actual.unwrap();
+        if let LoxValue::Bool(actual) = actual {
+            assert_eq!(actual, expected)
+        } else {
+            todo!()
+        }
     }
 }
