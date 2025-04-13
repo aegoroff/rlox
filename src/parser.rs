@@ -31,7 +31,6 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
         let current = self.tokens.peek()?;
         if let Ok((_, Token::Print, _)) = current {
-            self.tokens.next(); // consume print token
             self.print_statement()
         } else {
             self.expr_statement()
@@ -39,6 +38,7 @@ impl<'a> Parser<'a> {
     }
 
     fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        self.tokens.next(); // consume print token TODO: include print start position into stmt location
         match self.semicolon_terminated_expression()? {
             Ok(expr) => {
                 let location = expr.location.clone();
