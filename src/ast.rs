@@ -477,7 +477,17 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter<'a> {
 
     fn visit_variable_expr(&self, name: &Token<'a>) -> miette::Result<LoxValue> {
         match name {
-            Token::Identifier(id) => Ok(LoxValue::String((*id).to_string())),
+            Token::Identifier(id) => {
+                if let Some(var) = self.globals.get(id) {
+                    if let Some(val) = var {
+                        val.accept(self)
+                    } else {
+                        Ok(LoxValue::Nil)
+                    }
+                } else {
+                    Err(miette!("Undefined variable: '{id}'"))
+                }
+            }
             _ => Err(miette!("Invalid identifier")),
         }
     }
