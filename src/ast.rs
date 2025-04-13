@@ -552,10 +552,10 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
     ) -> miette::Result<()> {
         if let Token::Identifier(id) = name {
             self.globals.entry(id).or_insert(initializer);
+            Ok(())
         } else {
-            todo!()
+            Err(miette!("Invalid identifier"))
         }
-        Ok(())
     }
 
     fn visit_while_stmt(&self, cond: Expr<'a>, body: Stmt<'a>) -> miette::Result<()> {
