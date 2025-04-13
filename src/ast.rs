@@ -240,6 +240,7 @@ pub struct Interpreter<'a> {
 }
 
 impl<'a> Interpreter<'a> {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             globals: HashMap::new(),
@@ -260,7 +261,7 @@ impl<'a> Interpreter<'a> {
             match stmt {
                 Ok(s) => {
                     if let Err(e) = s.accept(&mut self) {
-                        errors.push(e)
+                        errors.push(e);
                     }
                 }
                 Err(e) => errors.push(e),
