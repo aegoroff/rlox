@@ -221,11 +221,13 @@ impl LoxValue {
     }
 }
 
-pub struct Evaluator {}
+// Iterpreter
 
-impl Evaluator {
+pub struct Interpreter {}
+
+impl Interpreter {
     pub fn print(&self, expr: &Expr<'_>) -> miette::Result<()> {
-        match self.evaluate(expr) {
+        match self.interpret(expr) {
             Ok(e) => println!("{e}"),
             Err(e) => {
                 return Err(e);
@@ -234,7 +236,7 @@ impl Evaluator {
         Ok(())
     }
 
-    pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
+    pub fn interpret(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
         expr.accept(&self)
     }
 }
@@ -251,7 +253,7 @@ fn map_operand_err<T>(err: miette::Result<T>, op: &Expr<'_>) -> miette::Result<T
     })
 }
 
-impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
+impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
@@ -272,8 +274,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
         left: &Expr<'a>,
         right: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
-        let lhs = self.evaluate(left)?;
-        let rhs = self.evaluate(right)?;
+        let lhs = self.interpret(left)?;
+        let rhs = self.interpret(right)?;
 
         match operator {
             Token::Minus => {
@@ -364,7 +366,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
     }
 
     fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> miette::Result<LoxValue> {
-        let val = self.evaluate(expr)?;
+        let val = self.interpret(expr)?;
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
             Token::Bang => Ok(LoxValue::Bool(!val.try_bool()?)),
@@ -395,11 +397,11 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
 
     fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
         let _ = name;
-        self.evaluate(object)
+        self.interpret(object)
     }
 
     fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {
-        self.evaluate(grouping)
+        self.interpret(grouping)
     }
 
     fn visit_logical_expr(
@@ -469,14 +471,14 @@ mod tests {
     #[test_case("(5 - (3-1)) * -1", -3.0)]
     #[test_case("((5 - (3-1)) * -2) / 4", -1.5)]
     #[test_case("((5 - (3-1) + 3) * -2) / 4", -3.0)]
-    fn evaluator_numeric_positive_tests(input: &str, expected: f64) {
+    fn iterpreter_numeric_positive_tests(input: &str, expected: f64) {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.parse().unwrap().unwrap();
-        let eval = Evaluator {};
+        let eval = Interpreter {};
 
         // Act
-        let actual = eval.evaluate(&expr);
+        let actual = eval.interpret(&expr);
 
         // Assert
         assert!(actual.is_ok());
@@ -493,14 +495,14 @@ mod tests {
     #[test_case("(4 + \"a\") + \"c\"", "4ac")]
     #[test_case("(true + \"a\") + \"c\"", "trueac")]
     #[test_case("(nil + \"a\") + \"c\"", "ac")]
-    fn evaluator_string_positive_tests(input: &str, expected: &str) {
+    fn iterpreter_string_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.parse().unwrap().unwrap();
-        let eval = Evaluator {};
+        let eval = Interpreter {};
 
         // Act
-        let actual = eval.evaluate(&expr);
+        let actual = eval.interpret(&expr);
 
         // Assert
         assert!(actual.is_ok());
@@ -532,14 +534,14 @@ mod tests {
     #[test_case("nil < false", false ; "nil lrs less")]
     #[test_case("nil == false", true ; "nil lrs equal")]
     #[test_case("!nil", true ; "not nil")]
-    fn evaluator_predicates_tests(input: &str, expected: bool) {
+    fn iterpreter_predicates_tests(input: &str, expected: bool) {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.parse().unwrap().unwrap();
-        let eval = Evaluator {};
+        let eval = Interpreter {};
 
         // Act
-        let actual = eval.evaluate(&expr);
+        let actual = eval.interpret(&expr);
 
         // Assert
         assert!(actual.is_ok());
