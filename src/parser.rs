@@ -39,7 +39,7 @@ impl<'a> Parser<'a> {
     }
 
     fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        match self.terminated_expression()? {
+        match self.semicolon_terminated_expression()? {
             Ok(expr) => {
                 let location = expr.location.clone();
                 let kind = StmtKind::Print(Box::new(expr));
@@ -50,7 +50,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expr_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        match self.terminated_expression()? {
+        match self.semicolon_terminated_expression()? {
             Ok(expr) => {
                 let location = expr.location.clone();
                 let kind = StmtKind::Expression(Box::new(expr));
@@ -60,7 +60,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn semicolon_terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
         match self.expression()? {
             Ok(expr) => {
                 let location = expr.location.clone();
