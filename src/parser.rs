@@ -11,7 +11,7 @@ pub struct Parser<'a> {
     tokens: Peekable<Lexer<'a>>,
 }
 
-impl<'a> Iterator for Parser<'a> {
+impl<'a> Iterator for &mut Parser<'a> {
     type Item = miette::Result<Stmt<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -535,10 +535,10 @@ mod tests {
     #[test_case("!!2;")]
     fn parser_tests(input: &str) {
         // Arrange
-        let parser = Parser::new(input);
+        let mut parser = Parser::new(input);
 
         // Act
-        for stmt in parser {
+        for stmt in &mut parser {
             // Assert
             assert!(stmt.is_ok());
         }

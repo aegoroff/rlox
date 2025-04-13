@@ -79,21 +79,19 @@ pub struct Stmt<'a> {
 }
 
 impl<'a> Stmt<'a> {
-    pub fn accept<R>(&'a self, visitor: &mut impl StmtVisitor<'a, R>) -> R {
-        match &self.kind {
+    pub fn accept<R>(self, visitor: &mut impl StmtVisitor<'a, R>) -> R {
+        match self.kind {
             StmtKind::Block(stmts) => visitor.visit_block_stmt(stmts),
-            StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, stmt, stmts),
-            StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
+            StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, *stmt, stmts),
+            StmtKind::Expression(expr) => visitor.visit_expression_stmt(*expr),
             StmtKind::Function(token, params, body) => {
                 visitor.visit_function_stmt(token, params, body)
             }
-            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
-            StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
-            StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
-            StmtKind::Variable(name, initializer) => {
-                visitor.visit_variable_stmt(name, initializer.as_deref())
-            }
-            StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
+            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(*cond, *then, *otherwise),
+            StmtKind::Print(expr) => visitor.visit_print_stmt(&expr),
+            StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, *value),
+            StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
+            StmtKind::While(cond, body) => visitor.visit_while_stmt(*cond, *body),
         }
     }
 }
@@ -115,25 +113,25 @@ pub enum StmtKind<'a> {
 }
 
 pub trait StmtVisitor<'a, R> {
-    fn visit_block_stmt(&self, body: &[Box<Stmt<'a>>]) -> R;
+    fn visit_block_stmt(&self, body: Vec<Box<Stmt<'a>>>) -> R;
     fn visit_class_stmt(
         &self,
-        name: &Token<'a>,
-        superclass: &Stmt<'a>,
-        methods: &[Box<Stmt<'a>>],
+        name: Token<'a>,
+        superclass: Stmt<'a>,
+        methods: Vec<Box<Stmt<'a>>>,
     ) -> R;
-    fn visit_expression_stmt(&self, expr: &Expr<'a>) -> R;
+    fn visit_expression_stmt(&self, expr: Expr<'a>) -> R;
     fn visit_function_stmt(
         &self,
-        token: &Token<'a>,
-        params: &[Box<Stmt<'a>>],
-        body: &[Box<Stmt<'a>>],
+        token: Token<'a>,
+        params: Vec<Box<Stmt<'a>>>,
+        body: Vec<Box<Stmt<'a>>>,
     ) -> R;
-    fn visit_if_stmt(&self, cond: &Expr<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> R;
+    fn visit_if_stmt(&self, cond: Expr<'a>, then: Stmt<'a>, otherwise: Stmt<'a>) -> R;
     fn visit_print_stmt(&self, expr: &Expr<'a>) -> R;
-    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
-    fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: Option<&'a Expr<'a>>) -> R;
-    fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> R;
+    fn visit_return_stmt(&self, keyword: Token<'a>, value: Expr<'a>) -> R;
+    fn visit_variable_stmt(&mut self, name: Token<'a>, initializer: Option<Box<Expr<'a>>>) -> R;
+    fn visit_while_stmt(&self, cond: Expr<'a>, body: Stmt<'a>) -> R;
 }
 
 // Values
@@ -238,7 +236,7 @@ const ERROR_MARGIN: f64 = 0.00001;
 
 #[derive(Default)]
 pub struct Interpreter<'a> {
-    globals: HashMap<&'a str, Option<&'a Expr<'a>>>,
+    globals: HashMap<&'a str, Option<Box<Expr<'a>>>>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -485,16 +483,16 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter<'a> {
 }
 
 impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
-    fn visit_block_stmt(&self, body: &[Box<Stmt<'a>>]) -> miette::Result<()> {
+    fn visit_block_stmt(&self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
         let _ = body;
         todo!()
     }
 
     fn visit_class_stmt(
         &self,
-        name: &Token<'a>,
-        superclass: &Stmt<'a>,
-        methods: &[Box<Stmt<'a>>],
+        name: Token<'a>,
+        superclass: Stmt<'a>,
+        methods: Vec<Box<Stmt<'a>>>,
     ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
@@ -502,16 +500,16 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
         todo!()
     }
 
-    fn visit_expression_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
-        self.evaluate(expr)?;
+    fn visit_expression_stmt(&self, expr: Expr<'a>) -> miette::Result<()> {
+        self.evaluate(&expr)?;
         Ok(())
     }
 
     fn visit_function_stmt(
         &self,
-        token: &Token<'a>,
-        params: &[Box<Stmt<'a>>],
-        body: &[Box<Stmt<'a>>],
+        token: Token<'a>,
+        params: Vec<Box<Stmt<'a>>>,
+        body: Vec<Box<Stmt<'a>>>,
     ) -> miette::Result<()> {
         let _ = body;
         let _ = params;
@@ -521,9 +519,9 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
 
     fn visit_if_stmt(
         &self,
-        cond: &Expr<'a>,
-        then: &Stmt<'a>,
-        otherwise: &Stmt<'a>,
+        cond: Expr<'a>,
+        then: Stmt<'a>,
+        otherwise: Stmt<'a>,
     ) -> miette::Result<()> {
         let _ = otherwise;
         let _ = then;
@@ -541,7 +539,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
         Ok(())
     }
 
-    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
+    fn visit_return_stmt(&self, keyword: Token<'a>, value: Expr<'a>) -> miette::Result<()> {
         let _ = value;
         let _ = keyword;
         todo!()
@@ -549,19 +547,18 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
 
     fn visit_variable_stmt(
         &mut self,
-        name: &Token<'a>,
-        initializer: Option<&'a Expr<'a>>,
+        name: Token<'a>,
+        initializer: Option<Box<Expr<'a>>>,
     ) -> miette::Result<()> {
         if let Token::Identifier(id) = name {
             self.globals.entry(id).or_insert(initializer);
         } else {
             todo!()
         }
-        // TODO: add var into scope
         Ok(())
     }
 
-    fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> miette::Result<()> {
+    fn visit_while_stmt(&self, cond: Expr<'a>, body: Stmt<'a>) -> miette::Result<()> {
         let _ = body;
         let _ = cond;
         todo!()
