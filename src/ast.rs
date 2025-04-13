@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use std::{fmt::Display, ops::RangeInclusive};
 
 use miette::{LabeledSpan, miette};
