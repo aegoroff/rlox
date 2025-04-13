@@ -77,6 +77,24 @@ pub struct Stmt<'a> {
     pub location: RangeInclusive<usize>,
 }
 
+impl<'a> Stmt<'a> {
+    pub fn accept<R>(&self, visitor: &impl StmtVisitor<'a, R>) -> R {
+        match &self.kind {
+            StmtKind::Block(stmts) => visitor.visit_block_stmt(stmts),
+            StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, stmt, stmts),
+            StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
+            StmtKind::Function(token, params, body) => {
+                visitor.visit_function_stmt(token, params, body)
+            }
+            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
+            StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
+            StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
+            StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
+            StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum StmtKind<'a> {
     Block(Vec<Box<Stmt<'a>>>),
@@ -228,16 +246,6 @@ impl LoxValue {
 pub struct Evaluator {}
 
 impl Evaluator {
-    pub fn print(&self, expr: &Expr<'_>) -> miette::Result<()> {
-        match self.evaluate(expr) {
-            Ok(e) => println!("{e}"),
-            Err(e) => {
-                return Err(e);
-            }
-        }
-        Ok(())
-    }
-
     pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
         expr.accept(&self)
     }
@@ -453,12 +461,24 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
 
 // Interpreter
 
-pub struct Interpreter {
-    
+pub struct Interpreter {}
+
+impl Interpreter {
+    pub fn interpret(&self, statments: Vec<miette::Result<Stmt<'_>>>) {
+        for r in statments {
+            match r {
+                Ok(s) => {
+                    s.accept(&self);
+                }
+                _ => (),
+            }
+        }
+    }
 }
 
 impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
     fn visit_block_stmt(&self, body: &[Box<Stmt<'a>>]) -> miette::Result<()> {
+        let _ = body;
         todo!()
     }
 
@@ -468,11 +488,16 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
         superclass: &Stmt<'a>,
         methods: &[Box<Stmt<'a>>],
     ) -> miette::Result<()> {
+        let _ = methods;
+        let _ = superclass;
+        let _ = name;
         todo!()
     }
 
     fn visit_expression_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
-        todo!()
+        let evaluator = Evaluator {};
+        evaluator.evaluate(expr)?;
+        Ok(())
     }
 
     fn visit_function_stmt(
@@ -481,26 +506,50 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
         params: &[Box<Stmt<'a>>],
         body: &[Box<Stmt<'a>>],
     ) -> miette::Result<()> {
+        let _ = body;
+        let _ = params;
+        let _ = token;
         todo!()
     }
 
-    fn visit_if_stmt(&self, cond: &Expr<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> miette::Result<()> {
+    fn visit_if_stmt(
+        &self,
+        cond: &Expr<'a>,
+        then: &Stmt<'a>,
+        otherwise: &Stmt<'a>,
+    ) -> miette::Result<()> {
+        let _ = otherwise;
+        let _ = then;
+        let _ = cond;
         todo!()
     }
 
     fn visit_print_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
-        todo!()
+        let evaluator = Evaluator {};
+        match evaluator.evaluate(expr) {
+            Ok(e) => println!("{e}"),
+            Err(e) => {
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 
     fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
+        let _ = value;
+        let _ = keyword;
         todo!()
     }
 
     fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &Expr<'a>) -> miette::Result<()> {
+        let _ = name;
+        let _ = initializer;
         todo!()
     }
 
     fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> miette::Result<()> {
+        let _ = body;
+        let _ = cond;
         todo!()
     }
 }
