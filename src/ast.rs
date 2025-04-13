@@ -223,7 +223,7 @@ impl LoxValue {
     }
 }
 
-// Iterpreter
+// Evaluator
 
 pub struct Evaluator {}
 
@@ -447,6 +447,60 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
 
     fn visit_variable_expr(&self, name: &Token<'a>) -> miette::Result<LoxValue> {
         let _ = name;
+        todo!()
+    }
+}
+
+// Interpreter
+
+pub struct Interpreter {
+    
+}
+
+impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
+    fn visit_block_stmt(&self, body: &[Box<Stmt<'a>>]) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_class_stmt(
+        &self,
+        name: &Token<'a>,
+        superclass: &Stmt<'a>,
+        methods: &[Box<Stmt<'a>>],
+    ) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_expression_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_function_stmt(
+        &self,
+        token: &Token<'a>,
+        params: &[Box<Stmt<'a>>],
+        body: &[Box<Stmt<'a>>],
+    ) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_if_stmt(&self, cond: &Expr<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_print_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &Expr<'a>) -> miette::Result<()> {
+        todo!()
+    }
+
+    fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> miette::Result<()> {
         todo!()
     }
 }

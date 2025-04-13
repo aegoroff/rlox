@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
         match self.expression()? {
             Ok(expr) => {
                 let location = expr.location.clone();
-                let semicolon = self.tokens.peek()?;
+                let semicolon = self.tokens.peek()?; // TODO: handle EOF as error here
                 if let Ok((_, Token::Semicolon, _)) = semicolon {
                     self.tokens.next(); // consume semicolon token
                 } else {
