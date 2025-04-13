@@ -69,35 +69,44 @@ impl<'a> Expr<'a> {
 
 // Statements
 
-pub enum Stmt<'a> {
+#[derive(Debug)]
+pub struct Stmt<'a> {
+    pub kind: StmtKind<'a>,
+    pub location: RangeInclusive<usize>,
+}
+
+#[derive(Debug)]
+pub enum StmtKind<'a> {
     Block(Vec<Box<Stmt<'a>>>),
     /// name, superclass, methods
     Class(Token<'a>, Box<Stmt<'a>>, Vec<Box<Stmt<'a>>>),
-    Expression(ExprKind<'a>),
+    Expression(Box<Expr<'a>>),
     /// token, params, body
     Function(Token<'a>, Vec<Box<Stmt<'a>>>, Vec<Box<Stmt<'a>>>),
     /// condition, then, else
-    If(ExprKind<'a>, Box<Stmt<'a>>, Box<Stmt<'a>>),
-    Print(ExprKind<'a>),
-    Return(Token<'a>, ExprKind<'a>),
-    Variable(Token<'a>, ExprKind<'a>),
-    While(ExprKind<'a>, Box<Stmt<'a>>),
+    If(Box<Expr<'a>>, Box<Stmt<'a>>, Box<Stmt<'a>>),
+    Print(Box<Expr<'a>>),
+    Return(Token<'a>, Box<Expr<'a>>),
+    Variable(Token<'a>, Box<Expr<'a>>),
+    While(Box<Expr<'a>>, Box<Stmt<'a>>),
 }
 
-impl<'a> Stmt<'a> {
+impl<'a> StmtKind<'a> {
     pub fn accept<R>(&self, visitor: &impl StmtVisitor<'a, R>) -> R {
         match self {
-            Stmt::Block(body) => visitor.visit_block_stmt(body),
-            Stmt::Class(name, superclass, methods) => {
+            StmtKind::Block(body) => visitor.visit_block_stmt(body),
+            StmtKind::Class(name, superclass, methods) => {
                 visitor.visit_class_stmt(name, superclass, methods)
             }
-            Stmt::Expression(expr) => visitor.visit_expression_stmt(expr),
-            Stmt::Function(token, params, body) => visitor.visit_function_stmt(token, params, body),
-            Stmt::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
-            Stmt::Print(expr) => visitor.visit_print_stmt(expr),
-            Stmt::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
-            Stmt::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
-            Stmt::While(cond, body) => visitor.visit_while_stmt(cond, body),
+            StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
+            StmtKind::Function(token, params, body) => {
+                visitor.visit_function_stmt(token, params, body)
+            }
+            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
+            StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
+            StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
+            StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
+            StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
         }
     }
 }
@@ -110,19 +119,21 @@ pub trait StmtVisitor<'a, R> {
         superclass: &Stmt<'a>,
         methods: &[Box<Stmt<'a>>],
     ) -> R;
-    fn visit_expression_stmt(&self, expr: &ExprKind<'a>) -> R;
+    fn visit_expression_stmt(&self, expr: &Expr<'a>) -> R;
     fn visit_function_stmt(
         &self,
         token: &Token<'a>,
         params: &[Box<Stmt<'a>>],
         body: &[Box<Stmt<'a>>],
     ) -> R;
-    fn visit_if_stmt(&self, cond: &ExprKind<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> R;
-    fn visit_print_stmt(&self, expr: &ExprKind<'a>) -> R;
-    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &ExprKind<'a>) -> R;
-    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &ExprKind<'a>) -> R;
-    fn visit_while_stmt(&self, cond: &ExprKind<'a>, body: &Stmt<'a>) -> R;
+    fn visit_if_stmt(&self, cond: &Expr<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> R;
+    fn visit_print_stmt(&self, expr: &Expr<'a>) -> R;
+    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
+    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &Expr<'a>) -> R;
+    fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> R;
 }
+
+// Values
 
 pub enum LoxValue {
     String(String),
