@@ -468,7 +468,7 @@ mod tests {
     #[test_case("(5 - (3-1)) * -1", -3.0)]
     #[test_case("((5 - (3-1)) * -2) / 4", -1.5)]
     #[test_case("((5 - (3-1) + 3) * -2) / 4", -3.0)]
-    fn iterpreter_numeric_positive_tests(input: &str, expected: f64) {
+    fn eval_numeric_positive_tests(input: &str, expected: f64) {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
@@ -492,7 +492,7 @@ mod tests {
     #[test_case("(4 + \"a\") + \"c\"", "4ac")]
     #[test_case("(true + \"a\") + \"c\"", "trueac")]
     #[test_case("(nil + \"a\") + \"c\"", "ac")]
-    fn iterpreter_string_positive_tests(input: &str, expected: &str) {
+    fn eval_string_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
@@ -531,7 +531,7 @@ mod tests {
     #[test_case("nil < false", false ; "nil lrs less")]
     #[test_case("nil == false", true ; "nil lrs equal")]
     #[test_case("!nil", true ; "not nil")]
-    fn iterpreter_predicates_tests(input: &str, expected: bool) {
+    fn eval_predicates_tests(input: &str, expected: bool) {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
