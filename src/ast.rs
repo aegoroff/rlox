@@ -83,15 +83,15 @@ impl<'a> Stmt<'a> {
         match self.kind {
             StmtKind::Block(stmts) => visitor.visit_block_stmt(stmts),
             StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, *stmt, stmts),
-            StmtKind::Expression(expr) => visitor.visit_expression_stmt(*expr),
+            StmtKind::Expression(expr) => visitor.visit_expression_stmt(&expr),
             StmtKind::Function(token, params, body) => {
                 visitor.visit_function_stmt(token, params, body)
             }
-            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(*cond, *then, *otherwise),
+            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(&cond, *then, *otherwise),
             StmtKind::Print(expr) => visitor.visit_print_stmt(&expr),
-            StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, *value),
+            StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, &value),
             StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
-            StmtKind::While(cond, body) => visitor.visit_while_stmt(*cond, *body),
+            StmtKind::While(cond, body) => visitor.visit_while_stmt(&cond, *body),
         }
     }
 }
@@ -120,18 +120,18 @@ pub trait StmtVisitor<'a, R> {
         superclass: Stmt<'a>,
         methods: Vec<Box<Stmt<'a>>>,
     ) -> R;
-    fn visit_expression_stmt(&self, expr: Expr<'a>) -> R;
+    fn visit_expression_stmt(&self, expr: &Expr<'a>) -> R;
     fn visit_function_stmt(
         &self,
         token: Token<'a>,
         params: Vec<Box<Stmt<'a>>>,
         body: Vec<Box<Stmt<'a>>>,
     ) -> R;
-    fn visit_if_stmt(&self, cond: Expr<'a>, then: Stmt<'a>, otherwise: Stmt<'a>) -> R;
+    fn visit_if_stmt(&self, cond: &Expr<'a>, then: Stmt<'a>, otherwise: Stmt<'a>) -> R;
     fn visit_print_stmt(&self, expr: &Expr<'a>) -> R;
-    fn visit_return_stmt(&self, keyword: Token<'a>, value: Expr<'a>) -> R;
+    fn visit_return_stmt(&self, keyword: Token<'a>, value: &Expr<'a>) -> R;
     fn visit_variable_stmt(&mut self, name: Token<'a>, initializer: Option<Box<Expr<'a>>>) -> R;
-    fn visit_while_stmt(&self, cond: Expr<'a>, body: Stmt<'a>) -> R;
+    fn visit_while_stmt(&self, cond: &Expr<'a>, body: Stmt<'a>) -> R;
 }
 
 // Values
@@ -500,8 +500,8 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
         todo!()
     }
 
-    fn visit_expression_stmt(&self, expr: Expr<'a>) -> miette::Result<()> {
-        self.evaluate(&expr)?;
+    fn visit_expression_stmt(&self, expr: &Expr<'a>) -> miette::Result<()> {
+        self.evaluate(expr)?;
         Ok(())
     }
 
@@ -519,7 +519,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
 
     fn visit_if_stmt(
         &self,
-        cond: Expr<'a>,
+        cond: &Expr<'a>,
         then: Stmt<'a>,
         otherwise: Stmt<'a>,
     ) -> miette::Result<()> {
@@ -539,7 +539,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
         Ok(())
     }
 
-    fn visit_return_stmt(&self, keyword: Token<'a>, value: Expr<'a>) -> miette::Result<()> {
+    fn visit_return_stmt(&self, keyword: Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
         let _ = value;
         let _ = keyword;
         todo!()
@@ -558,7 +558,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
         }
     }
 
-    fn visit_while_stmt(&self, cond: Expr<'a>, body: Stmt<'a>) -> miette::Result<()> {
+    fn visit_while_stmt(&self, cond: &Expr<'a>, body: Stmt<'a>) -> miette::Result<()> {
         let _ = body;
         let _ = cond;
         todo!()
