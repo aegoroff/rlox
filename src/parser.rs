@@ -63,15 +63,12 @@ impl<'a> Parser<'a> {
     fn semicolon_terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
         match self.expression()? {
             Ok(expr) => {
-                let location = expr.location.clone();
-                let semicolon = self.tokens.peek()?; // TODO: handle EOF as error here
-                if let Ok((_, Token::Semicolon, _)) = semicolon {
+                if let Some(Ok((_, Token::Semicolon, _))) = self.tokens.peek() {
                     self.tokens.next(); // consume semicolon token
                 } else {
-                    let s = location.end();
-                    let f = location.end();
+                    let pos = expr.location.end();
                     return Some(Err(miette!(
-                        labels = vec![LabeledSpan::at(*s..=*f, "Semicolon expected here")],
+                        labels = vec![LabeledSpan::at(*pos..=*pos, "Semicolon expected here")],
                         "Missing semicolon"
                     )));
                 }
