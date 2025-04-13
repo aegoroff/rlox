@@ -15,7 +15,7 @@ impl<'a> Iterator for Parser<'a> {
     type Item = miette::Result<Stmt<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.statement()
+        self.declaration()
     }
 }
 
@@ -24,6 +24,87 @@ impl<'a> Parser<'a> {
     pub fn new(content: &'a str) -> Self {
         Self {
             tokens: Lexer::new(content).peekable(),
+        }
+    }
+
+    fn declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        let current = self.tokens.peek()?;
+        if let Ok((_, Token::Var, _)) = current {
+            self.var_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        let t = self.tokens.next(); // consume VAR token TODO: include VAR start position into stmt location
+        let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
+        let name = match self.expression() {
+            Some(result) => match result {
+                Ok(expr) => {
+                    finish = *expr.location.end();
+                    match expr.kind {
+                        ExprKind::Variable(token) => Ok(token),
+                        _ => Err(miette!("Invalid variable name")),
+                    }
+                }
+                Err(e) => Err(e),
+            },
+            None => Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    "Variable name expected after this"
+                )],
+                "Missing variable name"
+            )),
+        };
+        let name = match name {
+            Ok(name) => name,
+            Err(e) => return Some(Err(e)),
+        };
+        // if var without initializer check semicolon
+        if self.tokens.peek().is_none() {
+            if let Err(e) = self.consume_semicolon(finish) {
+                return Some(Err(e));
+            }
+        }
+        let current = self.tokens.peek()?;
+        let stmt = if let Ok((_, Token::Equal, _)) = current {
+            self.tokens.next(); // consume EQUAL token
+            if let Some(initializer) = self.expression() {
+                match initializer {
+                    Ok(initializer) => {
+                        let end = *initializer.location.end();
+                        finish = end;
+                        let kind = StmtKind::Variable(name, Some(Box::new(initializer)));
+                        Ok(Stmt {
+                            kind,
+                            location: start..=end,
+                        })
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        start..=finish,
+                        "Variable name expected here"
+                    )],
+                    "Missing variable name"
+                ))
+            }
+        } else {
+            // Variable declaration without initializer
+            let kind = StmtKind::Variable(name, None);
+            Ok(Stmt {
+                kind,
+                location: start..=finish,
+            })
+        };
+        if let Err(e) = self.consume_semicolon(finish) {
+            Some(Err(e))
+        } else {
+            Some(stmt)
         }
     }
 
@@ -62,20 +143,30 @@ impl<'a> Parser<'a> {
     fn semicolon_terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
         match self.expression()? {
             Ok(expr) => {
-                if let Some(Ok((_, Token::Semicolon, _))) = self.tokens.peek() {
-                    self.tokens.next(); // consume semicolon token
-                } else {
-                    let pos = expr.location.end();
-                    return Some(Err(miette!(
-                        labels = vec![LabeledSpan::at(*pos..=*pos, "Semicolon expected here")],
-                        "Missing semicolon"
-                    )));
+                let pos = expr.location.end();
+                if let Err(e) = self.consume_semicolon(*pos) {
+                    return Some(Err(e));
                 }
 
                 Some(Ok(expr))
             }
             Err(e) => Some(Err(e)),
         }
+    }
+
+    fn consume_semicolon(&mut self, position: usize) -> miette::Result<()> {
+        if let Some(Ok((_, Token::Semicolon, _))) = self.tokens.peek() {
+            self.tokens.next(); // consume semicolon token
+        } else {
+            return Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    position..=position,
+                    "Semicolon expected here"
+                )],
+                "Missing semicolon"
+            ));
+        }
+        Ok(())
     }
 
     fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
@@ -410,6 +501,10 @@ impl<'a> Parser<'a> {
                     Err(e) => Some(Err(e)),
                 }
             }
+            Token::Identifier(_) => Some(Ok(Expr {
+                kind: ExprKind::Variable(tok),
+                location: start..=finish,
+            })),
             _ => Some(Err(miette!(
                 labels = vec![LabeledSpan::at(
                     start..finish,

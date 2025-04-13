@@ -90,7 +90,9 @@ impl<'a> Stmt<'a> {
             StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
             StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
             StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
-            StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
+            StmtKind::Variable(name, initializer) => {
+                visitor.visit_variable_stmt(name, initializer.as_deref())
+            }
             StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
         }
     }
@@ -108,7 +110,7 @@ pub enum StmtKind<'a> {
     If(Box<Expr<'a>>, Box<Stmt<'a>>, Box<Stmt<'a>>),
     Print(Box<Expr<'a>>),
     Return(Token<'a>, Box<Expr<'a>>),
-    Variable(Token<'a>, Box<Expr<'a>>),
+    Variable(Token<'a>, Option<Box<Expr<'a>>>),
     While(Box<Expr<'a>>, Box<Stmt<'a>>),
 }
 
@@ -126,7 +128,9 @@ impl<'a> StmtKind<'a> {
             StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
             StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
             StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
-            StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
+            StmtKind::Variable(name, initializer) => {
+                visitor.visit_variable_stmt(name, initializer.as_deref())
+            }
             StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
         }
     }
@@ -150,7 +154,7 @@ pub trait StmtVisitor<'a, R> {
     fn visit_if_stmt(&self, cond: &Expr<'a>, then: &Stmt<'a>, otherwise: &Stmt<'a>) -> R;
     fn visit_print_stmt(&self, expr: &Expr<'a>) -> R;
     fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
-    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &Expr<'a>) -> R;
+    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: Option<&Expr<'a>>) -> R;
     fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> R;
 }
 
@@ -486,8 +490,10 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
     }
 
     fn visit_variable_expr(&self, name: &Token<'a>) -> miette::Result<LoxValue> {
-        let _ = name;
-        todo!()
+        match name {
+            Token::Identifier(id) => Ok(LoxValue::String((*id).to_string())),
+            _ => Err(miette!("Invalid identifier")),
+        }
     }
 }
 
@@ -554,10 +560,15 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for &Interpreter {
         todo!()
     }
 
-    fn visit_variable_stmt(&self, name: &Token<'a>, initializer: &Expr<'a>) -> miette::Result<()> {
+    fn visit_variable_stmt(
+        &self,
+        name: &Token<'a>,
+        initializer: Option<&Expr<'a>>,
+    ) -> miette::Result<()> {
         let _ = name;
         let _ = initializer;
-        todo!()
+        // TODO: add var into scope
+        Ok(())
     }
 
     fn visit_while_stmt(&self, cond: &Expr<'a>, body: &Stmt<'a>) -> miette::Result<()> {
