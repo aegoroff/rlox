@@ -11,7 +11,7 @@ use bugreport::{
 use clap::{ArgMatches, Command, command};
 use miette::{Context, IntoDiagnostic, miette};
 use rlox::{
-    ast::{Interpreter, StmtKind},
+    ast::{Evaluator, StmtKind},
     parser::Parser,
 };
 
@@ -76,7 +76,7 @@ fn scan(content: String) -> miette::Result<()> {
         for stmt in r {
             match stmt {
                 Ok(stmt) => {
-                    let iterpreter = Interpreter {};
+                    let iterpreter = Evaluator {};
                     if let StmtKind::Expression(expr) = stmt.kind {
                         if let Err(e) = iterpreter.print(&expr) {
                             return Err(e.with_source_code(content));

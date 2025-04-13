@@ -225,11 +225,11 @@ impl LoxValue {
 
 // Iterpreter
 
-pub struct Interpreter {}
+pub struct Evaluator {}
 
-impl Interpreter {
+impl Evaluator {
     pub fn print(&self, expr: &Expr<'_>) -> miette::Result<()> {
-        match self.interpret(expr) {
+        match self.evaluate(expr) {
             Ok(e) => println!("{e}"),
             Err(e) => {
                 return Err(e);
@@ -238,7 +238,7 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn interpret(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
+    pub fn evaluate(&self, expr: &Expr<'_>) -> miette::Result<LoxValue> {
         expr.accept(&self)
     }
 }
@@ -255,7 +255,7 @@ fn map_operand_err<T>(err: miette::Result<T>, op: &Expr<'_>) -> miette::Result<T
     })
 }
 
-impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
+impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Evaluator {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
@@ -276,8 +276,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
         left: &Expr<'a>,
         right: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
-        let lhs = self.interpret(left)?;
-        let rhs = self.interpret(right)?;
+        let lhs = self.evaluate(left)?;
+        let rhs = self.evaluate(right)?;
 
         match operator {
             Token::Minus => {
@@ -368,7 +368,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
     }
 
     fn visit_unary_expr(&self, operator: &Token<'a>, expr: &Expr<'a>) -> miette::Result<LoxValue> {
-        let val = self.interpret(expr)?;
+        let val = self.evaluate(expr)?;
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
             Token::Bang => Ok(LoxValue::Bool(!val.try_bool()?)),
@@ -399,11 +399,11 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter {
 
     fn visit_get_expr(&self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
         let _ = name;
-        self.interpret(object)
+        self.evaluate(object)
     }
 
     fn visit_grouping_expr(&self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {
-        self.interpret(grouping)
+        self.evaluate(grouping)
     }
 
     fn visit_logical_expr(

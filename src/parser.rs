@@ -427,7 +427,7 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Interpreter, LoxValue};
+    use crate::ast::{Evaluator, LoxValue};
 
     use super::*;
     use test_case::test_case;
@@ -472,10 +472,10 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter {};
+        let eval = Evaluator {};
 
         // Act
-        let actual = eval.interpret(&expr);
+        let actual = eval.evaluate(&expr);
 
         // Assert
         assert!(actual.is_ok());
@@ -496,10 +496,10 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter {};
+        let eval = Evaluator {};
 
         // Act
-        let actual = eval.interpret(&expr);
+        let actual = eval.evaluate(&expr);
 
         // Assert
         assert!(actual.is_ok());
@@ -535,10 +535,10 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter {};
+        let eval = Evaluator {};
 
         // Act
-        let actual = eval.interpret(&expr);
+        let actual = eval.evaluate(&expr);
 
         // Assert
         assert!(actual.is_ok());
