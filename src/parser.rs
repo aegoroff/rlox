@@ -39,15 +39,44 @@ impl<'a> Parser<'a> {
     }
 
     fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        todo!()
+        match self.terminated_expression()? {
+            Ok(expr) => {
+                let location = expr.location.clone();
+                let kind = StmtKind::Print(Box::new(expr));
+                Some(Ok(Stmt { kind, location }))
+            }
+            Err(e) => Some(Err(e)),
+        }
     }
 
     fn expr_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        match self.expression()? {
+        match self.terminated_expression()? {
             Ok(expr) => {
                 let location = expr.location.clone();
                 let kind = StmtKind::Expression(Box::new(expr));
                 Some(Ok(Stmt { kind, location }))
+            }
+            Err(e) => Some(Err(e)),
+        }
+    }
+
+    fn terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        match self.expression()? {
+            Ok(expr) => {
+                let location = expr.location.clone();
+                let semicolon = self.tokens.peek()?;
+                if let Ok((_, Token::Semicolon, _)) = semicolon {
+                    self.tokens.next(); // consume semicolon token
+                } else {
+                    let s = location.end();
+                    let f = location.end();
+                    return Some(Err(miette!(
+                        labels = vec![LabeledSpan::at(*s..=*f, "Semicolon expected here")],
+                        "Missing semicolon"
+                    )));
+                }
+
+                Some(Ok(expr))
             }
             Err(e) => Some(Err(e)),
         }
