@@ -170,7 +170,67 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let lhs = self.equality();
+        let Some(current) = self.tokens.peek() else {
+            return lhs;
+        };
+        let Ok(next_tok) = current else {
+            // Consume token if it's not a valid
+            match self.tokens.next()? {
+                Ok(_) => unreachable!(),
+                Err(e) => return Some(Err(e)),
+            }
+        };
+
+        if !matches!(next_tok, (_, Token::Equal, _)) {
+            return lhs;
+        }
+
+        // Consume =
+        self.tokens.next();
+        if let Some(rhs) = self.assignment() {
+            if let Some(Ok(lhs)) = lhs {
+                let start = *lhs.location.start();
+                let lhs_finish = *lhs.location.end();
+                match rhs {
+                    Ok(rhs) => {
+                        let rhs_finish = *rhs.location.end();
+                        match &lhs.kind {
+                            ExprKind::Variable(token) => match token {
+                                Token::Identifier(id) => {
+                                    if let Err(e) = self.consume_semicolon(rhs_finish) {
+                                        return Some(Err(e));
+                                    }
+                                    let kind =
+                                        ExprKind::Assign(Token::Identifier(id), Box::new(rhs));
+                                    Some(Ok(Expr {
+                                        kind,
+                                        location: start..=rhs_finish,
+                                    }))
+                                }
+                                _ => todo!(),
+                            },
+                            _ => Some(Err(miette!(
+                                labels = vec![LabeledSpan::at(
+                                    start..=lhs_finish,
+                                    "Invalid assignment target"
+                                )],
+                                "Invalid assignment target"
+                            ))),
+                        }
+                    }
+                    Err(e) => Some(Err(e)),
+                }
+            } else {
+                Some(Err(miette!("Invalid assignment target")))
+            }
+        } else {
+            Some(Err(miette!("invalid assignment")))
+        }
     }
 
     fn equality(&mut self) -> Option<miette::Result<Expr<'a>>> {

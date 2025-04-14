@@ -409,9 +409,12 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter<'a> {
     }
 
     fn visit_assign_expr(&self, name: &Token<'a>, value: &Expr<'a>) -> miette::Result<LoxValue> {
-        let _ = value;
-        let _ = name;
-        todo!()
+        if let Token::Identifier(id) = name {
+            // TODO: self.globals.define(id, Some(Box::new(*value)));
+            Ok(LoxValue::Nil)
+        } else {
+            todo!()
+        }
     }
 
     fn visit_call_expr(
