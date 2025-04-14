@@ -543,6 +543,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
         let _ = body;
+        //let block_env = Environment::child(Box::new(self.environment));
         todo!()
     }
 
