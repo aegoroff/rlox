@@ -546,8 +546,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
         let prev = Rc::clone(&self.environment);
-        let root = Rc::clone(&self.environment);
-        let child = Environment::child(root);
+        let enclosing = Rc::clone(&self.environment);
+        let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
         let result = self.interpret(body.into_iter().map(|stmt| Ok(*stmt)));
         self.environment = prev;
