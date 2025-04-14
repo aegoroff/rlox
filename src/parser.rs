@@ -620,10 +620,10 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter::new();
+        let mut eval = Interpreter::new();
 
         // Act
-        let actual = eval.evaluate(&expr);
+        let actual = eval.evaluate(Box::new(expr));
 
         // Assert
         assert!(actual.is_ok());
@@ -644,10 +644,10 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter::new();
+        let mut eval = Interpreter::new();
 
         // Act
-        let actual = eval.evaluate(&expr);
+        let actual = eval.evaluate(Box::new(expr));
 
         // Assert
         assert!(actual.is_ok());
@@ -683,10 +683,10 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let eval = Interpreter::new();
+        let mut eval = Interpreter::new();
 
         // Act
-        let actual = eval.evaluate(&expr);
+        let actual = eval.evaluate(Box::new(expr));
 
         // Assert
         assert!(actual.is_ok());
