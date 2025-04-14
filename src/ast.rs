@@ -619,4 +619,23 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use crate::parser::Parser;
+
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case("1+2;")]
+    #[test_case("var x; x = 2; var y = 4; print x+y;")]
+    fn eval_single_result_tests(input: &str) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let interpreter = Interpreter::new();
+
+        // Act
+        let actual = interpreter.interpret(&mut parser);
+
+        // Assert
+        assert!(actual.is_ok());
+    }
+}
