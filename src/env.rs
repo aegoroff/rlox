@@ -45,6 +45,8 @@ impl<'a> Environment<'a> {
         if self.storage.contains_key(id) {
             self.storage.entry(id).and_modify(|e| *e = initializer);
             Ok(())
+        } else if let Some(enclosing) = &mut self.enclosing {
+            enclosing.assign(id, initializer)
         } else {
             Err(miette!("assignment to undefined variable '{id}'"))
         }
