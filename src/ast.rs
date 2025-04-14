@@ -261,7 +261,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     }
 
     pub fn interpret(
-        mut self,
+        &mut self,
         statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
     ) -> miette::Result<()> {
         let mut labels = vec![];
@@ -277,7 +277,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         for stmt in statements {
             match stmt {
                 Ok(s) => {
-                    if let Err(e) = s.accept(&mut self) {
+                    if let Err(e) = s.accept(self) {
                         add_label(e);
                     }
                 }
@@ -545,10 +545,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
-        let _ = body;
+        let prev = Rc::clone(&self.environment);
         let root = Rc::clone(&self.environment);
-        let block_env = Environment::child(root);
-        Ok(())
+        let child = Environment::child(root);
+        self.environment = Rc::new(RefCell::new(child));
+        let result = self.interpret(body.into_iter().map(|stmt| Ok(*stmt)));
+        self.environment = prev;
+        result
     }
 
     fn visit_class_stmt(
@@ -651,7 +654,7 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let mut stdout = Vec::new();
-        let interpreter = Interpreter::new(&mut stdout);
+        let mut interpreter = Interpreter::new(&mut stdout);
 
         // Act
         let actual = interpreter.interpret(&mut parser);
