@@ -623,7 +623,7 @@ mod tests {
         let mut eval = Interpreter::new();
 
         // Act
-        let actual = eval.evaluate(Box::new(expr));
+        let actual = eval.evaluate(expr);
 
         // Assert
         assert!(actual.is_ok());
@@ -647,7 +647,7 @@ mod tests {
         let mut eval = Interpreter::new();
 
         // Act
-        let actual = eval.evaluate(Box::new(expr));
+        let actual = eval.evaluate(expr);
 
         // Assert
         assert!(actual.is_ok());
@@ -686,7 +686,7 @@ mod tests {
         let mut eval = Interpreter::new();
 
         // Act
-        let actual = eval.evaluate(Box::new(expr));
+        let actual = eval.evaluate(expr);
 
         // Assert
         assert!(actual.is_ok());

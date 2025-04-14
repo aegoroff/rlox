@@ -254,7 +254,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn evaluate(&mut self, expr: Box<Expr<'a>>) -> miette::Result<LoxValue> {
+    pub fn evaluate(&mut self, expr: Expr<'a>) -> miette::Result<LoxValue> {
         expr.accept(self)
     }
 
@@ -323,8 +323,8 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a> {
     ) -> miette::Result<LoxValue> {
         let left_loc = left.location.clone();
         let right_loc = right.location.clone();
-        let lhs = self.evaluate(left)?;
-        let rhs = self.evaluate(right)?;
+        let lhs = self.evaluate(*left)?;
+        let rhs = self.evaluate(*right)?;
 
         match operator {
             Token::Minus => {
@@ -421,7 +421,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a> {
         expr: Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
         let expr_loc = expr.location.clone();
-        let val = self.evaluate(expr)?;
+        let val = self.evaluate(*expr)?;
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
             Token::Bang => Ok(LoxValue::Bool(!val.try_bool()?)),
@@ -466,11 +466,11 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a> {
         object: Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
         let _ = name;
-        self.evaluate(object)
+        self.evaluate(*object)
     }
 
     fn visit_grouping_expr(&mut self, grouping: Box<Expr<'a>>) -> miette::Result<LoxValue> {
-        self.evaluate(grouping)
+        self.evaluate(*grouping)
     }
 
     fn visit_logical_expr(
@@ -538,7 +538,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
     }
 
     fn visit_expression_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {
-        self.evaluate(expr)?;
+        self.evaluate(*expr)?;
         Ok(())
     }
 
@@ -567,7 +567,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
     }
 
     fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {
-        match self.evaluate(expr) {
+        match self.evaluate(*expr) {
             Ok(e) => println!("{e}"),
             Err(e) => {
                 return Err(e);
@@ -593,7 +593,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
                     Ok(val) => self.globals.define(id, val),
                     Err(e) => return Err(e),
                 }
-            };
+            }
             Ok(())
         } else {
             Err(miette!("Invalid identifier"))
