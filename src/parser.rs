@@ -180,7 +180,7 @@ impl<'a> Parser<'a> {
                         "Statement in block error"
                     )));
                 }
-            };
+            }
         }
         let kind = StmtKind::Block(statements);
         Some(Ok(Stmt {
