@@ -593,6 +593,8 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
                     Ok(val) => self.globals.define(id, val),
                     Err(e) => return Err(e),
                 }
+            } else {
+                self.globals.define(id, LoxValue::Nil);
             }
             Ok(())
         } else {
