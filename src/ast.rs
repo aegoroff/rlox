@@ -1,11 +1,11 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{collections::HashMap, fmt::Display, ops::RangeInclusive};
+use std::{fmt::Display, ops::RangeInclusive};
 
 use miette::{Diagnostic, LabeledSpan, miette};
 use thiserror::Error;
 
-use crate::lexer::Token;
+use crate::{env::Environment, lexer::Token};
 
 // Expressions
 
@@ -236,14 +236,14 @@ const ERROR_MARGIN: f64 = 0.00001;
 
 #[derive(Default)]
 pub struct Interpreter<'a> {
-    globals: HashMap<&'a str, Option<Box<Expr<'a>>>>,
+    globals: Environment<'a>,
 }
 
 impl<'a> Interpreter<'a> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            globals: HashMap::new(),
+            globals: Environment::new(),
         }
     }
 
@@ -478,14 +478,11 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for &Interpreter<'a> {
     fn visit_variable_expr(&self, name: &Token<'a>) -> miette::Result<LoxValue> {
         match name {
             Token::Identifier(id) => {
-                if let Some(var) = self.globals.get(id) {
-                    if let Some(val) = var {
-                        val.accept(self)
-                    } else {
-                        Ok(LoxValue::Nil)
-                    }
+                let val = self.globals.get(id)?;
+                if let Some(val) = val {
+                    val.accept(self)
                 } else {
-                    Err(miette!("Undefined variable: '{id}'"))
+                    Ok(LoxValue::Nil)
                 }
             }
             _ => Err(miette!("Invalid identifier")),
@@ -562,11 +559,7 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
         initializer: Option<Box<Expr<'a>>>,
     ) -> miette::Result<()> {
         if let Token::Identifier(id) = name {
-            if self.globals.contains_key(id) {
-                self.globals.entry(id).and_modify(|e| *e = initializer);
-            } else {
-                self.globals.entry(id).or_insert(initializer);
-            }
+            self.globals.define(id, initializer);
             Ok(())
         } else {
             Err(miette!("Invalid identifier"))
