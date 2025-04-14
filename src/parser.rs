@@ -141,7 +141,7 @@ impl<'a> Parser<'a> {
     }
 
     fn semicolon_terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        match self.expression()? {
+        match self.assignment()? {
             Ok(expr) => {
                 let pos = expr.location.end();
                 if let Err(e) = self.consume_semicolon(*pos) {
@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        self.assignment()
+        self.equality()
     }
 
     fn assignment(&mut self) -> Option<miette::Result<Expr<'a>>> {
@@ -202,9 +202,6 @@ impl<'a> Parser<'a> {
                         match &lhs.kind {
                             ExprKind::Variable(token) => match token {
                                 Token::Identifier(id) => {
-                                    if let Err(e) = self.consume_semicolon(rhs_finish) {
-                                        return Some(Err(e));
-                                    }
                                     let kind =
                                         ExprKind::Assign(Token::Identifier(id), Box::new(rhs));
                                     Some(Ok(Expr {
