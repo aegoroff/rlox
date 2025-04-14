@@ -2,8 +2,7 @@
 
 use std::{fmt::Display, ops::RangeInclusive};
 
-use miette::{Diagnostic, LabeledSpan, miette};
-use thiserror::Error;
+use miette::{LabeledSpan, miette};
 
 use crate::{env::Environment, lexer::Token};
 
@@ -224,14 +223,6 @@ impl LoxValue {
 
 // Interpreter
 
-#[derive(Debug, Error, Diagnostic)]
-#[error("Program completed with errors")]
-#[diagnostic()]
-pub struct ProgramError {
-    #[related]
-    errors: Vec<miette::Report>,
-}
-
 const ERROR_MARGIN: f64 = 0.00001;
 
 #[derive(Default)]
@@ -255,22 +246,30 @@ impl<'a> Interpreter<'a> {
         mut self,
         statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
     ) -> miette::Result<()> {
-        let mut errors = vec![];
+        let mut labels = vec![];
+
+        let mut add_label = |e: miette::Report| {
+            if let Some(label) = e.labels() {
+                for l in label {
+                    labels.push(l);
+                }
+            }
+        };
 
         for stmt in statements {
             match stmt {
                 Ok(s) => {
                     if let Err(e) = s.accept(&mut self) {
-                        errors.push(e);
+                        add_label(e);
                     }
                 }
-                Err(e) => errors.push(e),
+                Err(e) => add_label(e),
             }
         }
-        if errors.is_empty() {
+        if labels.is_empty() {
             Ok(())
         } else {
-            Err(ProgramError { errors }.into())
+            Err(miette!(labels = labels, "Program completed with errors"))
         }
     }
 }
