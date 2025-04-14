@@ -127,7 +127,7 @@ pub enum StmtKind<'a> {
 }
 
 pub trait StmtVisitor<'a, R> {
-    fn visit_block_stmt(&self, body: Vec<Box<Stmt<'a>>>) -> R;
+    fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> R;
     fn visit_class_stmt(
         &self,
         name: Token<'a>,
@@ -541,7 +541,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 }
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
-    fn visit_block_stmt(&self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
+    fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
         let _ = body;
         todo!()
     }

@@ -112,6 +112,8 @@ impl<'a> Parser<'a> {
         let current = self.tokens.peek()?;
         if let Ok((_, Token::Print, _)) = current {
             self.print_statement()
+        } else if let Ok((_, Token::LeftBrace, _)) = current {
+            self.block()
         } else {
             self.expr_statement()
         }
@@ -138,6 +140,52 @@ impl<'a> Parser<'a> {
             }
             Err(e) => Some(Err(e)),
         }
+    }
+
+    fn block(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        let (start, _, mut finish) = self.tokens.next().unwrap().unwrap(); // consume '{' token TODO: handle error
+        let mut statements = vec![];
+        loop {
+            let Some(current) = self.tokens.peek() else {
+                return Some(Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        start..=finish,
+                        "Unclosed left brace detected"
+                    )],
+                    "Invalid block syntax"
+                )));
+            };
+            let Ok(next_tok) = current else {
+                // Consume token if it's not a valid
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => return Some(Err(e)),
+                }
+            };
+
+            if matches!(next_tok, (_, Token::RightBrace, _)) {
+                break;
+            }
+            if let Some(opt) = self.declaration() {
+                if let Ok(stmt) = opt {
+                    finish = *stmt.location.end();
+                    statements.push(Box::new(stmt));
+                } else {
+                    return Some(Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            finish..=finish,
+                            "Invalid statements starts here"
+                        )],
+                        "Statement in block error"
+                    )));
+                }
+            };
+        }
+        let kind = StmtKind::Block(statements);
+        Some(Ok(Stmt {
+            kind,
+            location: start..=finish,
+        }))
     }
 
     fn semicolon_terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
