@@ -1,6 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{fmt::Display, ops::RangeInclusive};
+use std::{cell::RefCell, fmt::Display, ops::RangeInclusive, rc::Rc};
 
 use miette::{LabeledSpan, SourceSpan, miette};
 
@@ -243,7 +243,7 @@ const ERROR_MARGIN: f64 = 0.00001;
 
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Global environment variables
-    environment: Environment<'a>,
+    environment: Rc<RefCell<Environment<'a>>>,
     writer: W,
 }
 
@@ -251,7 +251,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         Self {
-            environment: Environment::new(),
+            environment: Rc::new(RefCell::new(Environment::new())),
             writer,
         }
     }
@@ -451,12 +451,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         if let Token::Identifier(id) = name {
             match value.accept(self) {
                 Ok(val) => {
-                    self.environment.assign(id, val.clone()).map_err(|e| {
-                        miette!(
-                            labels = vec![LabeledSpan::at(location, e.to_string())],
-                            "Assigment failed"
-                        )
-                    })?;
+                    self.environment
+                        .borrow_mut()
+                        .assign(id, val.clone())
+                        .map_err(|e| {
+                            miette!(
+                                labels = vec![LabeledSpan::at(location, e.to_string())],
+                                "Assigment failed"
+                            )
+                        })?;
                     Ok(val)
                 }
                 Err(e) => Err(e),
@@ -532,8 +535,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_variable_expr(&mut self, name: Token<'a>) -> miette::Result<LoxValue> {
         match name {
             Token::Identifier(id) => {
-                let val = self.environment.get(id)?;
-                Ok(val.clone())
+                let val = self.environment.borrow().get(id)?;
+                Ok(val)
             }
             _ => Err(miette!("Invalid identifier")),
         }
@@ -543,8 +546,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
         let _ = body;
-        //let block_env = Environment::child(Box::new(self.environment));
-        todo!()
+        let root = Rc::clone(&self.environment);
+        let block_env = Environment::child(root);
+        Ok(())
     }
 
     fn visit_class_stmt(
@@ -614,11 +618,11 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if let Token::Identifier(id) = name {
             if let Some(v) = initializer {
                 match v.accept(self) {
-                    Ok(val) => self.environment.define(id, val),
+                    Ok(val) => self.environment.borrow_mut().define(id, val),
                     Err(e) => return Err(e),
                 }
             } else {
-                self.environment.define(id, LoxValue::Nil);
+                self.environment.borrow_mut().define(id, LoxValue::Nil);
             }
             Ok(())
         } else {

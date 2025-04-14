@@ -164,6 +164,7 @@ impl<'a> Parser<'a> {
             };
 
             if matches!(next_tok, (_, Token::RightBrace, _)) {
+                self.tokens.next(); // consume '}' token
                 break;
             }
             if let Some(opt) = self.declaration() {

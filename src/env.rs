@@ -1,11 +1,11 @@
 use crate::ast::LoxValue;
 use miette::miette;
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Default)]
 pub struct Environment<'a> {
     storage: HashMap<&'a str, LoxValue>,
-    enclosing: Option<Box<Environment<'a>>>,
+    enclosing: Option<Rc<RefCell<Environment<'a>>>>,
 }
 
 impl<'a> Environment<'a> {
@@ -16,18 +16,18 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn child(enclosing: Box<Environment<'a>>) -> Self {
+    pub fn child(enclosing: Rc<RefCell<Environment<'a>>>) -> Self {
         Self {
             storage: HashMap::new(),
             enclosing: Some(enclosing),
         }
     }
 
-    pub fn get(&'a self, id: &'a str) -> miette::Result<&'a LoxValue> {
+    pub fn get(&self, id: &'a str) -> miette::Result<LoxValue> {
         if let Some(var) = self.storage.get(id) {
-            Ok(var)
+            Ok(var.clone())
         } else if let Some(enclosing) = &self.enclosing {
-            enclosing.get(id)
+            enclosing.borrow().get(id)
         } else {
             Err(miette!("Undefined variable: '{id}'"))
         }
@@ -46,7 +46,7 @@ impl<'a> Environment<'a> {
             self.storage.entry(id).and_modify(|e| *e = initializer);
             Ok(())
         } else if let Some(enclosing) = &mut self.enclosing {
-            enclosing.assign(id, initializer)
+            enclosing.borrow_mut().assign(id, initializer)
         } else {
             Err(miette!("assignment to undefined variable '{id}'"))
         }
