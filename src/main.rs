@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::{self, Read},
+    io::{self, Read, stdout},
 };
 
 use bugreport::{
@@ -69,10 +69,11 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 
 fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
-    let interpreter = Interpreter::new();
+    let interpreter = Interpreter::new(stdout());
     interpreter
         .interpret(&mut parser)
         .map_err(|err| err.with_source_code(content))?;
+
     Ok(())
 }
 

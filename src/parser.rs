@@ -575,6 +575,8 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::stdout;
+
     use crate::ast::{Interpreter, LoxValue};
 
     use super::*;
@@ -620,7 +622,7 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let mut eval = Interpreter::new();
+        let mut eval = Interpreter::new(stdout());
 
         // Act
         let actual = eval.evaluate(expr);
@@ -644,7 +646,7 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let mut eval = Interpreter::new();
+        let mut eval = Interpreter::new(stdout());
 
         // Act
         let actual = eval.evaluate(expr);
@@ -683,7 +685,7 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap().unwrap();
-        let mut eval = Interpreter::new();
+        let mut eval = Interpreter::new(stdout());
 
         // Act
         let actual = eval.evaluate(expr);

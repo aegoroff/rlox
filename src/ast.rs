@@ -241,16 +241,17 @@ impl LoxValue {
 
 const ERROR_MARGIN: f64 = 0.00001;
 
-#[derive(Default)]
-pub struct Interpreter<'a> {
+pub struct Interpreter<'a, W: std::io::Write> {
     globals: Environment<'a>,
+    writer: W,
 }
 
-impl<'a> Interpreter<'a> {
+impl<'a, W: std::io::Write> Interpreter<'a, W> {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(writer: W) -> Self {
         Self {
             globals: Environment::new(),
+            writer,
         }
     }
 
@@ -300,7 +301,7 @@ fn map_operand_err<T>(err: miette::Result<T>, span: impl Into<SourceSpan>) -> mi
     })
 }
 
-impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a> {
+impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a, W> {
     fn visit_literal(&self, token: Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
@@ -528,7 +529,7 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a> {
     }
 }
 
-impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
+impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
         let _ = body;
         todo!()
@@ -577,7 +578,9 @@ impl<'a> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a> {
 
     fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {
         match self.evaluate(*expr) {
-            Ok(e) => println!("{e}"),
+            Ok(e) => {
+                writeln!(self.writer, "{e}").map_err(|e| miette!(e))?;
+            }
             Err(e) => {
                 return Err(e);
             }
@@ -625,17 +628,20 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case("1+2;")]
-    #[test_case("var x; x = 2; var y = 4; print x+y;")]
-    fn eval_single_result_tests(input: &str) {
+    #[test_case("print 1+2;", "3")]
+    #[test_case("var x; x = 2; var y = 4; print x+y;", "6")]
+    fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
-        let interpreter = Interpreter::new();
+        let mut stdout = Vec::new();
+        let interpreter = Interpreter::new(&mut stdout);
 
         // Act
         let actual = interpreter.interpret(&mut parser);
 
         // Assert
         assert!(actual.is_ok());
+        let actual = String::from_utf8(stdout).unwrap();
+        assert_eq!(actual.trim_end(), expected);
     }
 }
