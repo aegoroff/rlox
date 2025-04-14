@@ -291,15 +291,23 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     }
 }
 
-fn map_operand_err<T>(err: miette::Result<T>, span: impl Into<SourceSpan>) -> miette::Result<T> {
+fn map_operand_err<T>(
+    err: miette::Result<T>,
+    span: impl Into<SourceSpan>,
+    label: &str,
+) -> miette::Result<T> {
     err.map_err(|e| {
         miette!(
-            labels = vec![LabeledSpan::at(span, "Problem expression")],
+            labels = vec![LabeledSpan::at(span, label)],
             "Invalid operand"
         )
         .wrap_err(e)
     })
 }
+
+const RIGHT_OPERAND_ERR: &str = "right operand type not match left one";
+const RIGHT_NUMBER_ERR: &str = "right operand must be number";
+const LEFT_NUMBER_ERR: &str = "left operand must be number";
 
 impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a, W> {
     fn visit_literal(&self, token: Option<Token<'a>>) -> miette::Result<LoxValue> {
@@ -329,8 +337,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
         match operator {
             Token::Minus => {
-                let l = map_operand_err(lhs.try_num(), left_loc)?;
-                let r = map_operand_err(rhs.try_num(), right_loc)?;
+                let l = map_operand_err(lhs.try_num(), left_loc, LEFT_NUMBER_ERR)?;
+                let r = map_operand_err(rhs.try_num(), right_loc, RIGHT_NUMBER_ERR)?;
                 let result = l - r;
                 Ok(LoxValue::Number(result))
             }
@@ -347,7 +355,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                         return Ok(LoxValue::String(result));
                     }
                 } else if let Ok(l) = lhs.try_num() {
-                    let r = map_operand_err(rhs.try_num(), right_loc)?;
+                    let r = map_operand_err(rhs.try_num(), right_loc, RIGHT_NUMBER_ERR)?;
                     let result = l + r;
                     return Ok(LoxValue::Number(result));
                 }
@@ -360,8 +368,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             }
             Token::Slash => {
                 let err_loc = right_loc.clone();
-                let l = map_operand_err(lhs.try_num(), left_loc)?;
-                let r = map_operand_err(rhs.try_num(), right_loc)?;
+                let l = map_operand_err(lhs.try_num(), left_loc, LEFT_NUMBER_ERR)?;
+                let r = map_operand_err(rhs.try_num(), right_loc, RIGHT_NUMBER_ERR)?;
 
                 if !r.is_normal() && !r.is_infinite() {
                     Err(miette!(
@@ -374,41 +382,41 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 }
             }
             Token::Star => {
-                let l = map_operand_err(lhs.try_num(), left_loc)?;
-                let r = map_operand_err(rhs.try_num(), right_loc)?;
+                let l = map_operand_err(lhs.try_num(), left_loc, LEFT_NUMBER_ERR)?;
+                let r = map_operand_err(rhs.try_num(), right_loc, RIGHT_NUMBER_ERR)?;
                 let result = l * r;
                 Ok(LoxValue::Number(result))
             }
             Token::BangEqual => {
-                let eq = map_operand_err(lhs.equal(&rhs), right_loc)?;
+                let eq = map_operand_err(lhs.equal(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
                 Ok(LoxValue::Bool(!eq))
             }
             Token::EqualEqual => {
-                let eq = map_operand_err(lhs.equal(&rhs), right_loc)?;
+                let eq = map_operand_err(lhs.equal(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
                 Ok(LoxValue::Bool(eq))
             }
             Token::Greater => {
                 let eq_location = right_loc.clone();
-                let lt = map_operand_err(lhs.less(&rhs), right_loc)?;
-                let eq = map_operand_err(lhs.equal(&rhs), eq_location)?;
+                let lt = map_operand_err(lhs.less(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
+                let eq = map_operand_err(lhs.equal(&rhs), eq_location, RIGHT_OPERAND_ERR)?;
                 let gt = !lt && !eq;
                 Ok(LoxValue::Bool(gt))
             }
             Token::GreaterEqual => {
                 let eq_location = right_loc.clone();
-                let lt = map_operand_err(lhs.less(&rhs), right_loc)?;
-                let eq = map_operand_err(lhs.equal(&rhs), eq_location)?;
+                let lt = map_operand_err(lhs.less(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
+                let eq = map_operand_err(lhs.equal(&rhs), eq_location, RIGHT_OPERAND_ERR)?;
                 let ge = !lt || eq;
                 Ok(LoxValue::Bool(ge))
             }
             Token::Less => {
-                let lt = map_operand_err(lhs.less(&rhs), right_loc)?;
+                let lt = map_operand_err(lhs.less(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
                 Ok(LoxValue::Bool(lt))
             }
             Token::LessEqual => {
                 let eq_location = right_loc.clone();
-                let lt = map_operand_err(lhs.less(&rhs), right_loc)?;
-                let eq = map_operand_err(lhs.equal(&rhs), eq_location)?;
+                let lt = map_operand_err(lhs.less(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
+                let eq = map_operand_err(lhs.equal(&rhs), eq_location, RIGHT_OPERAND_ERR)?;
                 let le = lt || eq;
                 Ok(LoxValue::Bool(le))
             }
