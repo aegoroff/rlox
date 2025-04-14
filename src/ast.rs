@@ -449,15 +449,17 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let location = value.location.clone();
         if let Token::Identifier(id) = name {
             match value.accept(self) {
-                Ok(val) => self.globals.assign(id, val).map_err(|e| {
-                    miette!(
-                        labels = vec![LabeledSpan::at(location, e.to_string())],
-                        "Assigment failed"
-                    )
-                })?,
-                Err(e) => return Err(e),
+                Ok(val) => {
+                    self.globals.assign(id, val.clone()).map_err(|e| {
+                        miette!(
+                            labels = vec![LabeledSpan::at(location, e.to_string())],
+                            "Assigment failed"
+                        )
+                    })?;
+                    Ok(val)
+                }
+                Err(e) => Err(e),
             }
-            Ok(LoxValue::Nil)
         } else {
             Err(miette!(
                 labels = vec![LabeledSpan::at(location, "Invalid l-value expression")],
@@ -638,6 +640,7 @@ mod tests {
 
     #[test_case("print 1+2;", "3")]
     #[test_case("var x; x = 2; var y = 4; print x+y;", "6")]
+    #[test_case("var a; print a = \"arg\";", "arg")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
