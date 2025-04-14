@@ -242,7 +242,8 @@ impl LoxValue {
 const ERROR_MARGIN: f64 = 0.00001;
 
 pub struct Interpreter<'a, W: std::io::Write> {
-    globals: Environment<'a>,
+    /// Global environment variables
+    environment: Environment<'a>,
     writer: W,
 }
 
@@ -250,7 +251,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         Self {
-            globals: Environment::new(),
+            environment: Environment::new(),
             writer,
         }
     }
@@ -450,7 +451,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         if let Token::Identifier(id) = name {
             match value.accept(self) {
                 Ok(val) => {
-                    self.globals.assign(id, val.clone()).map_err(|e| {
+                    self.environment.assign(id, val.clone()).map_err(|e| {
                         miette!(
                             labels = vec![LabeledSpan::at(location, e.to_string())],
                             "Assigment failed"
@@ -531,7 +532,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_variable_expr(&mut self, name: Token<'a>) -> miette::Result<LoxValue> {
         match name {
             Token::Identifier(id) => {
-                let val = self.globals.get(id)?;
+                let val = self.environment.get(id)?;
                 Ok(val.clone())
             }
             _ => Err(miette!("Invalid identifier")),
@@ -612,11 +613,11 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if let Token::Identifier(id) = name {
             if let Some(v) = initializer {
                 match v.accept(self) {
-                    Ok(val) => self.globals.define(id, val),
+                    Ok(val) => self.environment.define(id, val),
                     Err(e) => return Err(e),
                 }
             } else {
-                self.globals.define(id, LoxValue::Nil);
+                self.environment.define(id, LoxValue::Nil);
             }
             Ok(())
         } else {
