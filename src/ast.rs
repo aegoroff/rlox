@@ -437,14 +437,23 @@ impl<'a> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a> {
         name: Token<'a>,
         value: Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
+        let location = value.location.clone();
         if let Token::Identifier(id) = name {
             match value.accept(self) {
-                Ok(val) => self.globals.define(id, val),
+                Ok(val) => self.globals.assign(id, val).map_err(|e| {
+                    miette!(
+                        labels = vec![LabeledSpan::at(location, e.to_string())],
+                        "Assigment failed"
+                    )
+                })?,
                 Err(e) => return Err(e),
             }
             Ok(LoxValue::Nil)
         } else {
-            todo!()
+            Err(miette!(
+                labels = vec![LabeledSpan::at(location, "Invalid l-value expression")],
+                "Assigment failed"
+            ))
         }
     }
 
