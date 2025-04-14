@@ -650,6 +650,10 @@ mod tests {
     #[test_case("print 1+2;", "3")]
     #[test_case("var x; x = 2; var y = 4; print x+y;", "6")]
     #[test_case("var a; print a = \"arg\";", "arg")]
+    #[test_case(
+        "var a = 1; var b; { var a = 2; b = 3; print a; } print a; print b;",
+        "2\n1\n3"
+    )]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
