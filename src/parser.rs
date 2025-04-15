@@ -168,17 +168,12 @@ impl<'a> Parser<'a> {
                 break;
             }
             if let Some(opt) = self.declaration() {
-                if let Ok(stmt) = opt {
-                    finish = *stmt.location.end();
-                    statements.push(Box::new(stmt));
-                } else {
-                    return Some(Err(miette!(
-                        labels = vec![LabeledSpan::at(
-                            finish..=finish,
-                            "Invalid statements starts here"
-                        )],
-                        "Statement in block error"
-                    )));
+                match opt {
+                    Ok(stmt) => {
+                        finish = *stmt.location.end();
+                        statements.push(Ok(stmt));
+                    }
+                    Err(e) => statements.push(Err(e)),
                 }
             }
         }

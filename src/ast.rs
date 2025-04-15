@@ -112,7 +112,7 @@ impl<'a> Stmt<'a> {
 
 #[derive(Debug)]
 pub enum StmtKind<'a> {
-    Block(Vec<Box<Stmt<'a>>>),
+    Block(Vec<miette::Result<Stmt<'a>>>),
     /// name, superclass, methods
     Class(Token<'a>, Box<Stmt<'a>>, Vec<Box<Stmt<'a>>>),
     Expression(Box<Expr<'a>>),
@@ -127,7 +127,7 @@ pub enum StmtKind<'a> {
 }
 
 pub trait StmtVisitor<'a, R> {
-    fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> R;
+    fn visit_block_stmt(&mut self, body: Vec<miette::Result<Stmt<'a>>>) -> R;
     fn visit_class_stmt(
         &self,
         name: Token<'a>,
@@ -242,7 +242,7 @@ impl LoxValue {
 const ERROR_MARGIN: f64 = 0.00001;
 
 pub struct Interpreter<'a, W: std::io::Write> {
-    /// Global environment variables
+    /// Current environment that keeps current scope vars. Global by default
     environment: Rc<RefCell<Environment<'a>>>,
     writer: W,
 }
@@ -544,12 +544,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 }
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
-    fn visit_block_stmt(&mut self, body: Vec<Box<Stmt<'a>>>) -> miette::Result<()> {
+    fn visit_block_stmt(&mut self, body: Vec<miette::Result<Stmt<'a>>>) -> miette::Result<()> {
         let prev = Rc::clone(&self.environment);
         let enclosing = Rc::clone(&self.environment);
         let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
-        let result = self.interpret(body.into_iter().map(|stmt| Ok(*stmt)));
+        let result = self.interpret(body.into_iter());
         self.environment = prev;
         result
     }
