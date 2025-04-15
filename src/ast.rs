@@ -694,7 +694,7 @@ mod tests {
     #[test_case("var a = 1; if (a != 1) { print 10; } else { print 20; }", "20")]
     #[test_case("var a = 1; if (a == 1) { print 10; }", "10")]
     #[test_case("var a = 1; if (a == 2) { print 10; }", "")]
-    #[test_case("var a = false; if (a = true) { print 10; }", "10")]
+    #[test_case("var a = false; if (a = true) { print 10; }", "10" ; "assignment in condition")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
