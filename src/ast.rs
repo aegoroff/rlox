@@ -10,29 +10,14 @@ use crate::{env::Environment, lexer::Token};
 
 pub trait ExprVisitor<'a, R> {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> R;
-    fn visit_binary_expr(
-        &mut self,
-        operator: &Token<'a>,
-        left: &Box<Expr<'a>>,
-        right: &Box<Expr<'a>>,
-    ) -> R;
-    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Box<Expr<'a>>) -> R;
-    fn visit_assign_expr(&mut self, name: &Token<'a>, value: &Box<Expr<'a>>) -> R;
-    fn visit_call_expr(
-        &self,
-        paren: &Token<'a>,
-        callee: &Box<Expr<'a>>,
-        args: &Vec<Box<Expr<'a>>>,
-    ) -> R;
-    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Box<Expr<'a>>) -> R;
-    fn visit_grouping_expr(&mut self, grouping: &Box<Expr<'a>>) -> R;
-    fn visit_logical_expr(
-        &mut self,
-        operator: &Token<'a>,
-        left: &Box<Expr<'a>>,
-        right: &Box<Expr<'a>>,
-    ) -> R;
-    fn visit_set_expr(&self, name: &Token<'a>, obj: &Box<Expr<'a>>, val: &Box<Expr<'a>>) -> R;
+    fn visit_binary_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
+    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) -> R;
+    fn visit_assign_expr(&mut self, name: &Token<'a>, value: &Expr<'a>) -> R;
+    fn visit_call_expr(&self, paren: &Token<'a>, callee: &Expr<'a>, args: &[Box<Expr<'a>>]) -> R;
+    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> R;
+    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> R;
+    fn visit_logical_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
+    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> R;
     fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> R;
     fn visit_this_expr(&self, keyword: &Token<'a>) -> R;
     fn visit_variable_expr(&mut self, name: &Token<'a>) -> R;
@@ -350,8 +335,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_binary_expr(
         &mut self,
         operator: &Token<'a>,
-        left: &Box<Expr<'a>>,
-        right: &Box<Expr<'a>>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
         let left_loc = left.location.clone();
         let right_loc = right.location.clone();
@@ -438,7 +423,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_unary_expr(
         &mut self,
         operator: &Token<'a>,
-        expr: &Box<Expr<'a>>,
+        expr: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
         let expr_loc = expr.location.clone();
         let val = self.evaluate(expr)?;
@@ -455,7 +440,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_assign_expr(
         &mut self,
         name: &Token<'a>,
-        value: &Box<Expr<'a>>,
+        value: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
         let location = value.location.clone();
         if let Token::Identifier(id) = name {
@@ -485,8 +470,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_call_expr(
         &self,
         paren: &Token<'a>,
-        callee: &Box<Expr<'a>>,
-        args: &Vec<Box<Expr<'a>>>,
+        callee: &Expr<'a>,
+        args: &[Box<Expr<'a>>],
     ) -> miette::Result<LoxValue> {
         let _ = args;
         let _ = callee;
@@ -494,24 +479,20 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         todo!()
     }
 
-    fn visit_get_expr(
-        &mut self,
-        name: &Token<'a>,
-        object: &Box<Expr<'a>>,
-    ) -> miette::Result<LoxValue> {
+    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
         let _ = name;
         self.evaluate(object)
     }
 
-    fn visit_grouping_expr(&mut self, grouping: &Box<Expr<'a>>) -> miette::Result<LoxValue> {
+    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {
         self.evaluate(grouping)
     }
 
     fn visit_logical_expr(
         &mut self,
         operator: &Token<'a>,
-        left: &Box<Expr<'a>>,
-        right: &Box<Expr<'a>>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
         let lhs = self.evaluate(left)?;
         match operator {
@@ -536,8 +517,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_set_expr(
         &self,
         name: &Token<'a>,
-        obj: &Box<Expr<'a>>,
-        val: &Box<Expr<'a>>,
+        obj: &Expr<'a>,
+        val: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
         let _ = val;
         let _ = obj;
