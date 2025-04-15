@@ -690,6 +690,11 @@ mod tests {
         "var a = 1; var b; { var a = 2; b = 3; print a; } print a; print b;",
         "2\n1\n3"
     )]
+    #[test_case("var a = 1; if (a == 1) { print 10; } else { print 20; }", "10")]
+    #[test_case("var a = 1; if (a != 1) { print 10; } else { print 20; }", "20")]
+    #[test_case("var a = 1; if (a == 1) { print 10; }", "10")]
+    #[test_case("var a = 1; if (a == 2) { print 10; }", "")]
+    #[test_case("var a = false; if (a = true) { print 10; }", "10")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
@@ -700,7 +705,10 @@ mod tests {
         let actual = interpreter.interpret(&mut parser);
 
         // Assert
-        assert!(actual.is_ok());
+        if let Err(e) = actual {
+            panic!("actual should be correct. But it was: {e:#?}");
+        }
+
         let actual = String::from_utf8(stdout).unwrap();
         assert_eq!(actual.trim_end(), expected);
     }
