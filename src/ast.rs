@@ -257,7 +257,16 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     }
 
     pub fn evaluate(&mut self, expr: Expr<'a>) -> miette::Result<LoxValue> {
-        expr.accept(self)
+        let loc = expr.location.clone();
+        expr.accept(self).map_err(|e| {
+            let mut labels = if let Some(labels) = e.labels() {
+                labels.collect()
+            } else {
+                vec![]
+            };
+            labels.push(LabeledSpan::at(loc, e.to_string()));
+            miette!(labels = labels, "Evaluation failed")
+        })
     }
 
     pub fn interpret(
@@ -533,12 +542,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     }
 
     fn visit_variable_expr(&mut self, name: Token<'a>) -> miette::Result<LoxValue> {
-        match name {
-            Token::Identifier(id) => {
-                let val = self.environment.borrow().get(id)?;
+        if let Token::Identifier(id) = name {
+            let val = self.environment.borrow().get(id)?;
+            if let LoxValue::Nil = val {
+                Err(miette!("Using uninitialized variable '{id}'"))
+            } else {
                 Ok(val)
             }
-            _ => Err(miette!("Invalid identifier")),
+        } else {
+            Err(miette!("Invalid identifier"))
         }
     }
 }
