@@ -610,7 +610,6 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         then: Box<miette::Result<Stmt<'a>>>,
         otherwise: Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> miette::Result<()> {
-        let cond_location = cond.location.clone();
         match self.evaluate(*cond)? {
             LoxValue::Bool(v) => {
                 if v {
@@ -621,13 +620,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                     Ok(())
                 }
             }
-            _ => Err(miette!(
-                labels = vec![LabeledSpan::at(
-                    cond_location,
-                    "Invalid condition type. Bool expected"
-                )],
-                "Invalid condition type"
-            )),
+            LoxValue::String(_) => self.interpret(once(*then)),
+            LoxValue::Number(_) => self.interpret(once(*then)),
+            LoxValue::Nil => {
+                if let Some(otherwise) = otherwise {
+                    self.interpret(once(*otherwise))
+                } else {
+                    Ok(())
+                }
+            }
         }
     }
 
