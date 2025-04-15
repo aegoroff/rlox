@@ -1,8 +1,6 @@
 use std::{
-    cell::RefCell,
     fs,
     io::{self, Read, stdout},
-    rc::Rc,
 };
 
 use bugreport::{
@@ -72,9 +70,9 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     let mut interpreter = Interpreter::new(stdout());
-    let it = parser.into_iter().map(|item| Rc::new(RefCell::new(item)));
+    //let it = parser.map(|item| Rc::new(RefCell::new(item)));
     interpreter
-        .interpret(it)
+        .interpret_from_it(&mut parser)
         .map_err(|err| err.with_source_code(content))?;
 
     Ok(())

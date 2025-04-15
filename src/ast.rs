@@ -1,6 +1,11 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, fmt::Display, iter::once, ops::RangeInclusive, rc::Rc};
+use std::{
+    cell::RefCell,
+    fmt::Display,
+    ops::{Deref, RangeInclusive},
+    rc::Rc,
+};
 
 use miette::{LabeledSpan, SourceSpan, miette};
 
@@ -83,10 +88,10 @@ pub struct Stmt<'a> {
 }
 
 impl<'a> Stmt<'a> {
-    pub fn accept<R>(self, visitor: &mut impl StmtVisitor<'a, R>) -> R {
-        match self.kind {
+    pub fn accept<R>(&'a self, visitor: &mut impl StmtVisitor<'a, R>) -> R {
+        match &self.kind {
             StmtKind::Block(stmts) => visitor.visit_block_stmt(stmts),
-            StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, *stmt, stmts),
+            StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, stmt, stmts),
             StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
             StmtKind::Function(token, params, body) => {
                 visitor.visit_function_stmt(token, params, body)
@@ -121,30 +126,30 @@ pub enum StmtKind<'a> {
 }
 
 pub trait StmtVisitor<'a, R> {
-    fn visit_block_stmt(&mut self, body: Vec<miette::Result<Stmt<'a>>>) -> R;
+    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> R;
     fn visit_class_stmt(
         &self,
-        name: Token<'a>,
-        superclass: Stmt<'a>,
-        methods: Vec<Box<Stmt<'a>>>,
+        name: &Token<'a>,
+        superclass: &Stmt<'a>,
+        methods: &[Box<Stmt<'a>>],
     ) -> R;
-    fn visit_expression_stmt(&mut self, expr: Box<Expr<'a>>) -> R;
+    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
     fn visit_function_stmt(
         &self,
-        token: Token<'a>,
-        params: Vec<Box<Stmt<'a>>>,
-        body: Vec<Box<Stmt<'a>>>,
+        token: &Token<'a>,
+        params: &[Box<Stmt<'a>>],
+        body: &[Box<Stmt<'a>>],
     ) -> R;
     fn visit_if_stmt(
         &mut self,
-        cond: Box<Expr<'a>>,
-        then: Box<miette::Result<Stmt<'a>>>,
-        otherwise: Option<Box<miette::Result<Stmt<'a>>>>,
+        cond: &Expr<'a>,
+        then: &'a miette::Result<Stmt<'a>>,
+        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> R;
-    fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> R;
-    fn visit_return_stmt(&self, keyword: Token<'a>, value: Box<Expr<'a>>) -> R;
-    fn visit_variable_stmt(&mut self, name: Token<'a>, initializer: Option<Box<Expr<'a>>>) -> R;
-    fn visit_while_stmt(&mut self, cond: Box<Expr<'a>>, body: Box<miette::Result<Stmt<'a>>>) -> R;
+    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> R;
+    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
+    fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) -> R;
+    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) -> R;
 }
 
 // Values
@@ -272,9 +277,19 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         })
     }
 
-    pub fn interpret(
+    pub fn interpret_from_it(
         &mut self,
-        statements: impl Iterator<Item = Rc<RefCell<miette::Result<Stmt<'a>>>>>,
+        statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
+    ) -> miette::Result<()> {
+        let refs = statements.map(|x| &*Box::leak(Box::new(x)));
+        let arr: Vec<Rc<RefCell<&'a miette::Result<Stmt<'a>>>>> =
+            refs.map(|x| Rc::new(RefCell::new(x))).collect();
+        self.interpret(&arr)
+    }
+
+    fn interpret(
+        &mut self,
+        statements: &[Rc<RefCell<&'a miette::Result<Stmt<'a>>>>],
     ) -> miette::Result<()> {
         let mut labels = vec![];
 
@@ -563,22 +578,25 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 }
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
-    fn visit_block_stmt(&mut self, body: Vec<miette::Result<Stmt<'a>>>) -> miette::Result<()> {
+    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         let prev = Rc::clone(&self.environment);
         let enclosing = Rc::clone(&self.environment);
         let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
-        let it = body.into_iter().map(|item| Rc::new(RefCell::new(item)));
-        let result = self.interpret(it);
+        let it: Vec<Rc<RefCell<&'a miette::Result<Stmt<'a>>>>> = body
+            .iter()
+            .map(|item| Rc::new(RefCell::new(item)))
+            .collect();
+        let result = self.interpret(&it);
         self.environment = prev;
         result
     }
 
     fn visit_class_stmt(
         &self,
-        name: Token<'a>,
-        superclass: Stmt<'a>,
-        methods: Vec<Box<Stmt<'a>>>,
+        name: &Token<'a>,
+        superclass: &Stmt<'a>,
+        methods: &[Box<Stmt<'a>>],
     ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
@@ -586,16 +604,16 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         todo!()
     }
 
-    fn visit_expression_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {
-        self.evaluate(&expr)?;
+    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+        self.evaluate(expr)?;
         Ok(())
     }
 
     fn visit_function_stmt(
         &self,
-        token: Token<'a>,
-        params: Vec<Box<Stmt<'a>>>,
-        body: Vec<Box<Stmt<'a>>>,
+        token: &Token<'a>,
+        params: &[Box<Stmt<'a>>],
+        body: &[Box<Stmt<'a>>],
     ) -> miette::Result<()> {
         let _ = body;
         let _ = params;
@@ -605,29 +623,29 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
     fn visit_if_stmt(
         &mut self,
-        cond: Box<Expr<'a>>,
-        then: Box<miette::Result<Stmt<'a>>>,
-        otherwise: Option<Box<miette::Result<Stmt<'a>>>>,
+        cond: &Expr<'a>,
+        then: &'a miette::Result<Stmt<'a>>,
+        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> miette::Result<()> {
-        match self.evaluate(&cond)? {
+        match self.evaluate(cond)? {
             LoxValue::Bool(v) => {
                 if v {
-                    let then = Rc::new(RefCell::new(*then));
-                    self.interpret(once(then))
+                    let then = Rc::new(RefCell::new(then));
+                    self.interpret(&[then])
                 } else if let Some(otherwise) = otherwise {
-                    let otherwise = Rc::new(RefCell::new(*otherwise));
-                    self.interpret(once(otherwise))
+                    let otherwise = Rc::new(RefCell::new(otherwise.deref()));
+                    self.interpret(&[otherwise])
                 } else {
                     Ok(())
                 }
             }
             LoxValue::String(_) | LoxValue::Number(_) => {
-                self.interpret(once(Rc::new(RefCell::new(*then))))
+                self.interpret(&[Rc::new(RefCell::new(then))])
             }
             LoxValue::Nil => {
                 if let Some(otherwise) = otherwise {
-                    let otherwise = Rc::new(RefCell::new(*otherwise));
-                    self.interpret(once(otherwise))
+                    let otherwise = Rc::new(RefCell::new(otherwise.deref()));
+                    self.interpret(&[otherwise])
                 } else {
                     Ok(())
                 }
@@ -635,8 +653,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         }
     }
 
-    fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {
-        match self.evaluate(&expr) {
+    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+        match self.evaluate(expr) {
             Ok(e) => {
                 writeln!(self.writer, "{e}").map_err(|e| miette!(e))?;
             }
@@ -647,7 +665,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         Ok(())
     }
 
-    fn visit_return_stmt(&self, keyword: Token<'a>, value: Box<Expr<'a>>) -> miette::Result<()> {
+    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
         let _ = value;
         let _ = keyword;
         todo!()
@@ -655,8 +673,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
     fn visit_variable_stmt(
         &mut self,
-        name: Token<'a>,
-        initializer: Option<Box<Expr<'a>>>,
+        name: &Token<'a>,
+        initializer: &Option<Box<Expr<'a>>>,
     ) -> miette::Result<()> {
         if let Token::Identifier(id) = name {
             if let Some(v) = initializer {
@@ -675,13 +693,13 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
     fn visit_while_stmt(
         &mut self,
-        cond: Box<Expr<'a>>,
-        body: Box<miette::Result<Stmt<'a>>>,
+        cond: &Expr<'a>,
+        body: &'a miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
-        let b = Rc::new(RefCell::new(*body));
-        while self.evaluate(&cond)?.is_truthy() {
+        let b = Rc::new(RefCell::new(body));
+        while self.evaluate(cond)?.is_truthy() {
             let prev = b.clone();
-            let _ = self.interpret(once(prev));
+            let _ = self.interpret(&[prev]);
         }
         Ok(())
     }
@@ -714,15 +732,16 @@ mod tests {
     #[test_case("if (true == 1) print 10;", "" ; "bool eq")]
     #[test_case("if (nil != 1) print 10;", "10" ; "nil ne")]
     #[test_case("if (true != 1) print 10;", "10" ; "bool ne")]
+    #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
         let mut stdout = Vec::new();
         let mut interpreter = Interpreter::new(&mut stdout);
-        let it = parser.into_iter().map(|item| Rc::new(RefCell::new(item)));
+        //let it = parser.map(|item| Rc::new(RefCell::new(item)));
 
         // Act
-        let iterpretation_result = interpreter.interpret(it);
+        let iterpretation_result = interpreter.interpret_from_it(&mut parser);
 
         // Assert
         if let Err(e) = iterpretation_result {
