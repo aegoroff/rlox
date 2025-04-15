@@ -203,10 +203,12 @@ impl LoxValue {
         }
     }
 
+    #[must_use]
     pub fn is_truthy(&self) -> bool {
         self.try_bool().unwrap_or(true)
     }
 
+    #[must_use]
     pub fn equal(&self, other: &LoxValue) -> bool {
         if let Ok(l) = self.try_num() {
             let Ok(r) = other.try_num() else {
@@ -514,10 +516,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let lhs = self.evaluate(*left)?;
         match operator {
             Token::And => {
-                if !lhs.is_truthy() {
-                    Ok(lhs)
-                } else {
+                if lhs.is_truthy() {
                     self.evaluate(*right)
+                } else {
+                    Ok(lhs)
                 }
             }
             Token::Or => {
@@ -624,8 +626,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                     Ok(())
                 }
             }
-            LoxValue::String(_) => self.interpret(once(*then)),
-            LoxValue::Number(_) => self.interpret(once(*then)),
+            LoxValue::String(_) | LoxValue::Number(_) => self.interpret(once(*then)),
             LoxValue::Nil => {
                 if let Some(otherwise) = otherwise {
                     self.interpret(once(*otherwise))
