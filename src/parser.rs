@@ -39,7 +39,7 @@ impl<'a> Parser<'a> {
     fn var_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
         let t = self.tokens.next(); // consume VAR token TODO: include VAR start position into stmt location
         let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
-        let name = match self.expression() {
+        let name = match self.equality() {
             Some(result) => match result {
                 Ok(expr) => {
                     finish = *expr.location.end();
@@ -297,7 +297,7 @@ impl<'a> Parser<'a> {
     }
 
     fn semicolon_terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        match self.assignment()? {
+        match self.expression()? {
             Ok(expr) => {
                 let pos = expr.location.end();
                 if let Err(e) = self.consume_semicolon(*pos) {
@@ -326,7 +326,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        self.equality()
+        self.assignment()
     }
 
     fn assignment(&mut self) -> Option<miette::Result<Expr<'a>>> {
