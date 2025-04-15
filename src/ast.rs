@@ -203,30 +203,32 @@ impl LoxValue {
         }
     }
 
-    pub fn equal(&self, other: &LoxValue) -> miette::Result<bool> {
+    pub fn is_truthy(&self) -> bool {
+        self.try_bool().unwrap_or(true)
+    }
+
+    pub fn equal(&self, other: &LoxValue) -> bool {
         if let Ok(l) = self.try_num() {
-            let r = other.try_num()?;
-            Ok((l - r).abs() < ERROR_MARGIN)
+            let Ok(r) = other.try_num() else {
+                return false;
+            };
+            (l - r).abs() < ERROR_MARGIN
         } else if let Ok(l) = self.try_bool() {
-            let r = other.try_bool()?;
-            Ok(l == r)
+            let Ok(r) = other.try_bool() else {
+                return false;
+            };
+            l == r
         } else if let Ok(l) = self.try_str() {
-            let r = other.try_str()?;
-            Ok(l == r)
+            let Ok(r) = other.try_str() else {
+                return false;
+            };
+            l == r
         } else if let LoxValue::Nil = self {
-            if let LoxValue::Nil = other {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            matches!(other, LoxValue::Nil)
         } else if let LoxValue::Nil = other {
-            if let LoxValue::Nil = self {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            matches!(self, LoxValue::Nil)
         } else {
-            Err(miette!("Invalid operands types for equality"))
+            false
         }
     }
 
@@ -327,8 +329,6 @@ fn map_operand_err<T>(
 const RIGHT_OPERAND_ERR: &str = "right operand type not match left one";
 const RIGHT_NUMBER_ERR: &str = "right operand must be number";
 const LEFT_NUMBER_ERR: &str = "left operand must be number";
-const LEFT_BOOL_ERR: &str = "left operand must be bool";
-const RIGHT_BOOL_ERR: &str = "right operand must be bool";
 
 impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a, W> {
     fn visit_literal(&self, token: Option<Token<'a>>) -> miette::Result<LoxValue> {
@@ -408,26 +408,16 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 let result = l * r;
                 Ok(LoxValue::Number(result))
             }
-            Token::BangEqual => {
-                let eq = map_operand_err(lhs.equal(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
-                Ok(LoxValue::Bool(!eq))
-            }
-            Token::EqualEqual => {
-                let eq = map_operand_err(lhs.equal(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
-                Ok(LoxValue::Bool(eq))
-            }
+            Token::BangEqual => Ok(LoxValue::Bool(!lhs.equal(&rhs))),
+            Token::EqualEqual => Ok(LoxValue::Bool(lhs.equal(&rhs))),
             Token::Greater => {
-                let eq_location = right_loc.clone();
                 let lt = map_operand_err(lhs.less(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
-                let eq = map_operand_err(lhs.equal(&rhs), eq_location, RIGHT_OPERAND_ERR)?;
-                let gt = !lt && !eq;
+                let gt = !lt && !lhs.equal(&rhs);
                 Ok(LoxValue::Bool(gt))
             }
             Token::GreaterEqual => {
-                let eq_location = right_loc.clone();
                 let lt = map_operand_err(lhs.less(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
-                let eq = map_operand_err(lhs.equal(&rhs), eq_location, RIGHT_OPERAND_ERR)?;
-                let ge = !lt || eq;
+                let ge = !lt || lhs.equal(&rhs);
                 Ok(LoxValue::Bool(ge))
             }
             Token::Less => {
@@ -435,10 +425,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 Ok(LoxValue::Bool(lt))
             }
             Token::LessEqual => {
-                let eq_location = right_loc.clone();
                 let lt = map_operand_err(lhs.less(&rhs), right_loc, RIGHT_OPERAND_ERR)?;
-                let eq = map_operand_err(lhs.equal(&rhs), eq_location, RIGHT_OPERAND_ERR)?;
-                let le = lt || eq;
+                let le = lt || lhs.equal(&rhs);
                 Ok(LoxValue::Bool(le))
             }
             _ => Err(miette!("Invalid binary operator")),
@@ -454,7 +442,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let val = self.evaluate(*expr)?;
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
-            Token::Bang => Ok(LoxValue::Bool(!val.try_bool()?)),
+            Token::Bang => Ok(LoxValue::Bool(!val.is_truthy())),
             _ => Err(miette!(
                 labels = vec![LabeledSpan::at(expr_loc, "Problem expression")],
                 "Invalid unary operator"
@@ -523,22 +511,21 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         left: Box<Expr<'a>>,
         right: Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
-        let left_loc = left.location.clone();
-        let right_loc = right.location.clone();
         let lhs = self.evaluate(*left)?;
-        let rhs = self.evaluate(*right)?;
         match operator {
             Token::And => {
-                let l = map_operand_err(lhs.try_bool(), left_loc, LEFT_BOOL_ERR)?;
-                let r = map_operand_err(rhs.try_bool(), right_loc, RIGHT_BOOL_ERR)?;
-                let result = l && r;
-                Ok(LoxValue::Bool(result))
+                if !lhs.is_truthy() {
+                    Ok(lhs)
+                } else {
+                    self.evaluate(*right)
+                }
             }
             Token::Or => {
-                let l = map_operand_err(lhs.try_bool(), left_loc, LEFT_BOOL_ERR)?;
-                let r = map_operand_err(rhs.try_bool(), right_loc, RIGHT_BOOL_ERR)?;
-                let result = l || r;
-                Ok(LoxValue::Bool(result))
+                if lhs.is_truthy() {
+                    Ok(lhs)
+                } else {
+                    self.evaluate(*right)
+                }
             }
             _ => Err(miette!("Invalid logical operator")),
         }
@@ -717,6 +704,10 @@ mod tests {
     #[test_case("var a = 1; var b = 2; if (a < b and b > 10) { print 10; } else print 20;", "20" ; "and logic otherwise")]
     #[test_case("var a = 1; var b = 1; if (a < b or b > 0) { print 10; } else print 20;", "10" ; "or logic then")]
     #[test_case("var a = 2; var b = 2; if (a < b or b < 1) { print 10; } else print 20;", "20" ; "or logic otherwise")]
+    #[test_case("if (nil == 1) print 10;", "" ; "nil eq")]
+    #[test_case("if (true == 1) print 10;", "" ; "bool eq")]
+    #[test_case("if (nil != 1) print 10;", "10" ; "nil ne")]
+    #[test_case("if (true != 1) print 10;", "10" ; "bool ne")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
