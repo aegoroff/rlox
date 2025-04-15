@@ -1,6 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, fmt::Display, ops::RangeInclusive, rc::Rc};
+use std::{cell::RefCell, fmt::Display, iter::once, ops::RangeInclusive, rc::Rc};
 
 use miette::{LabeledSpan, SourceSpan, miette};
 
@@ -101,7 +101,7 @@ impl<'a> Stmt<'a> {
             StmtKind::Function(token, params, body) => {
                 visitor.visit_function_stmt(token, params, body)
             }
-            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, *then, *otherwise),
+            StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
             StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
             StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
             StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
@@ -119,7 +119,11 @@ pub enum StmtKind<'a> {
     /// token, params, body
     Function(Token<'a>, Vec<Box<Stmt<'a>>>, Vec<Box<Stmt<'a>>>),
     /// condition, then, else
-    If(Box<Expr<'a>>, Box<Stmt<'a>>, Box<Stmt<'a>>),
+    If(
+        Box<Expr<'a>>,
+        Box<miette::Result<Stmt<'a>>>,
+        Option<Box<miette::Result<Stmt<'a>>>>,
+    ),
     Print(Box<Expr<'a>>),
     Return(Token<'a>, Box<Expr<'a>>),
     Variable(Token<'a>, Option<Box<Expr<'a>>>),
@@ -141,7 +145,12 @@ pub trait StmtVisitor<'a, R> {
         params: Vec<Box<Stmt<'a>>>,
         body: Vec<Box<Stmt<'a>>>,
     ) -> R;
-    fn visit_if_stmt(&self, cond: Box<Expr<'a>>, then: Stmt<'a>, otherwise: Stmt<'a>) -> R;
+    fn visit_if_stmt(
+        &mut self,
+        cond: Box<Expr<'a>>,
+        then: Box<miette::Result<Stmt<'a>>>,
+        otherwise: Option<Box<miette::Result<Stmt<'a>>>>,
+    ) -> R;
     fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> R;
     fn visit_return_stmt(&self, keyword: Token<'a>, value: Box<Expr<'a>>) -> R;
     fn visit_variable_stmt(&mut self, name: Token<'a>, initializer: Option<Box<Expr<'a>>>) -> R;
@@ -596,15 +605,30 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     }
 
     fn visit_if_stmt(
-        &self,
+        &mut self,
         cond: Box<Expr<'a>>,
-        then: Stmt<'a>,
-        otherwise: Stmt<'a>,
+        then: Box<miette::Result<Stmt<'a>>>,
+        otherwise: Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> miette::Result<()> {
-        let _ = otherwise;
-        let _ = then;
-        let _ = cond;
-        todo!()
+        let cond_location = cond.location.clone();
+        match self.evaluate(*cond)? {
+            LoxValue::Bool(v) => {
+                if v {
+                    self.interpret(once(*then))
+                } else if let Some(otherwise) = otherwise {
+                    self.interpret(once(*otherwise))
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    cond_location,
+                    "Invalid condition type. Bool expected"
+                )],
+                "Invalid condition type"
+            )),
+        }
     }
 
     fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {

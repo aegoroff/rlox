@@ -110,13 +110,125 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
         let current = self.tokens.peek()?;
-        if let Ok((_, Token::Print, _)) = current {
-            self.print_statement()
-        } else if let Ok((_, Token::LeftBrace, _)) = current {
-            self.block()
-        } else {
-            self.expr_statement()
+        match current {
+            Ok((_, Token::If, _)) => self.if_statement(),
+            Ok((_, Token::Print, _)) => self.print_statement(),
+            Ok((_, Token::LeftBrace, _)) => self.block(),
+            _ => self.expr_statement(),
         }
+    }
+
+    fn if_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        let (start_if, _, _) = self.tokens.next().unwrap().unwrap(); // consume IF token TODO: include print start position into stmt location
+        let Some(current) = self.tokens.peek() else {
+            return Some(Err(miette!("Dangling if")));
+        };
+        let Ok((start_paren, next_tok, end_paren)) = current else {
+            // Consume token if it's not a valid
+            match self.tokens.next()? {
+                Ok(_) => unreachable!(),
+                Err(e) => return Some(Err(e)),
+            }
+        };
+        let start_lp = *start_paren;
+        let end_lp = *end_paren;
+
+        if !matches!(next_tok, Token::LeftParen) {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(start_lp..=end_lp, "Unclosed ( detected")],
+                "Invalid condition syntax"
+            )));
+        }
+        self.tokens.next(); // consume (
+
+        let Some(cond) = self.expression() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start_lp..=end_lp,
+                    "Condition must start here"
+                )],
+                "Invalid condition syntax"
+            )));
+        };
+        let cond = match cond {
+            Ok(cond) => cond,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let cond_end = *cond.location.end();
+        let Some(current) = self.tokens.peek() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(cond_end..=cond_end, "Missing closing )")],
+                "Missing closing paren"
+            )));
+        };
+        let Ok((start_paren, next_tok, end_paren)) = current else {
+            // Consume token if it's not a valid
+            match self.tokens.next()? {
+                Ok(_) => unreachable!(),
+                Err(e) => return Some(Err(e)),
+            }
+        };
+        let start_rp = *start_paren;
+        let end_rp = *end_paren;
+
+        if !matches!(next_tok, Token::RightParen) {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(start_rp..=end_rp, "Unclosed ( detected")],
+                "Invalid condition syntax"
+            )));
+        }
+        self.tokens.next(); // consume )
+
+        let Some(then_branch) = self.statement() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(start_rp..=end_rp, "Missing then branch")],
+                "Missing then branch"
+            )));
+        };
+
+        let Some(current) = self.tokens.peek() else {
+            let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
+            return Some(Ok(Stmt {
+                kind,
+                location: start_if..=end_rp,
+            }));
+        };
+
+        let Ok((_, next_tok, _)) = current else {
+            // Consume token if it's not a valid
+            match self.tokens.next()? {
+                Ok(_) => unreachable!(),
+                Err(e) => return Some(Err(e)),
+            }
+        };
+
+        if !matches!(next_tok, Token::Else) {
+            let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
+            return Some(Ok(Stmt {
+                kind,
+                location: start_if..=end_rp,
+            }));
+        }
+
+        let (_, _, end_else) = self.tokens.next().unwrap().unwrap(); // consume ELSE
+
+        let Some(else_branch) = self.statement() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(end_else..=end_else, "Missing else branch")],
+                "Missing else branch"
+            )));
+        };
+
+        let kind = StmtKind::If(
+            Box::new(cond),
+            Box::new(then_branch),
+            Some(Box::new(else_branch)),
+        );
+        Some(Ok(Stmt {
+            kind,
+            location: start_if..=end_else,
+        }))
     }
 
     fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
