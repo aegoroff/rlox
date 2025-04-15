@@ -9,33 +9,33 @@ use crate::{env::Environment, lexer::Token};
 // Expressions
 
 pub trait ExprVisitor<'a, R> {
-    fn visit_literal(&self, token: Option<Token<'a>>) -> R;
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> R;
     fn visit_binary_expr(
         &mut self,
-        operator: Token<'a>,
-        left: Box<Expr<'a>>,
-        right: Box<Expr<'a>>,
+        operator: &Token<'a>,
+        left: &Box<Expr<'a>>,
+        right: &Box<Expr<'a>>,
     ) -> R;
-    fn visit_unary_expr(&mut self, operator: Token<'a>, expr: Box<Expr<'a>>) -> R;
-    fn visit_assign_expr(&mut self, name: Token<'a>, value: Box<Expr<'a>>) -> R;
+    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Box<Expr<'a>>) -> R;
+    fn visit_assign_expr(&mut self, name: &Token<'a>, value: &Box<Expr<'a>>) -> R;
     fn visit_call_expr(
         &self,
-        paren: Token<'a>,
-        callee: Box<Expr<'a>>,
-        args: Vec<Box<Expr<'a>>>,
+        paren: &Token<'a>,
+        callee: &Box<Expr<'a>>,
+        args: &Vec<Box<Expr<'a>>>,
     ) -> R;
-    fn visit_get_expr(&mut self, name: Token<'a>, object: Box<Expr<'a>>) -> R;
-    fn visit_grouping_expr(&mut self, grouping: Box<Expr<'a>>) -> R;
+    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Box<Expr<'a>>) -> R;
+    fn visit_grouping_expr(&mut self, grouping: &Box<Expr<'a>>) -> R;
     fn visit_logical_expr(
         &mut self,
-        operator: Token<'a>,
-        left: Box<Expr<'a>>,
-        right: Box<Expr<'a>>,
+        operator: &Token<'a>,
+        left: &Box<Expr<'a>>,
+        right: &Box<Expr<'a>>,
     ) -> R;
-    fn visit_set_expr(&self, name: Token<'a>, obj: Box<Expr<'a>>, val: Box<Expr<'a>>) -> R;
-    fn visit_super_expr(&self, keyword: Token<'a>, method: Token<'a>) -> R;
-    fn visit_this_expr(&self, keyword: Token<'a>) -> R;
-    fn visit_variable_expr(&mut self, name: Token<'a>) -> R;
+    fn visit_set_expr(&self, name: &Token<'a>, obj: &Box<Expr<'a>>, val: &Box<Expr<'a>>) -> R;
+    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> R;
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> R;
+    fn visit_variable_expr(&mut self, name: &Token<'a>) -> R;
 }
 
 #[derive(Debug)]
@@ -64,8 +64,8 @@ pub struct Expr<'a> {
 }
 
 impl<'a> Expr<'a> {
-    pub fn accept<R>(self, visitor: &mut impl ExprVisitor<'a, R>) -> R {
-        match self.kind {
+    pub fn accept<R>(&self, visitor: &mut impl ExprVisitor<'a, R>) -> R {
+        match &self.kind {
             ExprKind::Literal(token) => visitor.visit_literal(token),
             ExprKind::Binary(operator, left, right) => {
                 visitor.visit_binary_expr(operator, left, right)
@@ -269,7 +269,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         }
     }
 
-    pub fn evaluate(&mut self, expr: Expr<'a>) -> miette::Result<LoxValue> {
+    pub fn evaluate(&mut self, expr: &Expr<'a>) -> miette::Result<LoxValue> {
         let loc = expr.location.clone();
         expr.accept(self).map_err(|e| {
             let mut labels = if let Some(labels) = e.labels() {
@@ -333,11 +333,11 @@ const RIGHT_NUMBER_ERR: &str = "right operand must be number";
 const LEFT_NUMBER_ERR: &str = "left operand must be number";
 
 impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a, W> {
-    fn visit_literal(&self, token: Option<Token<'a>>) -> miette::Result<LoxValue> {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
         match token {
             Some(t) => match t {
                 Token::String(s) => Ok(LoxValue::String((*s).to_string())),
-                Token::Number(n) => Ok(LoxValue::Number(n)),
+                Token::Number(n) => Ok(LoxValue::Number(*n)),
                 Token::False => Ok(LoxValue::Bool(false)),
                 Token::True => Ok(LoxValue::Bool(true)),
                 Token::Nil => Ok(LoxValue::Nil),
@@ -349,14 +349,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_binary_expr(
         &mut self,
-        operator: Token<'a>,
-        left: Box<Expr<'a>>,
-        right: Box<Expr<'a>>,
+        operator: &Token<'a>,
+        left: &Box<Expr<'a>>,
+        right: &Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
         let left_loc = left.location.clone();
         let right_loc = right.location.clone();
-        let lhs = self.evaluate(*left)?;
-        let rhs = self.evaluate(*right)?;
+        let lhs = self.evaluate(left)?;
+        let rhs = self.evaluate(right)?;
 
         match operator {
             Token::Minus => {
@@ -437,11 +437,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_unary_expr(
         &mut self,
-        operator: Token<'a>,
-        expr: Box<Expr<'a>>,
+        operator: &Token<'a>,
+        expr: &Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
         let expr_loc = expr.location.clone();
-        let val = self.evaluate(*expr)?;
+        let val = self.evaluate(expr)?;
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
             Token::Bang => Ok(LoxValue::Bool(!val.is_truthy())),
@@ -454,8 +454,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_assign_expr(
         &mut self,
-        name: Token<'a>,
-        value: Box<Expr<'a>>,
+        name: &Token<'a>,
+        value: &Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
         let location = value.location.clone();
         if let Token::Identifier(id) = name {
@@ -484,9 +484,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_call_expr(
         &self,
-        paren: Token<'a>,
-        callee: Box<Expr<'a>>,
-        args: Vec<Box<Expr<'a>>>,
+        paren: &Token<'a>,
+        callee: &Box<Expr<'a>>,
+        args: &Vec<Box<Expr<'a>>>,
     ) -> miette::Result<LoxValue> {
         let _ = args;
         let _ = callee;
@@ -496,28 +496,28 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_get_expr(
         &mut self,
-        name: Token<'a>,
-        object: Box<Expr<'a>>,
+        name: &Token<'a>,
+        object: &Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
         let _ = name;
-        self.evaluate(*object)
+        self.evaluate(object)
     }
 
-    fn visit_grouping_expr(&mut self, grouping: Box<Expr<'a>>) -> miette::Result<LoxValue> {
-        self.evaluate(*grouping)
+    fn visit_grouping_expr(&mut self, grouping: &Box<Expr<'a>>) -> miette::Result<LoxValue> {
+        self.evaluate(grouping)
     }
 
     fn visit_logical_expr(
         &mut self,
-        operator: Token<'a>,
-        left: Box<Expr<'a>>,
-        right: Box<Expr<'a>>,
+        operator: &Token<'a>,
+        left: &Box<Expr<'a>>,
+        right: &Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
-        let lhs = self.evaluate(*left)?;
+        let lhs = self.evaluate(left)?;
         match operator {
             Token::And => {
                 if lhs.is_truthy() {
-                    self.evaluate(*right)
+                    self.evaluate(right)
                 } else {
                     Ok(lhs)
                 }
@@ -526,7 +526,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 if lhs.is_truthy() {
                     Ok(lhs)
                 } else {
-                    self.evaluate(*right)
+                    self.evaluate(right)
                 }
             }
             _ => Err(miette!("Invalid logical operator")),
@@ -535,9 +535,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_set_expr(
         &self,
-        name: Token<'a>,
-        obj: Box<Expr<'a>>,
-        val: Box<Expr<'a>>,
+        name: &Token<'a>,
+        obj: &Box<Expr<'a>>,
+        val: &Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
         let _ = val;
         let _ = obj;
@@ -545,18 +545,22 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         todo!()
     }
 
-    fn visit_super_expr(&self, keyword: Token<'a>, method: Token<'a>) -> miette::Result<LoxValue> {
+    fn visit_super_expr(
+        &self,
+        keyword: &Token<'a>,
+        method: &Token<'a>,
+    ) -> miette::Result<LoxValue> {
         let _ = method;
         let _ = keyword;
         todo!()
     }
 
-    fn visit_this_expr(&self, keyword: Token<'a>) -> miette::Result<LoxValue> {
+    fn visit_this_expr(&self, keyword: &Token<'a>) -> miette::Result<LoxValue> {
         let _ = keyword;
         todo!()
     }
 
-    fn visit_variable_expr(&mut self, name: Token<'a>) -> miette::Result<LoxValue> {
+    fn visit_variable_expr(&mut self, name: &Token<'a>) -> miette::Result<LoxValue> {
         if let Token::Identifier(id) = name {
             let val = self.environment.borrow().get(id)?;
             if let LoxValue::Nil = val {
@@ -594,7 +598,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     }
 
     fn visit_expression_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {
-        self.evaluate(*expr)?;
+        self.evaluate(&expr)?;
         Ok(())
     }
 
@@ -616,7 +620,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         then: Box<miette::Result<Stmt<'a>>>,
         otherwise: Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> miette::Result<()> {
-        match self.evaluate(*cond)? {
+        match self.evaluate(&cond)? {
             LoxValue::Bool(v) => {
                 if v {
                     self.interpret(once(*then))
@@ -638,7 +642,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     }
 
     fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> miette::Result<()> {
-        match self.evaluate(*expr) {
+        match self.evaluate(&expr) {
             Ok(e) => {
                 writeln!(self.writer, "{e}").map_err(|e| miette!(e))?;
             }
@@ -681,7 +685,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         body: Box<miette::Result<Stmt<'a>>>,
     ) -> miette::Result<()> {
         // TODO: implement while
-        if self.evaluate(*cond)?.is_truthy() {
+        if self.evaluate(&cond)?.is_truthy() {
             self.interpret(once(*body));
         }
         Ok(())
