@@ -303,7 +303,6 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         };
 
         for stmt in statements {
-            let stmt = stmt.clone();
             let stmt = stmt.borrow();
             match stmt.as_ref() {
                 Ok(s) => {
