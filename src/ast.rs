@@ -13,13 +13,18 @@ pub trait ExprVisitor<'a, R> {
     fn visit_binary_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
     fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) -> R;
     fn visit_assign_expr(&mut self, name: &Token<'a>, value: &Expr<'a>) -> R;
-    fn visit_call_expr(&self, paren: &Token<'a>, callee: &Expr<'a>, args: &[Box<Expr<'a>>]) -> R;
+    fn visit_call_expr(
+        &mut self,
+        paren: &Token<'a>,
+        callee: &Expr<'a>,
+        args: &[Box<Expr<'a>>],
+    ) -> R;
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> R;
     fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> R;
     fn visit_logical_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
     fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> R;
-    fn visit_super_expr(&self, keyword: &Token<'a>, method: &Token<'a>) -> R;
-    fn visit_this_expr(&self, keyword: &Token<'a>) -> R;
+    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> R;
+    fn visit_this_expr(&mut self, keyword: &Token<'a>) -> R;
     fn visit_variable_expr(&mut self, name: &Token<'a>) -> R;
 }
 
@@ -269,11 +274,11 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
 
     pub fn interpret(
         &mut self,
-        statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
+        statements: impl Iterator<Item = Rc<RefCell<miette::Result<Stmt<'a>>>>>,
     ) -> miette::Result<()> {
         let mut labels = vec![];
 
-        let mut add_label = |e: miette::Report| {
+        let mut add_label = |e: &miette::Report| {
             if let Some(label) = e.labels() {
                 for l in label {
                     labels.push(l);
@@ -282,10 +287,12 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         };
 
         for stmt in statements {
-            match stmt {
+            let stmt = stmt.clone();
+            let stmt = stmt.borrow();
+            match stmt.as_ref() {
                 Ok(s) => {
                     if let Err(e) = s.accept(self) {
-                        add_label(e);
+                        add_label(&e);
                     }
                 }
                 Err(e) => add_label(e),
@@ -468,7 +475,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     }
 
     fn visit_call_expr(
-        &self,
+        &mut self,
         paren: &Token<'a>,
         callee: &Expr<'a>,
         args: &[Box<Expr<'a>>],
@@ -527,7 +534,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     }
 
     fn visit_super_expr(
-        &self,
+        &mut self,
         keyword: &Token<'a>,
         method: &Token<'a>,
     ) -> miette::Result<LoxValue> {
@@ -536,7 +543,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         todo!()
     }
 
-    fn visit_this_expr(&self, keyword: &Token<'a>) -> miette::Result<LoxValue> {
+    fn visit_this_expr(&mut self, keyword: &Token<'a>) -> miette::Result<LoxValue> {
         let _ = keyword;
         todo!()
     }
@@ -561,7 +568,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         let enclosing = Rc::clone(&self.environment);
         let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
-        let result = self.interpret(body.into_iter());
+        let it = body.into_iter().map(|item| Rc::new(RefCell::new(item)));
+        let result = self.interpret(it);
         self.environment = prev;
         result
     }
@@ -604,17 +612,22 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         match self.evaluate(&cond)? {
             LoxValue::Bool(v) => {
                 if v {
-                    self.interpret(once(*then))
+                    let then = Rc::new(RefCell::new(*then));
+                    self.interpret(once(then))
                 } else if let Some(otherwise) = otherwise {
-                    self.interpret(once(*otherwise))
+                    let otherwise = Rc::new(RefCell::new(*otherwise));
+                    self.interpret(once(otherwise))
                 } else {
                     Ok(())
                 }
             }
-            LoxValue::String(_) | LoxValue::Number(_) => self.interpret(once(*then)),
+            LoxValue::String(_) | LoxValue::Number(_) => {
+                self.interpret(once(Rc::new(RefCell::new(*then))))
+            }
             LoxValue::Nil => {
                 if let Some(otherwise) = otherwise {
-                    self.interpret(once(*otherwise))
+                    let otherwise = Rc::new(RefCell::new(*otherwise));
+                    self.interpret(once(otherwise))
                 } else {
                     Ok(())
                 }
@@ -665,9 +678,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         cond: Box<Expr<'a>>,
         body: Box<miette::Result<Stmt<'a>>>,
     ) -> miette::Result<()> {
-        // TODO: implement while
-        if self.evaluate(&cond)?.is_truthy() {
-            self.interpret(once(*body));
+        let b = Rc::new(RefCell::new(*body));
+        while self.evaluate(&cond)?.is_truthy() {
+            let prev = b.clone();
+            let _ = self.interpret(once(prev));
         }
         Ok(())
     }
@@ -705,9 +719,10 @@ mod tests {
         let mut parser = Parser::new(input);
         let mut stdout = Vec::new();
         let mut interpreter = Interpreter::new(&mut stdout);
+        let it = parser.into_iter().map(|item| Rc::new(RefCell::new(item)));
 
         // Act
-        let iterpretation_result = interpreter.interpret(&mut parser);
+        let iterpretation_result = interpreter.interpret(it);
 
         // Assert
         if let Err(e) = iterpretation_result {
