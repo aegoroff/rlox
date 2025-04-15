@@ -113,6 +113,7 @@ impl<'a> Parser<'a> {
         let current = self.tokens.peek()?;
         match current {
             Ok((_, Token::If, _)) => self.if_statement(),
+            Ok((_, Token::While, _)) => self.while_statement(),
             Ok((_, Token::Print, _)) => self.print_statement(),
             Ok((_, Token::LeftBrace, _)) => self.block(),
             _ => self.expr_statement(),
@@ -229,6 +230,82 @@ impl<'a> Parser<'a> {
         Some(Ok(Stmt {
             kind,
             location: start_if..=end_else,
+        }))
+    }
+
+    fn while_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        let (start_while, _, _) = self.tokens.next().unwrap().unwrap(); // consume WHILE token TODO: include print start position into stmt location
+        let Some(current) = self.tokens.peek() else {
+            return Some(Err(miette!("Dangling while")));
+        };
+        let Ok((start_paren, next_tok, end_paren)) = current else {
+            // Consume token if it's not a valid
+            match self.tokens.next()? {
+                Ok(_) => unreachable!(),
+                Err(e) => return Some(Err(e)),
+            }
+        };
+        let start_lp = *start_paren;
+        let end_lp = *end_paren;
+
+        if !matches!(next_tok, Token::LeftParen) {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(start_lp..=end_lp, "Unclosed ( detected")],
+                "Invalid condition syntax"
+            )));
+        }
+        self.tokens.next(); // consume (
+
+        let Some(cond) = self.expression() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start_lp..=end_lp,
+                    "Condition must start here"
+                )],
+                "Invalid condition syntax"
+            )));
+        };
+        let cond = match cond {
+            Ok(cond) => cond,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let cond_end = *cond.location.end();
+        let Some(current) = self.tokens.peek() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(cond_end..=cond_end, "Missing closing )")],
+                "Missing closing paren"
+            )));
+        };
+        let Ok((start_paren, next_tok, end_paren)) = current else {
+            // Consume token if it's not a valid
+            match self.tokens.next()? {
+                Ok(_) => unreachable!(),
+                Err(e) => return Some(Err(e)),
+            }
+        };
+        let start_rp = *start_paren;
+        let end_rp = *end_paren;
+
+        if !matches!(next_tok, Token::RightParen) {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(start_rp..=end_rp, "Unclosed ( detected")],
+                "Invalid condition syntax"
+            )));
+        }
+        self.tokens.next(); // consume )
+
+        let Some(body) = self.statement() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(start_rp..=end_rp, "Missing while body")],
+                "Missing while body"
+            )));
+        };
+
+        let kind = StmtKind::While(Box::new(cond), Box::new(body));
+        Some(Ok(Stmt {
+            kind,
+            location: start_while..=end_rp,
         }))
     }
 

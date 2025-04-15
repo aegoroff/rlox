@@ -105,7 +105,7 @@ impl<'a> Stmt<'a> {
             StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
             StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
             StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
-            StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, *body),
+            StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
         }
     }
 }
@@ -127,7 +127,7 @@ pub enum StmtKind<'a> {
     Print(Box<Expr<'a>>),
     Return(Token<'a>, Box<Expr<'a>>),
     Variable(Token<'a>, Option<Box<Expr<'a>>>),
-    While(Box<Expr<'a>>, Box<Stmt<'a>>),
+    While(Box<Expr<'a>>, Box<miette::Result<Stmt<'a>>>),
 }
 
 pub trait StmtVisitor<'a, R> {
@@ -154,7 +154,7 @@ pub trait StmtVisitor<'a, R> {
     fn visit_print_stmt(&mut self, expr: Box<Expr<'a>>) -> R;
     fn visit_return_stmt(&self, keyword: Token<'a>, value: Box<Expr<'a>>) -> R;
     fn visit_variable_stmt(&mut self, name: Token<'a>, initializer: Option<Box<Expr<'a>>>) -> R;
-    fn visit_while_stmt(&self, cond: Box<Expr<'a>>, body: Stmt<'a>) -> R;
+    fn visit_while_stmt(&mut self, cond: Box<Expr<'a>>, body: Box<miette::Result<Stmt<'a>>>) -> R;
 }
 
 // Values
@@ -675,10 +675,16 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         }
     }
 
-    fn visit_while_stmt(&self, cond: Box<Expr<'a>>, body: Stmt<'a>) -> miette::Result<()> {
-        let _ = body;
-        let _ = cond;
-        todo!()
+    fn visit_while_stmt(
+        &mut self,
+        cond: Box<Expr<'a>>,
+        body: Box<miette::Result<Stmt<'a>>>,
+    ) -> miette::Result<()> {
+        // TODO: implement while
+        if self.evaluate(*cond)?.is_truthy() {
+            self.interpret(once(*body));
+        }
+        Ok(())
     }
 }
 
