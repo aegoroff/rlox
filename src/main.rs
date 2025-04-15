@@ -70,9 +70,8 @@ fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
 fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     let mut interpreter = Interpreter::new(stdout());
-    //let it = parser.map(|item| Rc::new(RefCell::new(item)));
     interpreter
-        .interpret_from_it(&mut parser)
+        .interpret(&mut parser)
         .map_err(|err| err.with_source_code(content))?;
 
     Ok(())

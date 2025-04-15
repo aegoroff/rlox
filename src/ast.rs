@@ -277,17 +277,18 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         })
     }
 
-    pub fn interpret_from_it(
+    pub fn interpret(
         &mut self,
         statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
     ) -> miette::Result<()> {
+        // HACK: Box::leak dangerous thing
         let refs = statements.map(|x| &*Box::leak(Box::new(x)));
         let arr: Vec<Rc<RefCell<&'a miette::Result<Stmt<'a>>>>> =
             refs.map(|x| Rc::new(RefCell::new(x))).collect();
-        self.interpret(&arr)
+        self.accept_all(&arr)
     }
 
-    fn interpret(
+    fn accept_all(
         &mut self,
         statements: &[Rc<RefCell<&'a miette::Result<Stmt<'a>>>>],
     ) -> miette::Result<()> {
@@ -587,7 +588,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             .iter()
             .map(|item| Rc::new(RefCell::new(item)))
             .collect();
-        let result = self.interpret(&it);
+        let result = self.accept_all(&it);
         self.environment = prev;
         result
     }
@@ -631,21 +632,21 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             LoxValue::Bool(v) => {
                 if v {
                     let then = Rc::new(RefCell::new(then));
-                    self.interpret(&[then])
+                    self.accept_all(&[then])
                 } else if let Some(otherwise) = otherwise {
                     let otherwise = Rc::new(RefCell::new(otherwise.deref()));
-                    self.interpret(&[otherwise])
+                    self.accept_all(&[otherwise])
                 } else {
                     Ok(())
                 }
             }
             LoxValue::String(_) | LoxValue::Number(_) => {
-                self.interpret(&[Rc::new(RefCell::new(then))])
+                self.accept_all(&[Rc::new(RefCell::new(then))])
             }
             LoxValue::Nil => {
                 if let Some(otherwise) = otherwise {
                     let otherwise = Rc::new(RefCell::new(otherwise.deref()));
-                    self.interpret(&[otherwise])
+                    self.accept_all(&[otherwise])
                 } else {
                     Ok(())
                 }
@@ -698,8 +699,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     ) -> miette::Result<()> {
         let b = Rc::new(RefCell::new(body));
         while self.evaluate(cond)?.is_truthy() {
-            let prev = b.clone();
-            let _ = self.interpret(&[prev]);
+            self.accept_all(&[b.clone()])?
         }
         Ok(())
     }
@@ -738,10 +738,9 @@ mod tests {
         let mut parser = Parser::new(input);
         let mut stdout = Vec::new();
         let mut interpreter = Interpreter::new(&mut stdout);
-        //let it = parser.map(|item| Rc::new(RefCell::new(item)));
 
         // Act
-        let iterpretation_result = interpreter.interpret_from_it(&mut parser);
+        let iterpretation_result = interpreter.interpret(&mut parser);
 
         // Assert
         if let Err(e) = iterpretation_result {
