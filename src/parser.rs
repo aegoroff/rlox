@@ -39,7 +39,7 @@ impl<'a> Parser<'a> {
     fn var_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
         let t = self.tokens.next(); // consume VAR token TODO: include VAR start position into stmt location
         let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
-        let name = match self.equality() {
+        let name = match self.equality() { // IMPORTANT: dont call expression here so as not to conflict with assignment
             Some(result) => match result {
                 Ok(expr) => {
                     finish = *expr.location.end();
