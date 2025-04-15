@@ -702,11 +702,11 @@ mod tests {
         let mut interpreter = Interpreter::new(&mut stdout);
 
         // Act
-        let actual = interpreter.interpret(&mut parser);
+        let iterpretation_result = interpreter.interpret(&mut parser);
 
         // Assert
-        if let Err(e) = actual {
-            panic!("actual should be correct. But it was: {e:#?}");
+        if let Err(e) = iterpretation_result {
+            panic!("iterpretation_result should be Ok. But it was: {e:#?}");
         }
 
         let actual = String::from_utf8(stdout).unwrap();
