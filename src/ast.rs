@@ -27,7 +27,7 @@ pub trait ExprVisitor<'a, R> {
     fn visit_get_expr(&mut self, name: Token<'a>, object: Box<Expr<'a>>) -> R;
     fn visit_grouping_expr(&mut self, grouping: Box<Expr<'a>>) -> R;
     fn visit_logical_expr(
-        &self,
+        &mut self,
         operator: Token<'a>,
         left: Box<Expr<'a>>,
         right: Box<Expr<'a>>,
@@ -327,6 +327,8 @@ fn map_operand_err<T>(
 const RIGHT_OPERAND_ERR: &str = "right operand type not match left one";
 const RIGHT_NUMBER_ERR: &str = "right operand must be number";
 const LEFT_NUMBER_ERR: &str = "left operand must be number";
+const LEFT_BOOL_ERR: &str = "left operand must be bool";
+const RIGHT_BOOL_ERR: &str = "right operand must be bool";
 
 impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a, W> {
     fn visit_literal(&self, token: Option<Token<'a>>) -> miette::Result<LoxValue> {
@@ -516,15 +518,30 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     }
 
     fn visit_logical_expr(
-        &self,
+        &mut self,
         operator: Token<'a>,
         left: Box<Expr<'a>>,
         right: Box<Expr<'a>>,
     ) -> miette::Result<LoxValue> {
-        let _ = right;
-        let _ = left;
-        let _ = operator;
-        todo!()
+        let left_loc = left.location.clone();
+        let right_loc = right.location.clone();
+        let lhs = self.evaluate(*left)?;
+        let rhs = self.evaluate(*right)?;
+        match operator {
+            Token::And => {
+                let l = map_operand_err(lhs.try_bool(), left_loc, LEFT_BOOL_ERR)?;
+                let r = map_operand_err(rhs.try_bool(), right_loc, RIGHT_BOOL_ERR)?;
+                let result = l && r;
+                Ok(LoxValue::Bool(result))
+            }
+            Token::Or => {
+                let l = map_operand_err(lhs.try_bool(), left_loc, LEFT_BOOL_ERR)?;
+                let r = map_operand_err(rhs.try_bool(), right_loc, RIGHT_BOOL_ERR)?;
+                let result = l || r;
+                Ok(LoxValue::Bool(result))
+            }
+            _ => Err(miette!("Invalid logical operator")),
+        }
     }
 
     fn visit_set_expr(
@@ -696,6 +713,10 @@ mod tests {
     #[test_case("var a = 1; if (a == 1) { print 10; }", "10")]
     #[test_case("var a = 1; if (a == 2) { print 10; }", "")]
     #[test_case("var a = false; if (a = true) { print 10; }", "10" ; "assignment in condition")]
+    #[test_case("var a = 1; var b = 2; if (a < b and b > 1) { print 10; } else print 20;", "10" ; "and logic then")]
+    #[test_case("var a = 1; var b = 2; if (a < b and b > 10) { print 10; } else print 20;", "20" ; "and logic otherwise")]
+    #[test_case("var a = 1; var b = 1; if (a < b or b > 0) { print 10; } else print 20;", "10" ; "or logic then")]
+    #[test_case("var a = 2; var b = 2; if (a < b or b < 1) { print 10; } else print 20;", "20" ; "or logic otherwise")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

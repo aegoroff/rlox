@@ -39,7 +39,8 @@ impl<'a> Parser<'a> {
     fn var_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
         let t = self.tokens.next(); // consume VAR token TODO: include VAR start position into stmt location
         let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
-        let name = match self.equality() { // IMPORTANT: dont call expression here so as not to conflict with assignment
+        // IMPORTANT: dont call expression here so as not to conflict with assignment
+        let name = match self.or() {
             Some(result) => match result {
                 Ok(expr) => {
                     finish = *expr.location.end();
@@ -330,7 +331,7 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> Option<miette::Result<Expr<'a>>> {
-        let lhs = self.equality();
+        let lhs = self.or();
         let Some(current) = self.tokens.peek() else {
             return lhs;
         };
@@ -384,6 +385,118 @@ impl<'a> Parser<'a> {
         } else {
             Some(Err(miette!("invalid assignment")))
         }
+    }
+
+    fn or(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.and()? {
+            Ok(e) => e,
+            Err(e) => return Some(Err(e)),
+        };
+
+        loop {
+            let Some(current) = self.tokens.peek() else {
+                return Some(Ok(expr));
+            };
+            let Ok(next_tok) = current else {
+                // Consume token if it's not a valid
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => return Some(Err(e)),
+                }
+            };
+
+            if !matches!(next_tok, (_, Token::Or, _)) {
+                break;
+            }
+
+            // Consume operator
+            let (s, operator, f) = match self.tokens.next()? {
+                Ok(tok) => tok,
+                Err(e) => return Some(Err(e)),
+            };
+
+            let Some(and) = self.and() else {
+                return Some(Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        s..=f,
+                        "Missing expression in the right part of logic expression"
+                    )],
+                    "Invalid syntax"
+                )));
+            };
+
+            let right = match and {
+                Ok(r) => r,
+                Err(e) => return Some(Err(e)),
+            };
+
+            let start = *expr.location.start();
+            let end = *right.location.end() - 1;
+            let kind = ExprKind::Logical(operator, Box::new(expr), Box::new(right));
+
+            expr = Expr {
+                kind,
+                location: start..=end,
+            };
+        }
+
+        Some(Ok(expr))
+    }
+
+    fn and(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.equality()? {
+            Ok(e) => e,
+            Err(e) => return Some(Err(e)),
+        };
+
+        loop {
+            let Some(current) = self.tokens.peek() else {
+                return Some(Ok(expr));
+            };
+            let Ok(next_tok) = current else {
+                // Consume token if it's not a valid
+                match self.tokens.next()? {
+                    Ok(_) => unreachable!(),
+                    Err(e) => return Some(Err(e)),
+                }
+            };
+
+            if !matches!(next_tok, (_, Token::And, _)) {
+                break;
+            }
+
+            // Consume operator
+            let (s, operator, f) = match self.tokens.next()? {
+                Ok(tok) => tok,
+                Err(e) => return Some(Err(e)),
+            };
+
+            let Some(equality) = self.equality() else {
+                return Some(Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        s..=f,
+                        "Missing expression in the right part of logic expression"
+                    )],
+                    "Invalid syntax"
+                )));
+            };
+
+            let right = match equality {
+                Ok(r) => r,
+                Err(e) => return Some(Err(e)),
+            };
+
+            let start = *expr.location.start();
+            let end = *right.location.end() - 1;
+            let kind = ExprKind::Logical(operator, Box::new(expr), Box::new(right));
+
+            expr = Expr {
+                kind,
+                location: start..=end,
+            };
+        }
+
+        Some(Ok(expr))
     }
 
     fn equality(&mut self) -> Option<miette::Result<Expr<'a>>> {
