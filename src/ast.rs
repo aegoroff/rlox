@@ -742,6 +742,7 @@ mod tests {
     #[test_case("if (nil != 1) print 10;", "10" ; "nil ne")]
     #[test_case("if (true != 1) print 10;", "10" ; "bool ne")]
     #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
+    #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
