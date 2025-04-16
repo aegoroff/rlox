@@ -34,7 +34,7 @@ pub trait ExprVisitor<'a, R> {
 }
 
 pub trait StmtVisitor<'a, R> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> R;
+    fn visit_block_stmt(&mut self, body: &[miette::Result<Stmt<'a>>]) -> R;
     fn visit_class_stmt(
         &self,
         name: &Token<'a>,
@@ -51,13 +51,13 @@ pub trait StmtVisitor<'a, R> {
     fn visit_if_stmt(
         &mut self,
         cond: &Expr<'a>,
-        then: &'a miette::Result<Stmt<'a>>,
-        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
+        then: &miette::Result<Stmt<'a>>,
+        otherwise: &Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> R;
     fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> R;
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
     fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) -> R;
-    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) -> R;
+    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &miette::Result<Stmt<'a>>) -> R;
 }
 
 // Expressions
@@ -117,7 +117,7 @@ pub struct Stmt<'a> {
 }
 
 impl<'a> Stmt<'a> {
-    pub fn accept<R>(&'a self, visitor: &mut impl StmtVisitor<'a, R>) -> R {
+    pub fn accept<R>(&self, visitor: &mut impl StmtVisitor<'a, R>) -> R {
         match &self.kind {
             StmtKind::Block(stmts) => visitor.visit_block_stmt(stmts),
             StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, stmt, stmts),
@@ -290,9 +290,9 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         self.accept_all(refs)
     }
 
-    fn accept_all(
-        &mut self,
-        statements: impl Iterator<Item = Rc<RefCell<&'a miette::Result<Stmt<'a>>>>>,
+    fn accept_all<'b>(
+        &'b mut self,
+        statements: impl Iterator<Item = Rc<RefCell<&'b miette::Result<Stmt<'a>>>>>,
     ) -> miette::Result<()> {
         let mut labels = vec![];
 
@@ -580,7 +580,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 }
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
+    fn visit_block_stmt(&mut self, body: &[miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         let prev = Rc::clone(&self.environment);
         let enclosing = Rc::clone(&self.environment);
         let child = Environment::child(enclosing);
@@ -623,8 +623,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     fn visit_if_stmt(
         &mut self,
         cond: &Expr<'a>,
-        then: &'a miette::Result<Stmt<'a>>,
-        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
+        then: &miette::Result<Stmt<'a>>,
+        otherwise: &Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> miette::Result<()> {
         match self.evaluate(cond)? {
             LoxValue::Bool(v) => {
@@ -706,7 +706,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     fn visit_while_stmt(
         &mut self,
         cond: &Expr<'a>,
-        body: &'a miette::Result<Stmt<'a>>,
+        body: &miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
         let body = match body {
             Ok(s) => s,
