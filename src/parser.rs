@@ -122,32 +122,15 @@ impl<'a> Parser<'a> {
     }
 
     fn if_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let (start_if, _, _) = self.tokens.next().unwrap().unwrap(); // consume IF token TODO: include print start position into stmt location
-        let Some(current) = self.tokens.peek() else {
-            return Some(Err(miette!("Dangling if")));
+        let start_if = match self.consume_current_and_open_paren("if") {
+            Ok(x) => x,
+            Err(e) => return Some(Err(e)),
         };
-        let Ok((start_paren, next_tok, end_paren)) = current else {
-            // Consume token if it's not a valid
-            match self.tokens.next()? {
-                Ok(_) => unreachable!(),
-                Err(e) => return Some(Err(e)),
-            }
-        };
-        let start_lp = *start_paren;
-        let end_lp = *end_paren;
-
-        if !matches!(next_tok, Token::LeftParen) {
-            return Some(Err(miette!(
-                labels = vec![LabeledSpan::at(start_lp..=end_lp, "Unclosed ( detected")],
-                "Invalid condition syntax"
-            )));
-        }
-        self.tokens.next(); // consume (
 
         let Some(cond) = self.expression() else {
             return Some(Err(miette!(
                 labels = vec![LabeledSpan::at(
-                    start_lp..=end_lp,
+                    (start_if + 2)..=(start_if + 2),
                     "Condition must start here"
                 )],
                 "Invalid condition syntax"
@@ -235,7 +218,7 @@ impl<'a> Parser<'a> {
     }
 
     fn while_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let start_while = match self.consume_current_and_open_paren("WHILE") {
+        let start_while = match self.consume_current_and_open_paren("while") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
@@ -294,7 +277,7 @@ impl<'a> Parser<'a> {
     }
 
     fn for_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let start_for = match self.consume_current_and_open_paren("FOR") {
+        let start_for = match self.consume_current_and_open_paren("for") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
@@ -310,11 +293,17 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_current_and_open_paren(&mut self, token: &str) -> miette::Result<usize> {
-        let (start_for, _, _) = self.tokens.next().unwrap().unwrap(); // consume FOR token TODO: include print start position into stmt location
+        let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
         let Some(current) = self.tokens.peek() else {
-            return Err(miette!("Dangling {token}"));
+            return Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    end_token..=end_token,
+                    format!("Dangling {token}")
+                )],
+                "Dangling {token}"
+            ));
         };
-        let Ok((start_paren, next_tok, end_paren)) = current else {
+        let Ok((_, next_tok, _)) = current else {
             // Consume token if it's not a valid
             if let Some(Err(e)) = self.tokens.next() {
                 return Err(e);
@@ -322,17 +311,18 @@ impl<'a> Parser<'a> {
                 return Ok(0);
             };
         };
-        let start_lp = *start_paren;
-        let end_lp = *end_paren;
 
         if !matches!(next_tok, Token::LeftParen) {
             return Err(miette!(
-                labels = vec![LabeledSpan::at(start_lp..=end_lp, "Unclosed ( detected")],
+                labels = vec![LabeledSpan::at(
+                    end_token..=end_token,
+                    format!("Must be ( after {token}")
+                )],
                 "Invalid syntax"
             ));
         }
         self.tokens.next(); // consume (
-        Ok(start_for)
+        Ok(start_token)
     }
 
     fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
