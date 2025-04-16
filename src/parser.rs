@@ -289,9 +289,39 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        let body = self.statement();
+        let Some(body) = self.statement() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(right_paren_location, "Missing for body")],
+                "Missing body"
+            )));
+        };
 
-        None
+        let mut statements = vec![body];
+        if let Some(Ok(incr)) = increment {
+            let location = incr.location.clone();
+            let kind = StmtKind::Expression(Box::new(incr));
+            statements.push(Ok(Stmt { kind, location }));
+        }
+
+        let while_body = Ok(Stmt {
+            kind: StmtKind::Block(statements),
+            location: *start_loc.start()..=*start_loc.start(),
+        });
+
+        let while_stmt = Ok(Stmt {
+            kind: StmtKind::While(Box::new(condition), Box::new(while_body)),
+            location: *start_loc.start()..=*right_paren_location.end(),
+        });
+
+        if let Some(initializer) = initializer {
+            let statements = vec![initializer, while_stmt];
+            Some(Ok(Stmt {
+                kind: StmtKind::Block(statements),
+                location: *start_loc.start()..=*start_loc.start(),
+            }))
+        } else {
+            Some(while_stmt)
+        }
     }
 
     fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
