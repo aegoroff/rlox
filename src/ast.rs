@@ -282,15 +282,15 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
     ) -> miette::Result<()> {
         // HACK: Box::leak dangerous thing
-        let refs = statements.map(|x| &*Box::leak(Box::new(x)));
-        let arr: Vec<Rc<RefCell<&'a miette::Result<Stmt<'a>>>>> =
-            refs.map(|x| Rc::new(RefCell::new(x))).collect();
-        self.accept_all(&arr)
+        let refs = statements
+            .map(|x| &*Box::leak(Box::new(x)))
+            .map(|x| Rc::new(RefCell::new(x)));
+        self.accept_all(refs)
     }
 
     fn accept_all(
         &mut self,
-        statements: &[Rc<RefCell<&'a miette::Result<Stmt<'a>>>>],
+        statements: impl Iterator<Item = Rc<RefCell<&'a miette::Result<Stmt<'a>>>>>,
     ) -> miette::Result<()> {
         let mut labels = vec![];
 
@@ -583,11 +583,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         let enclosing = Rc::clone(&self.environment);
         let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
-        let it: Vec<Rc<RefCell<&'a miette::Result<Stmt<'a>>>>> = body
-            .iter()
-            .map(|item| Rc::new(RefCell::new(item)))
-            .collect();
-        let result = self.accept_all(&it);
+        let it = body.iter().map(|item| Rc::new(RefCell::new(item)));
+        let result = self.accept_all(it);
         self.environment = prev;
         result
     }
