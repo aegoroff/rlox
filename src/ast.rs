@@ -630,22 +630,35 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         match self.evaluate(cond)? {
             LoxValue::Bool(v) => {
                 if v {
-                    let then = Rc::new(RefCell::new(then));
-                    self.accept_all(&[then])
+                    let then = match then {
+                        Ok(s) => s,
+                        Err(e) => return Err(miette!(e.to_string())),
+                    };
+                    then.accept(self)
                 } else if let Some(otherwise) = otherwise {
-                    let otherwise = Rc::new(RefCell::new(otherwise.deref()));
-                    self.accept_all(&[otherwise])
+                    let otherwise = match otherwise.deref() {
+                        Ok(s) => s,
+                        Err(e) => return Err(miette!(e.to_string())),
+                    };
+                    otherwise.accept(self)
                 } else {
                     Ok(())
                 }
             }
             LoxValue::String(_) | LoxValue::Number(_) => {
-                self.accept_all(&[Rc::new(RefCell::new(then))])
+                let then = match then {
+                    Ok(s) => s,
+                    Err(e) => return Err(miette!(e.to_string())),
+                };
+                then.accept(self)
             }
             LoxValue::Nil => {
                 if let Some(otherwise) = otherwise {
-                    let otherwise = Rc::new(RefCell::new(otherwise.deref()));
-                    self.accept_all(&[otherwise])
+                    let otherwise = match otherwise.deref() {
+                        Ok(s) => s,
+                        Err(e) => return Err(miette!(e.to_string())),
+                    };
+                    otherwise.accept(self)
                 } else {
                     Ok(())
                 }
