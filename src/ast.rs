@@ -27,7 +27,7 @@ pub trait ExprVisitor<'a, R> {
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> R;
     fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> R;
     fn visit_logical_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
-    fn visit_set_expr(&self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> R;
+    fn visit_set_expr(&mut self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> R;
     fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> R;
     fn visit_this_expr(&mut self, keyword: &Token<'a>) -> R;
     fn visit_variable_expr(&mut self, name: &Token<'a>) -> R;
@@ -135,7 +135,7 @@ pub trait StmtVisitor<'a, R> {
     ) -> R;
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
     fn visit_function_stmt(
-        &self,
+        &mut self,
         token: &Token<'a>,
         params: &[Box<Stmt<'a>>],
         body: &[Box<Stmt<'a>>],
@@ -147,7 +147,7 @@ pub trait StmtVisitor<'a, R> {
         otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
     ) -> R;
     fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> R;
-    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
+    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
     fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) -> R;
     fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) -> R;
 }
@@ -537,7 +537,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     }
 
     fn visit_set_expr(
-        &self,
+        &mut self,
         name: &Token<'a>,
         obj: &Expr<'a>,
         val: &Expr<'a>,
@@ -607,7 +607,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     }
 
     fn visit_function_stmt(
-        &self,
+        &mut self,
         token: &Token<'a>,
         params: &[Box<Stmt<'a>>],
         body: &[Box<Stmt<'a>>],
@@ -675,7 +675,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         Ok(())
     }
 
-    fn visit_return_stmt(&self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
+    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
         let _ = value;
         let _ = keyword;
         todo!()
