@@ -122,7 +122,7 @@ impl<'a> Parser<'a> {
     }
 
     fn if_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let start_if = match self.consume_current_and_open_paren("if") {
+        let start_loc = match self.consume_current_and_open_paren("if") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
         let Some(cond) = self.expression() else {
             return Some(Err(miette!(
                 labels = vec![LabeledSpan::at(
-                    (start_if + 2)..=(start_if + 2),
+                    (*start_loc.start() + 2)..=(start_loc.start() + 2),
                     "Condition must start here"
                 )],
                 "Invalid condition syntax"
@@ -159,7 +159,7 @@ impl<'a> Parser<'a> {
             let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
             return Some(Ok(Stmt {
                 kind,
-                location: start_if..=*right_paren_location.end(),
+                location: *start_loc.start()..=*right_paren_location.end(),
             }));
         };
 
@@ -175,7 +175,7 @@ impl<'a> Parser<'a> {
             let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
             return Some(Ok(Stmt {
                 kind,
-                location: start_if..=*right_paren_location.end(),
+                location: *start_loc.start()..=*right_paren_location.end(),
             }));
         }
 
@@ -195,12 +195,12 @@ impl<'a> Parser<'a> {
         );
         Some(Ok(Stmt {
             kind,
-            location: start_if..=end_else,
+            location: *start_loc.start()..=end_else,
         }))
     }
 
     fn while_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let start_while = match self.consume_current_and_open_paren("while") {
+        let start_loc = match self.consume_current_and_open_paren("while") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
@@ -208,7 +208,7 @@ impl<'a> Parser<'a> {
         let Some(cond) = self.expression() else {
             return Some(Err(miette!(
                 labels = vec![LabeledSpan::at(
-                    start_while..=(start_while + 5),
+                    *start_loc.start()..=(*start_loc.start() + 5),
                     "No while condition specified"
                 )],
                 "Invalid condition syntax"
@@ -236,23 +236,61 @@ impl<'a> Parser<'a> {
         let kind = StmtKind::While(Box::new(cond), Box::new(body));
         Some(Ok(Stmt {
             kind,
-            location: start_while..=*right_paren_location.end(),
+            location: *start_loc.start()..=*right_paren_location.end(),
         }))
     }
 
     fn for_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let start_for = match self.consume_current_and_open_paren("for") {
+        let start_loc = match self.consume_current_and_open_paren("for") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
 
-        if let Some(initializer) = self.expression() {
-            let initializer = match initializer {
-                Ok(init) => init,
-                Err(e) => return Some(Err(e)),
-            };
+        let initializer = if self.consume_semicolon(*start_loc.end()).is_ok() {
+            None
+        } else if let Some(Ok((_, Token::Var, _))) = self.tokens.peek() {
+            self.var_declaration()
         } else {
+            self.expr_statement()
         };
+
+        let condition = if self.consume_semicolon(*start_loc.end()).is_ok() {
+            Expr {
+                kind: ExprKind::Literal(Some(Token::True)),
+                location: start_loc.clone(),
+            }
+        } else {
+            let Some(cond) = self.expression() else {
+                return Some(Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        *start_loc.start()..=(*start_loc.start() + 5),
+                        "No condition specified"
+                    )],
+                    "Invalid condition syntax"
+                )));
+            };
+            if let Err(e) = self.consume_semicolon(*start_loc.end()) {
+                return Some(Err(e));
+            }
+            match cond {
+                Ok(cond) => cond,
+                Err(e) => return Some(Err(e)),
+            }
+        };
+
+        let increment = if let Some(Ok((_, Token::RightParen, _))) = self.tokens.peek() {
+            None
+        } else {
+            self.expression()
+        };
+
+        let right_paren_location = match self.consume_right_parent(*start_loc.end()) {
+            Ok(loc) => loc,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let body = self.statement();
+
         None
     }
 
@@ -892,7 +930,10 @@ impl<'a> Parser<'a> {
         Ok(location)
     }
 
-    fn consume_current_and_open_paren(&mut self, token: &str) -> miette::Result<usize> {
+    fn consume_current_and_open_paren(
+        &mut self,
+        token: &str,
+    ) -> miette::Result<RangeInclusive<usize>> {
         let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
         let Some(current) = self.tokens.peek() else {
             return Err(miette!(
@@ -903,7 +944,7 @@ impl<'a> Parser<'a> {
                 "Dangling {token}"
             ));
         };
-        let Ok((_, next_tok, _)) = current else {
+        let Ok((_, next_tok, end_paren)) = current else {
             // Consume and validate token
             match self.tokens.next() {
                 Some(Ok(_)) => unreachable!(),
@@ -921,8 +962,9 @@ impl<'a> Parser<'a> {
                 "Invalid syntax"
             ));
         }
+        let result = start_token..=*end_paren;
         self.tokens.next(); // consume (
-        Ok(start_token)
+        Ok(result)
     }
 }
 
