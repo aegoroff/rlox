@@ -913,9 +913,8 @@ impl<'a> Parser<'a> {
         let Ok((start_paren, next_tok, end_paren)) = current else {
             // Consume and validate token
             match self.tokens.next() {
-                Some(Ok(_)) => unreachable!(),
+                Some(Ok(_)) | None => unreachable!(),
                 Some(Err(e)) => return Err(e),
-                None => unreachable!(),
             }
         };
         let location = *start_paren..=*end_paren;
@@ -947,9 +946,8 @@ impl<'a> Parser<'a> {
         let Ok((_, next_tok, end_paren)) = current else {
             // Consume and validate token
             match self.tokens.next() {
-                Some(Ok(_)) => unreachable!(),
+                Some(Ok(_)) | None => unreachable!(),
                 Some(Err(e)) => return Err(e),
-                None => unreachable!(),
             }
         };
 

@@ -1,11 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{
-    cell::RefCell,
-    fmt::Display,
-    ops::{Deref, RangeInclusive},
-    rc::Rc,
-};
+use std::{cell::RefCell, fmt::Display, ops::RangeInclusive, rc::Rc};
 
 use miette::{LabeledSpan, SourceSpan, miette};
 
@@ -635,7 +630,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                     };
                     then.accept(self)
                 } else if let Some(otherwise) = otherwise {
-                    let otherwise = match otherwise.deref() {
+                    let otherwise = match &**otherwise {
                         Ok(s) => s,
                         Err(e) => return Err(miette!(e.to_string())),
                     };
@@ -653,7 +648,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             }
             LoxValue::Nil => {
                 if let Some(otherwise) = otherwise {
-                    let otherwise = match otherwise.deref() {
+                    let otherwise = match &**otherwise {
                         Ok(s) => s,
                         Err(e) => return Err(miette!(e.to_string())),
                     };
