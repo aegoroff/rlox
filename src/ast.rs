@@ -11,7 +11,7 @@ use miette::{LabeledSpan, SourceSpan, miette};
 
 use crate::{env::Environment, lexer::Token};
 
-// Expressions
+// Traits
 
 pub trait ExprVisitor<'a, R> {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> R;
@@ -32,6 +32,35 @@ pub trait ExprVisitor<'a, R> {
     fn visit_this_expr(&mut self, keyword: &Token<'a>) -> R;
     fn visit_variable_expr(&mut self, name: &Token<'a>) -> R;
 }
+
+pub trait StmtVisitor<'a, R> {
+    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> R;
+    fn visit_class_stmt(
+        &self,
+        name: &Token<'a>,
+        superclass: &Stmt<'a>,
+        methods: &[Box<Stmt<'a>>],
+    ) -> R;
+    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
+    fn visit_function_stmt(
+        &mut self,
+        token: &Token<'a>,
+        params: &[Box<Stmt<'a>>],
+        body: &[Box<Stmt<'a>>],
+    ) -> R;
+    fn visit_if_stmt(
+        &mut self,
+        cond: &Expr<'a>,
+        then: &'a miette::Result<Stmt<'a>>,
+        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
+    ) -> R;
+    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> R;
+    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
+    fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) -> R;
+    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) -> R;
+}
+
+// Expressions
 
 #[derive(Debug)]
 pub enum ExprKind<'a> {
@@ -123,33 +152,6 @@ pub enum StmtKind<'a> {
     Return(Token<'a>, Box<Expr<'a>>),
     Variable(Token<'a>, Option<Box<Expr<'a>>>),
     While(Box<Expr<'a>>, Box<miette::Result<Stmt<'a>>>),
-}
-
-pub trait StmtVisitor<'a, R> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> R;
-    fn visit_class_stmt(
-        &self,
-        name: &Token<'a>,
-        superclass: &Stmt<'a>,
-        methods: &[Box<Stmt<'a>>],
-    ) -> R;
-    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
-    fn visit_function_stmt(
-        &mut self,
-        token: &Token<'a>,
-        params: &[Box<Stmt<'a>>],
-        body: &[Box<Stmt<'a>>],
-    ) -> R;
-    fn visit_if_stmt(
-        &mut self,
-        cond: &Expr<'a>,
-        then: &'a miette::Result<Stmt<'a>>,
-        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
-    ) -> R;
-    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> R;
-    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
-    fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) -> R;
-    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) -> R;
 }
 
 // Values
