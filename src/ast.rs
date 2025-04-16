@@ -701,7 +701,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             Err(e) => return Err(miette!(e.to_string())),
         };
         while self.evaluate(cond)?.is_truthy() {
-            body.accept(self)?
+            body.accept(self)?;
         }
         Ok(())
     }
