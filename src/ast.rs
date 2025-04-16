@@ -696,9 +696,12 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         cond: &Expr<'a>,
         body: &'a miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
-        let b = Rc::new(RefCell::new(body));
+        let body = match body {
+            Ok(s) => s,
+            Err(e) => return Err(miette!(e.to_string())),
+        };
         while self.evaluate(cond)?.is_truthy() {
-            self.accept_all(&[b.clone()])?
+            body.accept(self)?
         }
         Ok(())
     }
