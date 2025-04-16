@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
     }
 
     fn while_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let start_while = match self.consume_current_and_open_paren() {
+        let start_while = match self.consume_current_and_open_paren("WHILE") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
@@ -294,33 +294,25 @@ impl<'a> Parser<'a> {
     }
 
     fn for_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
-        let start_for = match self.consume_current_and_open_paren() {
+        let start_for = match self.consume_current_and_open_paren("FOR") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
 
-        let Some(cond) = self.expression() else {
-            return Some(Err(miette!(
-                labels = vec![LabeledSpan::at(
-                    start_for..=(start_for + 3),
-                    "Condition must start here"
-                )],
-                "Invalid condition syntax"
-            )));
+        if let Some(initializer) = self.expression() {
+            let initializer = match initializer {
+                Ok(init) => init,
+                Err(e) => return Some(Err(e)),
+            };
+        } else {
         };
-        let cond = match cond {
-            Ok(cond) => cond,
-            Err(e) => return Some(Err(e)),
-        };
-
-        let cond_end = *cond.location.end();
         None
     }
 
-    fn consume_current_and_open_paren(&mut self) -> miette::Result<usize> {
+    fn consume_current_and_open_paren(&mut self, token: &str) -> miette::Result<usize> {
         let (start_for, _, _) = self.tokens.next().unwrap().unwrap(); // consume FOR token TODO: include print start position into stmt location
         let Some(current) = self.tokens.peek() else {
-            return Err(miette!("Dangling for"));
+            return Err(miette!("Dangling {token}"));
         };
         let Ok((start_paren, next_tok, end_paren)) = current else {
             // Consume token if it's not a valid
