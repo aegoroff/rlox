@@ -4,7 +4,11 @@ use std::{cell::RefCell, fmt::Display, ops::RangeInclusive, rc::Rc};
 
 use miette::{LabeledSpan, SourceSpan, miette};
 
-use crate::{env::Environment, lexer::Token};
+use crate::{
+    call::{self, Catalogue, Clock},
+    env::Environment,
+    lexer::Token,
+};
 
 // Traits
 
@@ -53,6 +57,11 @@ pub trait StmtVisitor<'a, R> {
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
     fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) -> R;
     fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &miette::Result<Stmt<'a>>) -> R;
+}
+
+pub trait LoxCallable {
+    fn arity(&self) -> i32;
+    fn call(&self, arguments: &[LoxValue]) -> LoxValue;
 }
 
 // Expressions
@@ -157,12 +166,14 @@ pub enum LoxValue {
     Number(f64),
     Bool(bool),
     Nil,
+    Callable(String),
 }
 
 impl Display for LoxValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxValue::String(s) => write!(f, "{s}"),
+            LoxValue::Callable(s) => write!(f, "{s}"),
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
@@ -249,15 +260,25 @@ const ERROR_MARGIN: f64 = 0.00001;
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Current environment that keeps current scope vars. Global by default
     environment: Rc<RefCell<Environment<'a>>>,
+    callables: Rc<RefCell<Catalogue<'a>>>,
     writer: W,
 }
 
 impl<'a, W: std::io::Write> Interpreter<'a, W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
+        let environment = Rc::new(RefCell::new(Environment::new()));
+        let callables = Rc::new(RefCell::new(Catalogue::new()));
+        environment
+            .borrow_mut()
+            .define(call::CLOCK, LoxValue::Callable(call::CLOCK.to_owned()));
+        callables
+            .borrow_mut()
+            .define(call::CLOCK, Box::new(Clock {}));
         Self {
-            environment: Rc::new(RefCell::new(Environment::new())),
+            environment,
             writer,
+            callables,
         }
     }
 
@@ -492,15 +513,26 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         callee: &Expr<'a>,
         args: &[Box<Expr<'a>>],
     ) -> miette::Result<LoxValue> {
-        let callee = self.evaluate(callee)?;
         let _ = paren;
+        let location = callee.location.clone();
+        let callee = self.evaluate(callee)?;
         let mut arguments = vec![];
         for a in args {
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        // TODO: implement correct call
-        Ok(callee)
+        let callables = self.callables.borrow();
+        if let LoxValue::Callable(ref id) = callee {
+            let callee = callables.get(id)?;
+
+            let result = callee.call(&arguments);
+            Ok(result)
+        } else {
+            Err(miette!(
+                labels = vec![LabeledSpan::at(location, "Invalid callable type")],
+                "Invalid callable type"
+            ))
+        }
     }
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
@@ -644,7 +676,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                     Ok(())
                 }
             }
-            LoxValue::String(_) | LoxValue::Number(_) => {
+            LoxValue::String(_) | LoxValue::Number(_) | LoxValue::Callable(_) => {
                 let then = match then {
                     Ok(s) => s,
                     Err(e) => return Err(miette!(e.to_string())),
@@ -749,10 +781,10 @@ mod tests {
     #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
     #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
-    // #[test_case("print x();", "" ; "simple call no arg")]
-    // #[test_case("print x(1);", "" ; "simple call one arg")]
-    // #[test_case("print x(1, 2);", "" ; "simple call two args")]
-    // #[test_case("print x()(1, 2);", "" ; "cascade call")]
+    #[test_case("print clock() - clock();", "0" ; "simple clock call")]
+    //#[test_case("print x(1);", "" ; "simple call one arg")]
+    //#[test_case("print x(1, 2);", "" ; "simple call two args")]
+    //#[test_case("print x()(1, 2);", "" ; "cascade call")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

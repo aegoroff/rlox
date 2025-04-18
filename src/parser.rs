@@ -962,7 +962,7 @@ impl<'a> Parser<'a> {
                 labels = vec![LabeledSpan::at(position..=position, "Missing closing )")],
                 "Missing closing paren"
             ));
-        };
+        }
         let loc = self.consume(Token::RightParen)?;
         Ok(loc)
     }
@@ -980,7 +980,7 @@ impl<'a> Parser<'a> {
                 )],
                 "Dangling {token}"
             ));
-        };
+        }
         let loc = self.consume(Token::LeftParen)?;
         let result = start_token..=*loc.end();
         Ok(result)

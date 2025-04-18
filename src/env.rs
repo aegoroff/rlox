@@ -23,13 +23,13 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn get(&self, id: &'a str) -> miette::Result<LoxValue> {
+    pub fn get(&self, id: &str) -> miette::Result<LoxValue> {
         if let Some(var) = self.storage.get(id) {
             Ok(var.clone())
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow().get(id)
         } else {
-            Err(miette!("Undefined variable: '{id}'"))
+            Err(miette!("Undefined identifier: '{id}'"))
         }
     }
 
