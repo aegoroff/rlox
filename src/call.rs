@@ -37,7 +37,7 @@ impl<'a> Catalogue<'a> {
 pub struct Clock {}
 
 impl LoxCallable for Clock {
-    fn arity(&self) -> i32 {
+    fn arity(&self) -> usize {
         0
     }
 

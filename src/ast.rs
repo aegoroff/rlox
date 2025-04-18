@@ -60,7 +60,7 @@ pub trait StmtVisitor<'a, R> {
 }
 
 pub trait LoxCallable {
-    fn arity(&self) -> i32;
+    fn arity(&self) -> usize;
     fn call(&self, arguments: &[LoxValue]) -> LoxValue;
 }
 
@@ -524,6 +524,20 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let callables = self.callables.borrow();
         if let LoxValue::Callable(ref id) = callee {
             let callee = callables.get(id)?;
+
+            let expected = callee.arity();
+            let actual = arguments.len();
+            if expected != actual {
+                return Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        location,
+                        format!(
+                            "Invalid arguments number passed to '{id}'. Expected: {expected} passed: {actual}"
+                        )
+                    )],
+                    "Invalid arguments number"
+                ));
+            }
 
             let result = callee.call(&arguments);
             Ok(result)
