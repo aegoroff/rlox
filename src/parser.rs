@@ -887,6 +887,7 @@ impl<'a> Parser<'a> {
 
     fn finish_call(&mut self, call: Expr<'a>) -> Option<miette::Result<Expr<'a>>> {
         let mut args = vec![];
+        let location = call.location.clone();
         if !self.is_match(&[Token::RightParen]) {
             loop {
                 let arg = match self.expression() {
@@ -894,6 +895,15 @@ impl<'a> Parser<'a> {
                     Some(Err(e)) => return Some(Err(e)),
                     None => return None,
                 };
+                if args.len() >= 255 {
+                    return Some(Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            location,
+                            "Cant have more then 255 arguments"
+                        )],
+                        "Arguments number exceeded"
+                    )));
+                }
                 args.push(Box::new(arg));
                 if !self.is_match(&[Token::Comma]) {
                     break;
@@ -903,7 +913,6 @@ impl<'a> Parser<'a> {
                 return Some(Err(e));
             }
         }
-        let location = call.location.clone();
         Some(Ok(Expr {
             kind: ExprKind::Call(Token::RightParen, Box::new(call), args),
             location,
