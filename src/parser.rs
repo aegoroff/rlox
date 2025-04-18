@@ -351,27 +351,10 @@ impl<'a> Parser<'a> {
         let (start, _, mut finish) = self.tokens.next().unwrap().unwrap(); // consume '{' token TODO: handle error
         let mut statements = vec![];
         loop {
-            let Some(current) = self.tokens.peek() else {
-                return Some(Err(miette!(
-                    labels = vec![LabeledSpan::at(
-                        start..=finish,
-                        "Unclosed left brace detected"
-                    )],
-                    "Invalid block syntax"
-                )));
-            };
-            let Ok(next_tok) = current else {
-                // Consume token if it's not a valid
-                match self.tokens.next()? {
-                    Ok(_) => unreachable!(),
-                    Err(e) => return Some(Err(e)),
-                }
-            };
-
-            if matches!(next_tok, (_, Token::RightBrace, _)) {
-                self.tokens.next(); // consume '}' token
+            if self.matches(&[Token::RightBrace]) {
                 break;
             }
+
             if let Some(opt) = self.declaration() {
                 match opt {
                     Ok(stmt) => {
@@ -404,9 +387,7 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_semicolon(&mut self, position: usize) -> miette::Result<()> {
-        if let Some(Ok((_, Token::Semicolon, _))) = self.tokens.peek() {
-            self.tokens.next(); // consume semicolon token
-        } else {
+        if !self.matches(&[Token::Semicolon]) {
             return Err(miette!(
                 labels = vec![LabeledSpan::at(
                     position..=position,
@@ -424,23 +405,11 @@ impl<'a> Parser<'a> {
 
     fn assignment(&mut self) -> Option<miette::Result<Expr<'a>>> {
         let lhs = self.or_expression();
-        let Some(current) = self.tokens.peek() else {
-            return lhs;
-        };
-        let Ok(next_tok) = current else {
-            // Consume token if it's not a valid
-            match self.tokens.next()? {
-                Ok(_) => unreachable!(),
-                Err(e) => return Some(Err(e)),
-            }
-        };
 
-        if !matches!(next_tok, (_, Token::Equal, _)) {
+        if !self.matches(&[Token::Equal]) {
             return lhs;
         }
 
-        // Consume =
-        self.tokens.next();
         if let Some(rhs) = self.assignment() {
             if let Some(Ok(lhs)) = lhs {
                 let start = *lhs.location.start();
@@ -872,7 +841,7 @@ impl<'a> Parser<'a> {
             None => return None,
         };
         loop {
-            if self.is_match(&[Token::LeftParen]) {
+            if self.matches(&[Token::LeftParen]) {
                 expr = match self.finish_call(expr) {
                     Some(Ok(expr)) => expr,
                     Some(Err(e)) => return Some(Err(e)),
@@ -888,7 +857,7 @@ impl<'a> Parser<'a> {
     fn finish_call(&mut self, call: Expr<'a>) -> Option<miette::Result<Expr<'a>>> {
         let mut args = vec![];
         let location = call.location.clone();
-        if !self.is_match(&[Token::RightParen]) {
+        if !self.matches(&[Token::RightParen]) {
             loop {
                 let arg = match self.expression() {
                     Some(Ok(expr)) => expr,
@@ -905,7 +874,7 @@ impl<'a> Parser<'a> {
                     )));
                 }
                 args.push(Box::new(arg));
-                if !self.is_match(&[Token::Comma]) {
+                if !self.matches(&[Token::Comma]) {
                     break;
                 }
             }
@@ -1017,7 +986,9 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn is_match(&mut self, tokens: &[Token]) -> bool {
+    /// Validates current token matches any of tokens specifies and if so
+    /// consumes it advancing iterator
+    fn matches(&mut self, tokens: &[Token]) -> bool {
         let Some(Ok((_, next_tok, _))) = self.tokens.peek() else {
             return false;
         };
