@@ -752,6 +752,7 @@ mod tests {
     #[test_case("print x();", "" ; "simple call no arg")]
     #[test_case("print x(1);", "" ; "simple call one arg")]
     #[test_case("print x(1, 2);", "" ; "simple call two args")]
+    #[test_case("print x()(1, 2);", "" ; "cascade call")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
