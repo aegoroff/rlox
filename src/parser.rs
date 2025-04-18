@@ -899,10 +899,9 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-        }
-
-        if let Err(e) = self.consume(Token::RightParen) {
-            return Some(Err(e));
+            if let Err(e) = self.consume(Token::RightParen) {
+                return Some(Err(e));
+            }
         }
 
         Some(Ok(Expr {
