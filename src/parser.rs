@@ -179,11 +179,11 @@ impl<'a> Parser<'a> {
             }));
         }
 
-        let (_, _, end_else) = self.tokens.next().unwrap().unwrap(); // consume ELSE
+        let else_loc = self.consume(Token::Else).unwrap();
 
         let Some(else_branch) = self.statement() else {
             return Some(Err(miette!(
-                labels = vec![LabeledSpan::at(end_else..=end_else, "Missing else branch")],
+                labels = vec![LabeledSpan::at(else_loc, "Else branch expected")],
                 "Missing else branch"
             )));
         };
@@ -195,7 +195,7 @@ impl<'a> Parser<'a> {
         );
         Some(Ok(Stmt {
             kind,
-            location: *start_loc.start()..=end_else,
+            location: *start_loc.start()..=*else_loc.end(),
         }))
     }
 
