@@ -903,10 +903,10 @@ impl<'a> Parser<'a> {
                 return Some(Err(e));
             }
         }
-
+        let location = call.location.clone();
         Some(Ok(Expr {
             kind: ExprKind::Call(Token::RightParen, Box::new(call), args),
-            location: 0..=0,
+            location,
         }))
     }
 
