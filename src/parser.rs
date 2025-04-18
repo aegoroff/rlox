@@ -852,7 +852,7 @@ impl<'a> Parser<'a> {
                         Err(e) => Some(Err(e)),
                     }
                 } else {
-                    self.primary()
+                    self.call()
                 }
             }
             Err(_) => {
@@ -863,6 +863,52 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+    }
+
+    fn call(&mut self) -> Option<miette::Result<Expr<'a>>> {
+        let mut expr = match self.primary() {
+            Some(Ok(expr)) => expr,
+            Some(Err(e)) => return Some(Err(e)),
+            None => return None,
+        };
+        loop {
+            if self.is_match(&[Token::LeftParen]) {
+                expr = match self.finish_call(expr) {
+                    Some(Ok(expr)) => expr,
+                    Some(Err(e)) => return Some(Err(e)),
+                    None => return None,
+                };
+            } else {
+                break;
+            }
+        }
+        Some(Ok(expr))
+    }
+
+    fn finish_call(&mut self, call: Expr<'a>) -> Option<miette::Result<Expr<'a>>> {
+        let mut args = vec![];
+        if !self.is_match(&[Token::RightParen]) {
+            loop {
+                let arg = match self.expression() {
+                    Some(Ok(expr)) => expr,
+                    Some(Err(e)) => return Some(Err(e)),
+                    None => return None,
+                };
+                args.push(Box::new(arg));
+                if !self.is_match(&[Token::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        if let Err(e) = self.consume(Token::RightParen) {
+            return Some(Err(e));
+        }
+
+        Some(Ok(Expr {
+            kind: ExprKind::Call(Token::RightParen, Box::new(call), args),
+            location: 0..=0,
+        }))
     }
 
     fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
@@ -934,29 +980,14 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_right_parent(&mut self, position: usize) -> miette::Result<RangeInclusive<usize>> {
-        let Some(current) = self.tokens.peek() else {
+        if self.tokens.peek().is_none() {
             return Err(miette!(
                 labels = vec![LabeledSpan::at(position..=position, "Missing closing )")],
                 "Missing closing paren"
             ));
         };
-        let Ok((start_paren, next_tok, end_paren)) = current else {
-            // Consume and validate token
-            match self.tokens.next() {
-                Some(Ok(_)) | None => unreachable!(),
-                Some(Err(e)) => return Err(e),
-            }
-        };
-        let location = *start_paren..=*end_paren;
-
-        if !matches!(next_tok, Token::RightParen) {
-            return Err(miette!(
-                labels = vec![LabeledSpan::at(location, "Unclosed ( detected")],
-                "Invalid syntax"
-            ));
-        }
-        self.tokens.next(); // consume )
-        Ok(location)
+        let loc = self.consume(Token::RightParen)?;
+        Ok(loc)
     }
 
     fn consume_current_and_open_paren(
@@ -964,7 +995,7 @@ impl<'a> Parser<'a> {
         token: &str,
     ) -> miette::Result<RangeInclusive<usize>> {
         let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
-        let Some(current) = self.tokens.peek() else {
+        if self.tokens.peek().is_none() {
             return Err(miette!(
                 labels = vec![LabeledSpan::at(
                     end_token..=end_token,
@@ -973,26 +1004,49 @@ impl<'a> Parser<'a> {
                 "Dangling {token}"
             ));
         };
-        let Ok((_, next_tok, end_paren)) = current else {
+        let loc = self.consume(Token::LeftParen)?;
+        let result = start_token..=*loc.end();
+        Ok(result)
+    }
+
+    fn is_match(&mut self, tokens: &[Token]) -> bool {
+        let Some(Ok((_, next_tok, _))) = self.tokens.peek() else {
+            return false;
+        };
+        for t in tokens {
+            if next_tok == t {
+                self.tokens.next();
+                return true;
+            }
+        }
+        false
+    }
+
+    fn consume(&mut self, token: Token) -> miette::Result<RangeInclusive<usize>> {
+        let Some(current) = self.tokens.peek() else {
+            return Err(miette!("Expected {token} here"));
+        };
+        let Ok((start, next_tok, end)) = current else {
             // Consume and validate token
             match self.tokens.next() {
                 Some(Ok(_)) | None => unreachable!(),
                 Some(Err(e)) => return Err(e),
             }
         };
+        let start = *start;
+        let end = *end;
 
-        if !matches!(next_tok, Token::LeftParen) {
+        if *next_tok != token {
             return Err(miette!(
                 labels = vec![LabeledSpan::at(
-                    end_token..=end_token,
-                    format!("Must be ( after {token}")
+                    start..=end,
+                    format!("Expected {token} here")
                 )],
                 "Invalid syntax"
             ));
         }
-        let result = start_token..=*end_paren;
-        self.tokens.next(); // consume (
-        Ok(result)
+        self.tokens.next(); // consume 
+        Ok(start..=end)
     }
 }
 

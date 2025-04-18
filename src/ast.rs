@@ -492,10 +492,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         callee: &Expr<'a>,
         args: &[Box<Expr<'a>>],
     ) -> miette::Result<LoxValue> {
-        let _ = args;
-        let _ = callee;
+        let callee = self.evaluate(callee)?;
         let _ = paren;
-        todo!()
+        let mut arguments = vec![];
+        for a in args {
+            let a = self.evaluate(a)?;
+            arguments.push(a);
+        }
+        // TODO: implement correct call
+        Ok(callee)
     }
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
@@ -744,6 +749,9 @@ mod tests {
     #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
     #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
+    #[test_case("print x();", "" ; "simple call no arg")]
+    #[test_case("print x(1);", "" ; "simple call one arg")]
+    #[test_case("print x(1, 2);", "" ; "simple call two args")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
