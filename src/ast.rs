@@ -274,7 +274,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             .define(call::CLOCK, LoxValue::Callable(call::CLOCK.to_owned()));
         callables
             .borrow_mut()
-            .define(call::CLOCK, Box::new(Clock {}));
+            .define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
         Self {
             environment,
             writer,
@@ -524,6 +524,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let mut callables = self.callables.borrow_mut();
         if let LoxValue::Callable(ref id) = callee {
             let callee = callables.get(id)?;
+            let mut callee = callee.borrow_mut();
 
             let expected = callee.arity();
             let actual = arguments.len();
@@ -667,9 +668,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             self.environment
                 .borrow_mut()
                 .define(id, LoxValue::Callable(id.to_string()));
-            let callable = Function::new(params.len());
-            self.callables.borrow_mut().define(id, Box::new(callable));
-            // TODO: body must be linked to callable and interpreted only on call
+            let body = Rc::new(body);
+            let callable = Function::new(params.len(), body);
+            let callable = Rc::new(RefCell::new(callable));
+            self.callables.borrow_mut().define(id, callable);
             Ok(())
         } else {
             Err(miette!("Invalid function"))

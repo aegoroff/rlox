@@ -2,16 +2,18 @@
 
 use miette::miette;
 use std::{
+    cell::RefCell,
     collections::HashMap,
+    rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::ast::LoxCallable;
+use crate::ast::{LoxCallable, Stmt};
 
 pub const CLOCK: &str = "clock";
 
 pub struct Catalogue<'a> {
-    storage: HashMap<&'a str, Box<dyn LoxCallable>>,
+    storage: HashMap<&'a str, Rc<RefCell<dyn LoxCallable>>>,
 }
 
 impl<'a> Catalogue<'a> {
@@ -21,15 +23,15 @@ impl<'a> Catalogue<'a> {
         }
     }
 
-    pub fn get(&mut self, id: &str) -> miette::Result<&mut Box<dyn LoxCallable>> {
+    pub fn get(&mut self, id: &str) -> miette::Result<Rc<RefCell<dyn LoxCallable>>> {
         if let Some(var) = self.storage.get_mut(id) {
-            Ok(var)
+            Ok(var.clone())
         } else {
             Err(miette!("Undefined identifier: '{id}'"))
         }
     }
 
-    pub fn define(&mut self, id: &'a str, initializer: Box<dyn LoxCallable>) {
+    pub fn define(&mut self, id: &'a str, initializer: Rc<RefCell<dyn LoxCallable>>) {
         self.storage.entry(id).or_insert(initializer);
     }
 }
@@ -49,11 +51,12 @@ impl LoxCallable for Clock {
     }
 }
 
-pub struct Function {
+pub struct Function<'a> {
     arity: usize,
+    body: Rc<&'a Stmt<'a>>,
 }
 
-impl LoxCallable for Function {
+impl<'a> LoxCallable for Function<'a> {
     fn arity(&self) -> usize {
         self.arity
     }
@@ -63,8 +66,8 @@ impl LoxCallable for Function {
     }
 }
 
-impl Function {
-    pub fn new(arity: usize) -> Self {
-        Self { arity }
+impl<'a> Function<'a> {
+    pub fn new(arity: usize, body: Rc<&'a Stmt<'a>>) -> Self {
+        Self { arity, body }
     }
 }
