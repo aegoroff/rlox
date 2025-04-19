@@ -31,9 +31,125 @@ impl<'a> Parser<'a> {
         let current = self.tokens.peek()?;
         if let Ok((_, Token::Var, _)) = current {
             self.var_declaration()
+        } else if let Ok((_, Token::Fun, _)) = current {
+            self.function("function")
         } else {
             self.statement()
         }
+    }
+
+    fn function(&mut self, kind: &'static str) -> Option<miette::Result<Stmt<'a>>> {
+        let t = self.tokens.next(); // consume FUN token TODO: include FUN start position into stmt location
+        let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
+        // IMPORTANT: dont call expression here so as not to conflict with assignment
+        let name = match self.or_expression() {
+            Some(result) => match result {
+                Ok(expr) => {
+                    finish = *expr.location.end();
+                    match expr.kind {
+                        ExprKind::Variable(token) => Ok(token),
+                        _ => Err(miette!("Invalid variable name")),
+                    }
+                }
+                Err(e) => Err(e),
+            },
+            None => Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    format!("{kind} name expected after this")
+                )],
+                "Missing {kind} name"
+            )),
+        };
+        let name = match name {
+            Ok(name) => name,
+            Err(e) => return Some(Err(e)),
+        };
+
+        if let Err(e) = self.consume(Token::LeftParen) {
+            return Some(Err(e));
+        };
+        let mut args = vec![];
+        if !self.matches(&[Token::RightParen]) {
+            loop {
+                let (arg_start, arg, arg_end) = match self.tokens.next() {
+                    Some(Ok(expr)) => expr,
+                    Some(Err(e)) => return Some(Err(e)),
+                    None => return None,
+                };
+
+                if args.len() >= 255 {
+                    return Some(Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            start..=finish,
+                            "Cant have more then 255 arguments"
+                        )],
+                        "Arguments number exceeded"
+                    )));
+                }
+                if let Token::Identifier(_) = arg {
+                    let arg = Expr {
+                        kind: ExprKind::Variable(arg),
+                        location: arg_start..=arg_end,
+                    };
+                    args.push(Box::new(arg));
+                } else {
+                    return Some(Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            arg_start..=arg_end,
+                            "Invalid argument definition"
+                        )],
+                        "Invalid argument definition"
+                    )));
+                }
+
+                if !self.matches(&[Token::Comma]) {
+                    break;
+                }
+            }
+            if let Err(e) = self.consume(Token::RightParen) {
+                return Some(Err(e));
+            }
+        }
+
+        let Some(left_paren) = self.tokens.peek() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    format!("{kind} block expected after this")
+                )],
+                "Missing {kind} block"
+            )));
+        };
+
+        if let Err(e) = left_paren {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(start..=finish, e.to_string())],
+                "Missing {kind} block"
+            )));
+        }
+
+        let block = match self.block() {
+            Some(Ok(b)) => b,
+            Some(Err(e)) => return Some(Err(e)),
+            None => {
+                return Some(Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        start..=finish,
+                        format!("Missing {kind} block")
+                    )],
+                    "Missing {kind} block"
+                )));
+            }
+        };
+
+        let end_block = *block.location.end();
+        let kind = StmtKind::Function(name, args, Box::new(block));
+
+        Some(Ok(Stmt {
+            kind,
+            location: start..=end_block,
+        }))
     }
 
     fn var_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {

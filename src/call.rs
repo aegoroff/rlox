@@ -2,11 +2,13 @@
 
 use miette::miette;
 use std::{
+    cell::RefCell,
     collections::HashMap,
+    rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::ast::LoxCallable;
+use crate::ast::{Interpreter, LoxCallable};
 
 pub const CLOCK: &str = "clock";
 
@@ -21,8 +23,8 @@ impl<'a> Catalogue<'a> {
         }
     }
 
-    pub fn get(&self, id: &str) -> miette::Result<&Box<dyn LoxCallable>> {
-        if let Some(var) = self.storage.get(id) {
+    pub fn get(&mut self, id: &str) -> miette::Result<&mut Box<dyn LoxCallable>> {
+        if let Some(var) = self.storage.get_mut(id) {
             Ok(var)
         } else {
             Err(miette!("Undefined identifier: '{id}'"))
@@ -41,10 +43,31 @@ impl LoxCallable for Clock {
         0
     }
 
-    fn call(&self, _: &[crate::ast::LoxValue]) -> crate::ast::LoxValue {
+    fn call(&mut self, _: &[crate::ast::LoxValue]) -> crate::ast::LoxValue {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
         let seconds = since_the_epoch.as_secs();
         crate::ast::LoxValue::Number(seconds as f64)
+    }
+}
+
+pub struct Function<'a, W: std::io::Write> {
+    interpreter: Rc<RefCell<Interpreter<'a, W>>>,
+    arity: usize,
+}
+
+impl<W: std::io::Write> LoxCallable for Function<'_, W> {
+    fn arity(&self) -> usize {
+        self.arity
+    }
+
+    fn call(&mut self, arguments: &[crate::ast::LoxValue]) -> crate::ast::LoxValue {
+        todo!()
+    }
+}
+
+impl<'a, W: std::io::Write> Function<'a, W> {
+    pub fn new(interpreter: Rc<RefCell<Interpreter<'a, W>>>, arity: usize) -> Self {
+        Self { interpreter, arity }
     }
 }

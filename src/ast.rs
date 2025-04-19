@@ -44,8 +44,8 @@ pub trait StmtVisitor<'a, R> {
     fn visit_function_stmt(
         &mut self,
         token: &Token<'a>,
-        params: &[Box<Stmt<'a>>],
-        body: &[Box<Stmt<'a>>],
+        params: &[Box<Expr<'a>>],
+        body: &Stmt<'a>,
     ) -> R;
     fn visit_if_stmt(
         &mut self,
@@ -61,7 +61,7 @@ pub trait StmtVisitor<'a, R> {
 
 pub trait LoxCallable {
     fn arity(&self) -> usize;
-    fn call(&self, arguments: &[LoxValue]) -> LoxValue;
+    fn call(&mut self, arguments: &[LoxValue]) -> LoxValue;
 }
 
 // Expressions
@@ -145,7 +145,7 @@ pub enum StmtKind<'a> {
     Class(Token<'a>, Box<Stmt<'a>>, Vec<Box<Stmt<'a>>>),
     Expression(Box<Expr<'a>>),
     /// token, params, body
-    Function(Token<'a>, Vec<Box<Stmt<'a>>>, Vec<Box<Stmt<'a>>>),
+    Function(Token<'a>, Vec<Box<Expr<'a>>>, Box<Stmt<'a>>),
     /// condition, then, else
     If(
         Box<Expr<'a>>,
@@ -521,7 +521,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        let callables = self.callables.borrow();
+        let mut callables = self.callables.borrow_mut();
         if let LoxValue::Callable(ref id) = callee {
             let callee = callables.get(id)?;
 
@@ -657,8 +657,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     fn visit_function_stmt(
         &mut self,
         token: &Token<'a>,
-        params: &[Box<Stmt<'a>>],
-        body: &[Box<Stmt<'a>>],
+        params: &[Box<Expr<'a>>],
+        body: &Stmt<'a>,
     ) -> miette::Result<()> {
         let _ = body;
         let _ = params;
