@@ -797,7 +797,7 @@ mod tests {
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
     #[test_case("if (clock() > 0) print \"good\"; else print \"impossible\";", "good" ; "call in predicate")]
-    //#[test_case("print x(1);", "" ; "simple call one arg")]
+    #[test_case("fun x(v) {}; print x(1);", "" ; "simple call one arg")]
     //#[test_case("print x(1, 2);", "" ; "simple call two args")]
     //#[test_case("print x()(1, 2);", "" ; "cascade call")]
     fn eval_single_result_tests(input: &str, expected: &str) {
