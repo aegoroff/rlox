@@ -264,7 +264,7 @@ const ERROR_MARGIN: f64 = 0.00001;
 
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Current environment that keeps current scope vars. Global by default
-    environment: Rc<RefCell<Environment<'a>>>,
+    environment: Rc<RefCell<Environment>>,
     callables: Rc<RefCell<Catalogue<'a>>>,
     writer: W,
 }
@@ -274,9 +274,10 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     pub fn new(writer: W) -> Self {
         let environment = Rc::new(RefCell::new(Environment::new()));
         let callables = Rc::new(RefCell::new(Catalogue::new()));
-        environment
-            .borrow_mut()
-            .define(call::CLOCK, LoxValue::Callable(call::CLOCK.to_owned()));
+        environment.borrow_mut().define(
+            call::CLOCK.to_string(),
+            LoxValue::Callable(call::CLOCK.to_owned()),
+        );
         callables
             .borrow_mut()
             .define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
@@ -493,7 +494,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 Ok(val) => {
                     self.environment
                         .borrow_mut()
-                        .assign(id, val.clone())
+                        .assign(id.to_string(), val.clone())
                         .map_err(|e| {
                             miette!(
                                 labels = vec![LabeledSpan::at(location, e.to_string())],
@@ -552,11 +553,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                     let enclosing = Rc::clone(&self.environment);
                     let child = Environment::child(enclosing);
                     self.environment = Rc::new(RefCell::new(child));
-                    // for arg in args {
-                    //     if let LoxValue::String(id) = arg {
-                    //         self.environment.borrow_mut().define(&id, LoxValue::Nil);
-                    //     }
-                    // }
+                    for arg in args {
+                        if let LoxValue::String(id) = arg {
+                            self.environment.borrow_mut().define(id, LoxValue::Nil);
+                        }
+                    }
                     //stmt.accept(self);
                     self.environment = prev;
                     Ok(LoxValue::Nil)
@@ -687,7 +688,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             }
             self.environment
                 .borrow_mut()
-                .define(id, LoxValue::Callable(id.to_string()));
+                .define(id.to_string(), LoxValue::Callable(id.to_string()));
             let callable = Function::new(params.len(), body);
             let callable = Rc::new(RefCell::new(callable));
             self.callables.borrow_mut().define(id, callable);
@@ -768,11 +769,13 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if let Token::Identifier(id) = name {
             if let Some(v) = initializer {
                 match v.accept(self) {
-                    Ok(val) => self.environment.borrow_mut().define(id, val),
+                    Ok(val) => self.environment.borrow_mut().define(id.to_string(), val),
                     Err(e) => return Err(e),
                 }
             } else {
-                self.environment.borrow_mut().define(id, LoxValue::Nil);
+                self.environment
+                    .borrow_mut()
+                    .define(id.to_string(), LoxValue::Nil);
             }
             Ok(())
         } else {

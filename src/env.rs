@@ -3,12 +3,12 @@ use miette::miette;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Default)]
-pub struct Environment<'a> {
-    storage: HashMap<&'a str, LoxValue>,
-    enclosing: Option<Rc<RefCell<Environment<'a>>>>,
+pub struct Environment {
+    storage: HashMap<String, LoxValue>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
-impl<'a> Environment<'a> {
+impl Environment {
     pub fn new() -> Self {
         Self {
             storage: HashMap::new(),
@@ -16,7 +16,7 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn child(enclosing: Rc<RefCell<Environment<'a>>>) -> Self {
+    pub fn child(enclosing: Rc<RefCell<Environment>>) -> Self {
         Self {
             storage: HashMap::new(),
             enclosing: Some(enclosing),
@@ -33,16 +33,16 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn define(&mut self, id: &'a str, initializer: LoxValue) {
-        if self.storage.contains_key(id) {
+    pub fn define(&mut self, id: String, initializer: LoxValue) {
+        if self.storage.contains_key(&id) {
             let _ = self.assign(id, initializer);
         } else {
             self.storage.entry(id).or_insert(initializer);
         }
     }
 
-    pub fn assign(&mut self, id: &'a str, initializer: LoxValue) -> miette::Result<()> {
-        if self.storage.contains_key(id) {
+    pub fn assign(&mut self, id: String, initializer: LoxValue) -> miette::Result<()> {
+        if self.storage.contains_key(&id) {
             self.storage.entry(id).and_modify(|e| *e = initializer);
             Ok(())
         } else if let Some(enclosing) = &mut self.enclosing {
