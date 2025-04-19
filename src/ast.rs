@@ -669,7 +669,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                 .define(id, LoxValue::Callable(id.to_string()));
             let callable = Function::new(params.len());
             self.callables.borrow_mut().define(id, Box::new(callable));
-            body.accept(self)
+            // TODO: body must be linked to callable and interpreted only on call
+            Ok(())
         } else {
             Err(miette!("Invalid function"))
         }
