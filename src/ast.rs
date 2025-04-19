@@ -548,7 +548,17 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             match callee.call(arguments) {
                 CallResult::Value(lox_value) => Ok(lox_value),
                 CallResult::Code(stmt, args) => {
+                    let prev = Rc::clone(&self.environment);
+                    let enclosing = Rc::clone(&self.environment);
+                    let child = Environment::child(enclosing);
+                    self.environment = Rc::new(RefCell::new(child));
+                    // for arg in args {
+                    //     if let LoxValue::String(id) = arg {
+                    //         self.environment.borrow_mut().define(&id, LoxValue::Nil);
+                    //     }
+                    // }
                     //stmt.accept(self);
+                    self.environment = prev;
                     Ok(LoxValue::Nil)
                 }
             }
