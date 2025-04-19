@@ -56,7 +56,7 @@ pub struct Function<'a> {
     body: &'a Stmt<'a>,
 }
 
-impl<'a> LoxCallable for Function<'a> {
+impl LoxCallable for Function<'_> {
     fn arity(&self) -> usize {
         self.arity
     }
