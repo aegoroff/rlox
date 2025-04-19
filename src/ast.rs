@@ -310,12 +310,12 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         &'b mut self,
         statements: impl Iterator<Item = Rc<RefCell<&'b miette::Result<Stmt<'a>>>>>,
     ) -> miette::Result<()> {
-        let mut labels = vec![];
+        let mut errors = vec![];
 
-        let mut add_label = |e: &miette::Report| {
+        let mut add_error = |e: &miette::Report| {
             if let Some(label) = e.labels() {
                 for l in label {
-                    labels.push(l);
+                    errors.push(l);
                 }
             }
         };
@@ -325,16 +325,16 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             match stmt.as_ref() {
                 Ok(s) => {
                     if let Err(e) = s.accept(self) {
-                        add_label(&e);
+                        add_error(&e);
                     }
                 }
-                Err(e) => add_label(e),
+                Err(e) => add_error(e),
             }
         }
-        if labels.is_empty() {
+        if errors.is_empty() {
             Ok(())
         } else {
-            Err(miette!(labels = labels, "Program completed with errors"))
+            Err(miette!(labels = errors, "Program completed with errors"))
         }
     }
 }
