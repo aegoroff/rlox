@@ -2,13 +2,11 @@
 
 use miette::miette;
 use std::{
-    cell::RefCell,
     collections::HashMap,
-    rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::ast::{Interpreter, LoxCallable};
+use crate::ast::LoxCallable;
 
 pub const CLOCK: &str = "clock";
 
@@ -51,12 +49,11 @@ impl LoxCallable for Clock {
     }
 }
 
-pub struct Function<'a, W: std::io::Write> {
-    interpreter: Rc<RefCell<Interpreter<'a, W>>>,
+pub struct Function {
     arity: usize,
 }
 
-impl<W: std::io::Write> LoxCallable for Function<'_, W> {
+impl LoxCallable for Function {
     fn arity(&self) -> usize {
         self.arity
     }
@@ -66,8 +63,8 @@ impl<W: std::io::Write> LoxCallable for Function<'_, W> {
     }
 }
 
-impl<'a, W: std::io::Write> Function<'a, W> {
-    pub fn new(interpreter: Rc<RefCell<Interpreter<'a, W>>>, arity: usize) -> Self {
-        Self { interpreter, arity }
+impl Function {
+    pub fn new(arity: usize) -> Self {
+        Self { arity }
     }
 }

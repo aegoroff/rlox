@@ -42,13 +42,14 @@ impl<'a> Parser<'a> {
         let t = self.tokens.next(); // consume FUN token TODO: include FUN start position into stmt location
         let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
         // IMPORTANT: dont call expression here so as not to conflict with assignment
-        let name = match self.or_expression() {
+        let name = match self.primary() {
             Some(result) => match result {
                 Ok(expr) => {
                     finish = *expr.location.end();
                     match expr.kind {
-                        ExprKind::Variable(token) => Ok(token),
-                        _ => Err(miette!("Invalid variable name")),
+                        ExprKind::Literal(token) => Ok(token),
+                        ExprKind::Variable(token) => Ok(Some(token)),
+                        _ => Err(miette!("Invalid {kind} name")),
                     }
                 }
                 Err(e) => Err(e),
@@ -144,7 +145,7 @@ impl<'a> Parser<'a> {
         };
 
         let end_block = *block.location.end();
-        let kind = StmtKind::Function(name, args, Box::new(block));
+        let kind = StmtKind::Function(name?, args, Box::new(block));
 
         Some(Ok(Stmt {
             kind,
