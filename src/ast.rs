@@ -59,9 +59,14 @@ pub trait StmtVisitor<'a, R> {
     fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) -> R;
 }
 
-pub trait LoxCallable {
+pub trait LoxCallable<'a> {
     fn arity(&self) -> usize;
-    fn call(&mut self, arguments: &[LoxValue]) -> LoxValue;
+    fn call(&mut self, arguments: Vec<LoxValue>) -> CallResult<'a>;
+}
+
+pub enum CallResult<'a> {
+    Value(LoxValue),
+    Code(&'a Stmt<'a>, Vec<LoxValue>),
 }
 
 // Expressions
@@ -540,8 +545,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 ));
             }
 
-            let result = callee.call(&arguments);
-            Ok(result)
+            match callee.call(arguments) {
+                CallResult::Value(lox_value) => Ok(lox_value),
+                CallResult::Code(stmt, args) => {
+                    //stmt.accept(self);
+                    Ok(LoxValue::Nil)
+                }
+            }
         } else {
             Err(miette!(
                 labels = vec![LabeledSpan::at(location, "Invalid callable type")],
