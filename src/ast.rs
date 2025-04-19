@@ -41,7 +41,7 @@ pub trait StmtVisitor<'a, R> {
         methods: &[Box<Stmt<'a>>],
     ) -> R;
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
-    fn visit_function_stmt(
+    fn visit_function_decl_stmt(
         &mut self,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
@@ -127,7 +127,7 @@ impl<'a> Stmt<'a> {
             StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, stmt, stmts),
             StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
             StmtKind::Function(token, params, body) => {
-                visitor.visit_function_stmt(token, params, body)
+                visitor.visit_function_decl_stmt(token, params, body)
             }
             StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
             StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
@@ -654,7 +654,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         Ok(())
     }
 
-    fn visit_function_stmt(
+    fn visit_function_decl_stmt(
         &mut self,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
