@@ -554,9 +554,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                     let child = Environment::child(enclosing);
                     self.environment = Rc::new(RefCell::new(child));
                     for arg in args {
-                        if let LoxValue::String(id) = arg {
-                            self.environment.borrow_mut().define(id, LoxValue::Nil);
-                        }
+                        // TODO: get correct arguments names
+                        self.environment.borrow_mut().define("".to_string(), arg);
                     }
                     //stmt.accept(self);
                     self.environment = prev;
@@ -689,6 +688,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             self.environment
                 .borrow_mut()
                 .define(id.to_string(), LoxValue::Callable(id.to_string()));
+            // TODO: pass arguments to callable
             let callable = Function::new(params.len(), body);
             let callable = Rc::new(RefCell::new(callable));
             self.callables.borrow_mut().define(id, callable);
