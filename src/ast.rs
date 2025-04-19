@@ -668,7 +668,6 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             self.environment
                 .borrow_mut()
                 .define(id, LoxValue::Callable(id.to_string()));
-            let body = Rc::new(body);
             let callable = Function::new(params.len(), body);
             let callable = Rc::new(RefCell::new(callable));
             self.callables.borrow_mut().define(id, callable);

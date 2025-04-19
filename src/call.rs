@@ -53,7 +53,7 @@ impl LoxCallable for Clock {
 
 pub struct Function<'a> {
     arity: usize,
-    body: Rc<&'a Stmt<'a>>,
+    body: &'a Stmt<'a>,
 }
 
 impl<'a> LoxCallable for Function<'a> {
@@ -67,7 +67,7 @@ impl<'a> LoxCallable for Function<'a> {
 }
 
 impl<'a> Function<'a> {
-    pub fn new(arity: usize, body: Rc<&'a Stmt<'a>>) -> Self {
+    pub fn new(arity: usize, body: &'a Stmt<'a>) -> Self {
         Self { arity, body }
     }
 }
