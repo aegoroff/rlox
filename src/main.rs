@@ -72,7 +72,7 @@ fn scan(content: String) -> miette::Result<()> {
     let mut interpreter = Interpreter::new(stdout());
     interpreter
         .interpret(&mut parser)
-        .map_err(|err| err.with_source_code(content))?;
+        .map_err(|err| err.with_source_code(content.clone()))?;
 
     Ok(())
 }

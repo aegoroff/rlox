@@ -13,7 +13,7 @@ use crate::ast::{LoxCallable, Stmt};
 pub const CLOCK: &str = "clock";
 
 pub struct Catalogue<'a> {
-    storage: HashMap<&'a str, Rc<RefCell<dyn LoxCallable>>>,
+    storage: HashMap<&'a str, Rc<RefCell<dyn LoxCallable + 'a>>>,
 }
 
 impl<'a> Catalogue<'a> {
@@ -23,7 +23,7 @@ impl<'a> Catalogue<'a> {
         }
     }
 
-    pub fn get(&mut self, id: &str) -> miette::Result<Rc<RefCell<dyn LoxCallable>>> {
+    pub fn get(&mut self, id: &str) -> miette::Result<Rc<RefCell<dyn LoxCallable + 'a>>> {
         if let Some(var) = self.storage.get_mut(id) {
             Ok(var.clone())
         } else {
@@ -31,7 +31,7 @@ impl<'a> Catalogue<'a> {
         }
     }
 
-    pub fn define(&mut self, id: &'a str, initializer: Rc<RefCell<dyn LoxCallable>>) {
+    pub fn define(&mut self, id: &'a str, initializer: Rc<RefCell<dyn LoxCallable + 'a>>) {
         self.storage.entry(id).or_insert(initializer);
     }
 }
