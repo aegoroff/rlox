@@ -53,22 +53,28 @@ impl<'a> LoxCallable<'a> for Clock {
 }
 
 pub struct Function<'a> {
-    arity: usize,
+    parameters: Vec<&'a str>,
     body: &'a Stmt<'a>,
 }
 
 impl<'a> LoxCallable<'a> for Function<'a> {
     fn arity(&self) -> usize {
-        self.arity
+        self.parameters.len()
     }
 
     fn call(&mut self, arguments: Vec<LoxValue>) -> CallResult<'a> {
-        CallResult::Code(self.body, arguments)
+        let mapping: Vec<(String, LoxValue)> = self
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (v.to_string(), arguments[i].clone()))
+            .collect();
+        CallResult::Code(self.body, mapping)
     }
 }
 
 impl<'a> Function<'a> {
-    pub fn new(arity: usize, body: &'a Stmt<'a>) -> Self {
-        Self { arity, body }
+    pub fn new(parameters: Vec<&'a str>, body: &'a Stmt<'a>) -> Self {
+        Self { parameters, body }
     }
 }

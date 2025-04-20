@@ -66,7 +66,7 @@ pub trait LoxCallable<'a> {
 
 pub enum CallResult<'a> {
     Value(LoxValue),
-    Code(&'a Stmt<'a>, Vec<LoxValue>),
+    Code(&'a Stmt<'a>, Vec<(String, LoxValue)>),
 }
 
 // Expressions
@@ -548,14 +548,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
             match callee.call(arguments) {
                 CallResult::Value(lox_value) => Ok(lox_value),
-                CallResult::Code(stmt, args) => {
+                CallResult::Code(stmt, mapping) => {
                     let prev = Rc::clone(&self.environment);
                     let enclosing = Rc::clone(&self.environment);
                     let child = Environment::child(enclosing);
                     self.environment = Rc::new(RefCell::new(child));
-                    for arg in args {
-                        // TODO: get correct arguments names
-                        self.environment.borrow_mut().define("".to_string(), arg);
+                    for (name, val) in mapping.into_iter() {
+                        self.environment.borrow_mut().define(name, val);
                     }
                     //stmt.accept(self);
                     self.environment = prev;
@@ -688,8 +687,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             self.environment
                 .borrow_mut()
                 .define(id.to_string(), LoxValue::Callable(id.to_string()));
-            // TODO: pass arguments to callable
-            let callable = Function::new(params.len(), body);
+
+            let mut parameters = vec![];
+            for param in params {
+                if let ExprKind::Variable(Token::Identifier(name)) = &param.kind {
+                    parameters.push(*name);
+                }
+            }
+
+            let callable = Function::new(parameters, body);
             let callable = Rc::new(RefCell::new(callable));
             self.callables.borrow_mut().define(id, callable);
             Ok(())
