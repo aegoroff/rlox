@@ -1,5 +1,6 @@
 pub mod ast;
+mod call;
 mod env;
 pub mod lexer;
-mod call;
 pub mod parser;
+mod resolver;
