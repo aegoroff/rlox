@@ -1054,9 +1054,9 @@ impl<'a> Parser<'a> {
                             return Some(Err(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=finish,
-                                    "Expect ')' after grouping expression that starts here."
+                                    "Expect ')' after grouping expression that starts here"
                                 )],
-                                "Expect ')' after expression."
+                                "Expect ')' after expression"
                             )));
                         };
 
@@ -1070,9 +1070,9 @@ impl<'a> Parser<'a> {
                             Some(Err(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=finish,
-                                    "Expect ')' after grouping expression that starts here."
+                                    "Expect ')' after grouping expression that starts here"
                                 )],
-                                "Expect ')' after expression."
+                                "Expect ')' after expression"
                             )))
                         }
                     }
@@ -1086,7 +1086,7 @@ impl<'a> Parser<'a> {
             _ => Some(Err(miette!(
                 labels = vec![LabeledSpan::at(
                     start..finish,
-                    format!("Unexpected primary token: {tok}.")
+                    format!("Unexpected primary token '{tok}'")
                 )],
                 "Invalid syntax"
             ))),
