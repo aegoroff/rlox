@@ -1,6 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, fmt::Display, ops::RangeInclusive, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, fmt::Display, ops::RangeInclusive, rc::Rc};
 
 use miette::{LabeledSpan, SourceSpan, miette};
 
@@ -679,16 +679,26 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     ) -> miette::Result<()> {
         if let Token::Identifier(id) = token {
             if self.environment.borrow().get(id).is_ok() {
-                return Err(miette!("function of variable with '{id}' redefinition"));
+                return Err(miette!("function or variable with '{id}' redefinition"));
             }
             self.environment
                 .borrow_mut()
                 .define(id.to_string(), LoxValue::Callable(id.to_string()));
 
             let mut parameters = vec![];
+            let mut names = HashSet::new();
             for param in params {
                 if let ExprKind::Variable(Token::Identifier(name)) = &param.kind {
-                    parameters.push(*name);
+                    if !names.contains(name) {
+                        names.insert(*name);
+                        parameters.push(*name);
+                    } else {
+                        let location = param.location.clone();
+                        return Err(miette!(
+                            labels = vec![LabeledSpan::at(location, "Parameter redefinition")],
+                            "Parameter names must be unique"
+                        ));
+                    }
                 }
             }
 
