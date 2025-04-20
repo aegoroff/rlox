@@ -181,14 +181,14 @@ pub enum LoxValue {
     Number(f64),
     Bool(bool),
     Nil,
-    Callable(String),
+    Callable(&'static str, String),
 }
 
 impl Display for LoxValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxValue::String(s) => write!(f, "{s}"),
-            LoxValue::Callable(s) => write!(f, "{s}"),
+            LoxValue::Callable(kind, val) => write!(f, "<{kind} {val}>"),
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
@@ -286,7 +286,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         let mut callables = Box::new(Catalogue::new());
         environment.borrow_mut().define(
             call::CLOCK.to_string(),
-            LoxValue::Callable(call::CLOCK.to_owned()),
+            LoxValue::Callable("native", call::CLOCK.to_owned()),
         );
         callables.define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
         Self {
@@ -563,7 +563,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        if let LoxValue::Callable(ref id) = callee {
+        if let LoxValue::Callable(_, ref id) = callee {
             let callee = self.callables.get(id)?;
             let callee = callee.borrow();
 
@@ -721,7 +721,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             }
             self.environment
                 .borrow_mut()
-                .define(id.to_string(), LoxValue::Callable(id.to_string()));
+                .define(id.to_string(), LoxValue::Callable("fn", id.to_string()));
 
             let mut parameters = vec![];
             let mut names = HashSet::new();
@@ -776,7 +776,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                     Ok(())
                 }
             }
-            LoxValue::String(_) | LoxValue::Number(_) | LoxValue::Callable(_) => {
+            LoxValue::String(_) | LoxValue::Number(_) | LoxValue::Callable(_, _) => {
                 let then = match then {
                     Ok(s) => s,
                     Err(e) => return Err(miette!(e.to_string())),
