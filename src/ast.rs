@@ -1,8 +1,11 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, collections::HashSet, fmt::Display, ops::RangeInclusive, rc::Rc};
+use std::{
+    cell::RefCell, collections::HashSet, fmt::Display, iter::once, ops::RangeInclusive, rc::Rc,
+};
 
-use miette::{LabeledSpan, SourceSpan, miette};
+use miette::{Diagnostic, LabeledSpan, SourceSpan, miette};
+use thiserror::Error;
 
 use crate::{
     call::{self, Catalogue, Clock, Function},
@@ -45,7 +48,7 @@ pub trait StmtVisitor<'a, R> {
         &mut self,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
-        body: &'a Stmt<'a>,
+        body: &'a miette::Result<Stmt<'a>>,
     ) -> R;
     fn visit_if_stmt(
         &mut self,
@@ -66,7 +69,14 @@ pub trait LoxCallable<'a> {
 
 pub enum CallResult<'a> {
     Value(LoxValue),
-    Code(&'a Stmt<'a>, Vec<(String, LoxValue)>),
+    Code(&'a miette::Result<Stmt<'a>>, Vec<(String, LoxValue)>),
+}
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Program flow error")]
+#[diagnostic()]
+pub enum ProgramError {
+    Return(LoxValue),
 }
 
 // Expressions
@@ -150,7 +160,7 @@ pub enum StmtKind<'a> {
     Class(Token<'a>, Box<Stmt<'a>>, Vec<Box<Stmt<'a>>>),
     Expression(Box<Expr<'a>>),
     /// token, params, body
-    Function(Token<'a>, Vec<Box<Expr<'a>>>, Box<Stmt<'a>>),
+    Function(Token<'a>, Vec<Box<Expr<'a>>>, Box<miette::Result<Stmt<'a>>>),
     /// condition, then, else
     If(
         Box<Expr<'a>>,
@@ -165,7 +175,7 @@ pub enum StmtKind<'a> {
 
 // Values
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum LoxValue {
     String(String),
     Number(f64),
@@ -329,6 +339,13 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             match stmt.as_ref() {
                 Ok(s) => {
                     if let Err(e) = s.accept(self) {
+                        if let Some(ProgramError::Return(_)) = e.downcast_ref::<ProgramError>() {
+                            // break interpretation
+                            // error will be handled later
+                            return Err(e);
+                        } else {
+                            add_error(&e);
+                        }
                         add_error(&e);
                     }
                 }
@@ -340,6 +357,27 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         } else {
             Err(miette!(labels = errors, "Program completed with errors"))
         }
+    }
+
+    fn visit_block(
+        &mut self,
+        statements: impl Iterator<Item = Rc<RefCell<&'a miette::Result<Stmt<'a>>>>>,
+        context: Option<Vec<(String, LoxValue)>>,
+    ) -> miette::Result<()> {
+        let prev = self.environment.clone();
+        let enclosing = prev.clone();
+        let child = Environment::child(enclosing);
+        self.environment = Rc::new(RefCell::new(child));
+
+        if let Some(mapping) = context {
+            for (name, val) in mapping.into_iter() {
+                self.environment.borrow_mut().define(name, val);
+            }
+        }
+
+        let result = self.accept_all(statements);
+        self.environment = prev;
+        result
     }
 }
 
@@ -546,16 +584,22 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             match callee.call(arguments) {
                 CallResult::Value(lox_value) => Ok(lox_value),
                 CallResult::Code(stmt, mapping) => {
-                    let prev = self.environment.clone();
-                    let enclosing = prev.clone();
-                    let child = Environment::child(enclosing);
-                    self.environment = Rc::new(RefCell::new(child));
-                    for (name, val) in mapping.into_iter() {
-                        self.environment.borrow_mut().define(name, val);
+                    let body = Rc::new(RefCell::new(stmt));
+                    let result = self.visit_block(once(body), Some(mapping));
+                    match result {
+                        Ok(_) => Ok(LoxValue::Nil),
+                        Err(e) => {
+                            if let Some(ProgramError::Return(val)) =
+                                e.downcast_ref::<ProgramError>()
+                            {
+                                // Return handling case
+                                Ok(val.clone())
+                            } else {
+                                println!("visit_call_expr: {e}");
+                                Err(e)
+                            }
+                        }
                     }
-                    stmt.accept(self)?;
-                    self.environment = prev;
-                    Ok(LoxValue::Nil)
                 }
             }
         } else {
@@ -644,14 +688,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
-        let prev = self.environment.clone();
-        let enclosing = prev.clone();
-        let child = Environment::child(enclosing);
-        self.environment = Rc::new(RefCell::new(child));
         let it = body.iter().map(|item| Rc::new(RefCell::new(item)));
-        let result = self.accept_all(it);
-        self.environment = prev;
-        result
+        self.visit_block(it, None)?;
+        Ok(())
     }
 
     fn visit_class_stmt(
@@ -675,7 +714,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         &mut self,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
-        body: &'a Stmt<'a>,
+        body: &'a miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
         if let Token::Identifier(id) = token {
             if self.environment.borrow().get(id).is_ok() {
@@ -761,8 +800,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
     fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
         match self.evaluate(expr) {
-            Ok(e) => {
-                writeln!(self.writer, "{e}").map_err(|e| miette!(e))?;
+            Ok(val) => {
+                writeln!(self.writer, "{val}").map_err(|e| miette!(e))?;
             }
             Err(e) => {
                 return Err(e);
@@ -772,9 +811,9 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     }
 
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
-        let _ = value;
         let _ = keyword;
-        todo!()
+        let val = self.evaluate(value)?;
+        Err(ProgramError::Return(val).into())
     }
 
     fn visit_variable_stmt(
@@ -850,7 +889,8 @@ mod tests {
     #[test_case("fun x(v) { print v; } print x(10);", "10" ; "simple call one arg")]
     #[test_case("fun sum(a1, a2) { print a1 + a2; } sum(1, 2);", "3" ; "simple call two args")]
     #[test_case("fun sum_and_decr(a1, a2) { var x = a1 + a2 - 1; print x; } sum_and_decr(1, 2);", "2" ; "function with two statements")]
-    //#[test_case("print x()(1, 2);", "" ; "cascade call")]
+    #[test_case("fun foo(x) { return x + 1; } print foo(1);", "2" ; "function with return")]
+    #[test_case("fun foo() { return bar; } fun bar(x, y) { return x + y; } print foo()(1, 2);", "3" ; "cascade call")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

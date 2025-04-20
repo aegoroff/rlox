@@ -54,7 +54,7 @@ impl<'a> LoxCallable<'a> for Clock {
 
 pub struct Function<'a> {
     parameters: Vec<&'a str>,
-    body: &'a Stmt<'a>,
+    body: &'a miette::Result<Stmt<'a>>,
 }
 
 impl<'a> LoxCallable<'a> for Function<'a> {
@@ -74,7 +74,7 @@ impl<'a> LoxCallable<'a> for Function<'a> {
 }
 
 impl<'a> Function<'a> {
-    pub fn new(parameters: Vec<&'a str>, body: &'a Stmt<'a>) -> Self {
+    pub fn new(parameters: Vec<&'a str>, body: &'a miette::Result<Stmt<'a>>) -> Self {
         Self { parameters, body }
     }
 }

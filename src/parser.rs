@@ -131,8 +131,7 @@ impl<'a> Parser<'a> {
         }
 
         let block = match self.block() {
-            Some(Ok(b)) => b,
-            Some(Err(e)) => return Some(Err(e)),
+            Some(b) => b,
             None => {
                 return Some(Err(miette!(
                     labels = vec![LabeledSpan::at(
@@ -144,12 +143,11 @@ impl<'a> Parser<'a> {
             }
         };
 
-        let end_block = *block.location.end();
         let kind = StmtKind::Function(name?, args, Box::new(block));
 
         Some(Ok(Stmt {
             kind,
-            location: start..=end_block,
+            location: start..=finish,
         }))
     }
 
@@ -233,6 +231,7 @@ impl<'a> Parser<'a> {
             Ok((_, Token::While, _)) => self.while_statement(),
             Ok((_, Token::For, _)) => self.for_statement(),
             Ok((_, Token::Print, _)) => self.print_statement(),
+            Ok((_, Token::Return, _)) => self.return_statement(),
             Ok((_, Token::LeftBrace, _)) => self.block(),
             _ => self.expr_statement(),
         }
@@ -450,6 +449,27 @@ impl<'a> Parser<'a> {
                 Some(Ok(Stmt { kind, location }))
             }
             Err(e) => Some(Err(e)),
+        }
+    }
+
+    fn return_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        if let Some(Ok((start, keyword, end))) = self.tokens.next() {
+            let expr = if self.matches(&[Token::Semicolon]) {
+                Expr {
+                    kind: ExprKind::Literal(None),
+                    location: start..=end,
+                }
+            } else {
+                let Some(Ok(expr)) = self.semicolon_terminated_expression() else {
+                    return None;
+                };
+                expr
+            };
+            let location = start..=*expr.location.end();
+            let kind = StmtKind::Return(keyword, Box::new(expr));
+            Some(Ok(Stmt { kind, location }))
+        } else {
+            None
         }
     }
 
