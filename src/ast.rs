@@ -835,7 +835,8 @@ mod tests {
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
     #[test_case("if (clock() > 0) print \"good\"; else print \"impossible\";", "good" ; "call in predicate")]
     #[test_case("fun x(v) { print v; } print x(10);", "10" ; "simple call one arg")]
-    #[test_case("fun sum(a1, a2) { print a1 + a2; } print sum(1, 2);", "3" ; "simple call two args")]
+    #[test_case("fun sum(a1, a2) { print a1 + a2; } sum(1, 2);", "3" ; "simple call two args")]
+    #[test_case("fun sum_and_decr(a1, a2) { var x = a1 + a2 - 1; print x; } sum_and_decr(1, 2);", "2" ; "function with two statements")]
     //#[test_case("print x()(1, 2);", "" ; "cascade call")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
