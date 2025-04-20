@@ -69,7 +69,7 @@ pub trait LoxCallable<'a> {
 
 pub enum CallResult<'a> {
     Value(LoxValue),
-    Code(&'a miette::Result<Stmt<'a>>, Vec<(String, LoxValue)>),
+    Code(&'a miette::Result<Stmt<'a>>, Rc<RefCell<Environment>>),
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -362,19 +362,11 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     fn visit_block(
         &mut self,
         statements: impl Iterator<Item = Rc<RefCell<&'a miette::Result<Stmt<'a>>>>>,
-        context: Option<Vec<(String, LoxValue)>>,
+        enclosing: Rc<RefCell<Environment>>,
     ) -> miette::Result<()> {
         let prev = self.environment.clone();
-        let enclosing = prev.clone();
         let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
-
-        if let Some(mapping) = context {
-            for (name, val) in mapping.into_iter() {
-                self.environment.borrow_mut().define(name, val);
-            }
-        }
-
         let result = self.accept_all(statements);
         self.environment = prev;
         result
@@ -583,9 +575,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
             match callee.call(arguments) {
                 CallResult::Value(lox_value) => Ok(lox_value),
-                CallResult::Code(stmt, mapping) => {
+                CallResult::Code(stmt, closure) => {
                     let body = Rc::new(RefCell::new(stmt));
-                    let result = self.visit_block(once(body), Some(mapping));
+                    let result = self.visit_block(once(body), closure);
                     match result {
                         Ok(_) => Ok(LoxValue::Nil),
                         Err(e) => {
@@ -688,7 +680,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         let it = body.iter().map(|item| Rc::new(RefCell::new(item)));
-        self.visit_block(it, None)?;
+        self.visit_block(it, self.environment.clone())?;
         Ok(())
     }
 
@@ -743,7 +735,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                 }
             }
 
-            let callable = Function::new(parameters, body);
+            let callable = Function::new(parameters, body, self.environment.clone());
             let callable = Rc::new(RefCell::new(callable));
             self.callables.define(id, callable);
             Ok(())
@@ -890,6 +882,7 @@ mod tests {
     #[test_case("fun sum_and_decr(a1, a2) { var x = a1 + a2 - 1; print x; } sum_and_decr(1, 2);", "2" ; "function with two statements")]
     #[test_case("fun foo(x) { return x + 1; } print foo(1);", "2" ; "function with return")]
     #[test_case("fun foo() { return bar; } fun bar(x, y) { return x + y; } print foo()(1, 2);", "3" ; "cascade call")]
+    #[test_case("fun foo() { var i = 1; fun bar(x) { return i + x; } return bar; } print foo()(2);", "3" ; "closure")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

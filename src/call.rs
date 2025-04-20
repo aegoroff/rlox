@@ -8,7 +8,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::ast::{CallResult, LoxCallable, LoxValue, Stmt};
+use crate::{
+    ast::{CallResult, LoxCallable, LoxValue, Stmt},
+    env::Environment,
+};
 
 pub const CLOCK: &str = "clock";
 
@@ -55,6 +58,7 @@ impl<'a> LoxCallable<'a> for Clock {
 pub struct Function<'a> {
     parameters: Vec<&'a str>,
     body: &'a miette::Result<Stmt<'a>>,
+    closure: Rc<RefCell<Environment>>,
 }
 
 impl<'a> LoxCallable<'a> for Function<'a> {
@@ -63,18 +67,26 @@ impl<'a> LoxCallable<'a> for Function<'a> {
     }
 
     fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a> {
-        let mapping: Vec<(String, LoxValue)> = self
-            .parameters
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (v.to_string(), arguments[i].clone()))
-            .collect();
-        CallResult::Code(self.body, mapping)
+        for (i, name) in self.parameters.iter().enumerate() {
+            self.closure
+                .borrow_mut()
+                .define(name.to_string(), arguments[i].clone());
+        }
+
+        CallResult::Code(self.body, self.closure.clone())
     }
 }
 
 impl<'a> Function<'a> {
-    pub fn new(parameters: Vec<&'a str>, body: &'a miette::Result<Stmt<'a>>) -> Self {
-        Self { parameters, body }
+    pub fn new(
+        parameters: Vec<&'a str>,
+        body: &'a miette::Result<Stmt<'a>>,
+        closure: Rc<RefCell<Environment>>,
+    ) -> Self {
+        Self {
+            parameters,
+            body,
+            closure,
+        }
     }
 }
