@@ -695,7 +695,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                     } else {
                         let location = param.location.clone();
                         return Err(miette!(
-                            labels = vec![LabeledSpan::at(location, "Parameter redefinition")],
+                            labels = vec![LabeledSpan::at(
+                                location,
+                                format!("Parameter '{name}' redefinition")
+                            )],
                             "Parameter names must be unique"
                         ));
                     }
