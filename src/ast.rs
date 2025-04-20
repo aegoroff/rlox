@@ -326,10 +326,14 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     ) -> miette::Result<()> {
         let mut errors = vec![];
 
+        let mut spans = HashSet::new();
         let mut add_error = |e: &miette::Report| {
             if let Some(label) = e.labels() {
                 for l in label {
-                    errors.push(l);
+                    if !spans.contains(&(l.len(), l.offset())) {
+                        spans.insert((l.len(), l.offset()));
+                        errors.push(l);
+                    }
                 }
             }
         };
