@@ -595,7 +595,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                                 // Return handling case
                                 Ok(val.clone())
                             } else {
-                                println!("visit_call_expr: {e}");
                                 Err(e)
                             }
                         }
