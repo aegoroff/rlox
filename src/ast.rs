@@ -546,8 +546,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             match callee.call(arguments) {
                 CallResult::Value(lox_value) => Ok(lox_value),
                 CallResult::Code(stmt, mapping) => {
-                    let prev = Rc::clone(&self.environment);
-                    let enclosing = Rc::clone(&self.environment);
+                    let prev = self.environment.clone();
+                    let enclosing = prev.clone();
                     let child = Environment::child(enclosing);
                     self.environment = Rc::new(RefCell::new(child));
                     for (name, val) in mapping.into_iter() {
@@ -644,8 +644,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
-        let prev = Rc::clone(&self.environment);
-        let enclosing = Rc::clone(&self.environment);
+        let prev = self.environment.clone();
+        let enclosing = prev.clone();
         let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
         let it = body.iter().map(|item| Rc::new(RefCell::new(item)));
