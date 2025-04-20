@@ -61,7 +61,7 @@ pub trait StmtVisitor<'a, R> {
 
 pub trait LoxCallable<'a> {
     fn arity(&self) -> usize;
-    fn call(&mut self, arguments: Vec<LoxValue>) -> CallResult<'a>;
+    fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a>;
 }
 
 pub enum CallResult<'a> {
@@ -265,7 +265,7 @@ const ERROR_MARGIN: f64 = 0.00001;
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Current environment that keeps current scope vars. Global by default
     environment: Rc<RefCell<Environment>>,
-    callables: Rc<RefCell<Catalogue<'a>>>,
+    callables: Box<Catalogue<'a>>,
     writer: W,
 }
 
@@ -273,14 +273,12 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         let environment = Rc::new(RefCell::new(Environment::new()));
-        let callables = Rc::new(RefCell::new(Catalogue::new()));
+        let mut callables = Box::new(Catalogue::new());
         environment.borrow_mut().define(
             call::CLOCK.to_string(),
             LoxValue::Callable(call::CLOCK.to_owned()),
         );
-        callables
-            .borrow_mut()
-            .define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
+        callables.define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
         Self {
             environment,
             writer,
@@ -527,10 +525,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        let mut callables = self.callables.borrow_mut();
         if let LoxValue::Callable(ref id) = callee {
-            let callee = callables.get(id)?;
-            let mut callee = callee.borrow_mut();
+            let callee = self.callables.get(id)?;
+            let callee = callee.borrow();
 
             let expected = callee.arity();
             let actual = arguments.len();
@@ -556,7 +553,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                     for (name, val) in mapping.into_iter() {
                         self.environment.borrow_mut().define(name, val);
                     }
-                    //stmt.accept(self);
+                    stmt.accept(self)?;
                     self.environment = prev;
                     Ok(LoxValue::Nil)
                 }
@@ -697,7 +694,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
             let callable = Function::new(parameters, body);
             let callable = Rc::new(RefCell::new(callable));
-            self.callables.borrow_mut().define(id, callable);
+            self.callables.define(id, callable);
             Ok(())
         } else {
             Err(miette!("Invalid function"))

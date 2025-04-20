@@ -43,7 +43,7 @@ impl<'a> LoxCallable<'a> for Clock {
         0
     }
 
-    fn call(&mut self, _: Vec<LoxValue>) -> CallResult<'a> {
+    fn call(&self, _: Vec<LoxValue>) -> CallResult<'a> {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
         let seconds = since_the_epoch.as_secs();
@@ -62,7 +62,7 @@ impl<'a> LoxCallable<'a> for Function<'a> {
         self.parameters.len()
     }
 
-    fn call(&mut self, arguments: Vec<LoxValue>) -> CallResult<'a> {
+    fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a> {
         let mapping: Vec<(String, LoxValue)> = self
             .parameters
             .iter()
