@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, ExprKind, ExprVisitor, Interpreter, StmtVisitor},
+    ast::{Expr, ExprVisitor, Interpreter, StmtVisitor},
     lexer::Token,
 };
 
@@ -61,10 +61,10 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     fn resolve_local(&mut self, expr: &Expr<'a>, name: &Token<'a>) {
         let mut i = self.scopes.len();
         for scope in self.scopes.iter().rev() {
-            let name = match &expr.kind {
-                ExprKind::Call(Token::Identifier(name), _, _) => name,
-                ExprKind::Variable(Token::Identifier(name)) => name,
-                _ => break,
+            let name = if let Token::Identifier(name) = name {
+                name
+            } else {
+                break;
             };
             i -= 1;
             if scope.contains_key(name) {
