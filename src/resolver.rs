@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, ExprVisitor, Interpreter, StmtVisitor},
+    ast::{Expr, ExprKind, ExprVisitor, Interpreter, StmtVisitor},
     lexer::Token,
 };
 
 pub struct Resolver<'a, W: std::io::Write> {
-    interpreter: &'a Interpreter<'a, W>,
+    interpreter: &'a mut Interpreter<'a, W>,
     scopes: Vec<HashMap<&'a str, bool>>,
 }
 
 impl<'a, W: std::io::Write> Resolver<'a, W> {
-    pub fn new(interpreter: &'a Interpreter<'a, W>) -> Self {
+    pub fn new(interpreter: &'a mut Interpreter<'a, W>) -> Self {
         Self {
             interpreter,
             scopes: vec![],
@@ -54,6 +54,22 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         if let Some(scope) = self.scopes.last_mut() {
             if let Token::Identifier(id) = token {
                 scope.insert(id, true);
+            }
+        }
+    }
+
+    fn resolve_local(&mut self, expr: &Expr<'a>, name: &Token<'a>) {
+        let mut i = self.scopes.len();
+        for scope in self.scopes.iter().rev() {
+            let name = match &expr.kind {
+                ExprKind::Call(Token::Identifier(name), _, _) => name,
+                ExprKind::Variable(Token::Identifier(name)) => name,
+                _ => break,
+            };
+            i -= 1;
+            if scope.contains_key(name) {
+                self.interpreter.resolve(expr, self.scopes.len() - 1 - i);
+                return;
             }
         }
     }
