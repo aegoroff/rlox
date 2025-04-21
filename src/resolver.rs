@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, ExprVisitor, Interpreter, StmtVisitor},
+    ast::{Expr, ExprKind, ExprVisitor, Interpreter, StmtVisitor},
     lexer::Token,
 };
 
@@ -94,7 +94,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
     }
 
     fn visit_expression_stmt(&mut self, expr: &crate::ast::Expr<'a>) {
-        let _ = expr;
+        self.resolve_expression(expr);
     }
 
     fn visit_function_decl_stmt(
@@ -103,10 +103,17 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         params: &[Box<crate::ast::Expr<'a>>],
         body: &'a miette::Result<crate::ast::Stmt<'a>>,
     ) {
-        let _ = body;
-        let _ = params;
-        let _ = token;
-        todo!()
+        self.declare(token);
+        self.define(token);
+        self.begin_scope();
+        for p in params {
+            if let ExprKind::Variable(p) = &p.kind {
+                self.declare(p);
+                self.define(p);
+            }
+        }
+        self.resolve_statement(body);
+        self.end_scope();
     }
 
     fn visit_if_stmt(
@@ -181,8 +188,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
     }
 
     fn visit_assign_expr(&mut self, name: &crate::lexer::Token<'a>, value: &crate::ast::Expr<'a>) {
-        let _ = value;
-        let _ = name;
+        self.resolve_expression(value);
+        self.resolve_local(value, name);
     }
 
     fn visit_call_expr(
