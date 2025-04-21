@@ -1,7 +1,12 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::{
-    cell::RefCell, collections::HashSet, fmt::Display, iter::once, ops::RangeInclusive, rc::Rc,
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    iter::once,
+    ops::RangeInclusive,
+    rc::Rc,
 };
 
 use miette::{Diagnostic, LabeledSpan, SourceSpan, miette};
@@ -277,6 +282,7 @@ pub struct Interpreter<'a, W: std::io::Write> {
     environment: Rc<RefCell<Environment>>,
     callables: Box<Catalogue<'a>>,
     writer: W,
+    locals: HashMap<&'a str, i32>,
 }
 
 impl<'a, W: std::io::Write> Interpreter<'a, W> {
@@ -293,6 +299,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             environment,
             writer,
             callables,
+            locals: HashMap::new(),
         }
     }
 
@@ -307,6 +314,18 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             labels.push(LabeledSpan::at(loc, e.to_string()));
             miette!(labels = labels, "Evaluation failed")
         })
+    }
+
+    pub fn resolve(&mut self, expr: &Expr<'a>, depth: i32) {
+        match &expr.kind {
+            ExprKind::Call(Token::Identifier(name), _, _) => {
+                self.locals.insert(name, depth);
+            }
+            ExprKind::Variable(Token::Identifier(name)) => {
+                self.locals.insert(name, depth);
+            }
+            _ => {}
+        }
     }
 
     pub fn interpret(
