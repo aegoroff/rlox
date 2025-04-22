@@ -260,7 +260,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
     }
 
     fn visit_variable_expr(&mut self, name: &crate::lexer::Token<'a>) {
-        let _ = name;
         if let Some(scope) = self.scopes.last() {
             if let Token::Identifier(id) = name {
                 if scope.contains_key(id) {
