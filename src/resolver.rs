@@ -73,6 +73,18 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
             }
         }
     }
+    
+    fn resolve_function(&mut self, params: &[Box<Expr<'a>>], body: &'a Result<crate::ast::Stmt<'a>, miette::Error>) {
+        self.begin_scope();
+        for p in params {
+            if let ExprKind::Variable(p) = &p.kind {
+                self.declare(p);
+                self.define(p);
+            }
+        }
+        self.resolve_statement(body);
+        self.end_scope();
+    }
 }
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
@@ -105,15 +117,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
     ) {
         self.declare(token);
         self.define(token);
-        self.begin_scope();
-        for p in params {
-            if let ExprKind::Variable(p) = &p.kind {
-                self.declare(p);
-                self.define(p);
-            }
-        }
-        self.resolve_statement(body);
-        self.end_scope();
+        self.resolve_function(params, body);
     }
 
     fn visit_if_stmt(
