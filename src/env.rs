@@ -33,6 +33,15 @@ impl Environment {
         }
     }
 
+    pub fn ancestor(&self, distance: usize) {
+        let mut env = self;
+        for _ in 0..distance {
+            if let Some(e) = &env.enclosing {
+                let s = e.borrow().enclosing.as_deref();
+            }
+        }
+    }
+
     pub fn define(&mut self, id: String, initializer: LoxValue) {
         if self.storage.contains_key(&id) {
             let _ = self.assign(id, initializer);

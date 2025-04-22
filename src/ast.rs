@@ -280,6 +280,7 @@ const ERROR_MARGIN: f64 = 0.00001;
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Current environment that keeps current scope vars. Global by default
     environment: Rc<RefCell<Environment>>,
+    globals: Rc<RefCell<Environment>>,
     callables: Box<Catalogue<'a>>,
     writer: W,
     locals: HashMap<&'a str, usize>,
@@ -289,14 +290,16 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         let environment = Rc::new(RefCell::new(Environment::new()));
+        let globals = environment.clone();
         let mut callables = Box::new(Catalogue::new());
-        environment.borrow_mut().define(
+        globals.borrow_mut().define(
             call::CLOCK.to_string(),
             LoxValue::Callable("native", call::CLOCK.to_owned()),
         );
         callables.define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
         Self {
             environment,
+            globals,
             writer,
             callables,
             locals: HashMap::new(),
@@ -399,6 +402,19 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         let result = self.accept_all(statements);
         self.environment = prev;
         result
+    }
+
+    fn lookup_variable(&self, name: &'a str) -> miette::Result<LoxValue> {
+        if let Some(distance) = self.locals.get(name) {
+            Ok(LoxValue::Nil) // TODO: lookup_variable
+        } else {
+            let val = self.globals.borrow().get(name)?;
+            if let LoxValue::Nil = val {
+                Err(miette!("Using uninitialized variable '{name}'"))
+            } else {
+                Ok(val)
+            }
+        }
     }
 }
 
