@@ -59,16 +59,17 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     }
 
     fn resolve_local(&mut self, expr: &Expr<'a>, name: &Token<'a>) {
+        let name = if let Token::Identifier(name) = name {
+            name
+        } else {
+            return;
+        };
         let mut i = self.scopes.len();
         for scope in self.scopes.iter().rev() {
-            let name = if let Token::Identifier(name) = name {
-                name
-            } else {
-                break;
-            };
             i -= 1;
             if scope.contains_key(name) {
-                self.interpreter.resolve(expr, self.scopes.len() - 1 - i);
+                self.interpreter
+                    .resolve_expr(expr, self.scopes.len() - 1 - i);
                 return;
             }
         }
@@ -265,6 +266,20 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
                 if scope.contains_key(id) {
                     // TODO: Error here
                 }
+            }
+        }
+        let id = if let Token::Identifier(name) = name {
+            name
+        } else {
+            return;
+        };
+        let mut i = self.scopes.len();
+        for scope in self.scopes.iter().rev() {
+            i -= 1;
+            if scope.contains_key(id) {
+                self.interpreter
+                    .resolve_token(name, self.scopes.len() - 1 - i);
+                return;
             }
         }
     }
