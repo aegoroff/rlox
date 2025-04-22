@@ -73,8 +73,12 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
             }
         }
     }
-    
-    fn resolve_function(&mut self, params: &[Box<Expr<'a>>], body: &'a Result<crate::ast::Stmt<'a>, miette::Error>) {
+
+    fn resolve_function(
+        &mut self,
+        params: &[Box<Expr<'a>>],
+        body: &'a Result<crate::ast::Stmt<'a>, miette::Error>,
+    ) {
         self.begin_scope();
         for p in params {
             if let ExprKind::Variable(p) = &p.kind {
@@ -126,13 +130,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         then: &'a miette::Result<crate::ast::Stmt<'a>>,
         otherwise: &'a Option<Box<miette::Result<crate::ast::Stmt<'a>>>>,
     ) {
-        let _ = otherwise;
-        let _ = then;
-        let _ = cond;
+        self.resolve_expression(cond);
+        self.resolve_statement(then);
+        if let Some(other) = otherwise {
+            self.resolve_statement(other);
+        }
     }
 
     fn visit_print_stmt(&mut self, expr: &crate::ast::Expr<'a>) {
-        let _ = expr;
+        self.resolve_expression(expr);
     }
 
     fn visit_return_stmt(
@@ -140,8 +146,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         keyword: &crate::lexer::Token<'a>,
         value: &crate::ast::Expr<'a>,
     ) {
-        let _ = value;
         let _ = keyword;
+        self.resolve_expression(value);
     }
 
     fn visit_variable_stmt(
@@ -161,8 +167,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         cond: &crate::ast::Expr<'a>,
         body: &'a miette::Result<crate::ast::Stmt<'a>>,
     ) {
-        let _ = body;
-        let _ = cond;
+        self.resolve_expression(cond);
+        self.resolve_statement(body);
     }
 }
 
@@ -177,9 +183,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
         left: &crate::ast::Expr<'a>,
         right: &crate::ast::Expr<'a>,
     ) {
-        let _ = right;
-        let _ = left;
         let _ = operator;
+        self.resolve_expression(left);
+        self.resolve_expression(right);
     }
 
     fn visit_unary_expr(
@@ -187,8 +193,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
         operator: &crate::lexer::Token<'a>,
         expr: &crate::ast::Expr<'a>,
     ) {
-        let _ = expr;
         let _ = operator;
+        self.resolve_expression(expr);
     }
 
     fn visit_assign_expr(&mut self, name: &crate::lexer::Token<'a>, value: &crate::ast::Expr<'a>) {
@@ -202,9 +208,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
         callee: &crate::ast::Expr<'a>,
         args: &[Box<crate::ast::Expr<'a>>],
     ) {
-        let _ = args;
-        let _ = callee;
         let _ = paren;
+        self.resolve_expression(callee);
+        for arg in args {
+            self.resolve_expression(arg);
+        }
     }
 
     fn visit_get_expr(&mut self, name: &crate::lexer::Token<'a>, object: &crate::ast::Expr<'a>) {
@@ -213,7 +221,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
     }
 
     fn visit_grouping_expr(&mut self, grouping: &crate::ast::Expr<'a>) {
-        let _ = grouping;
+        self.resolve_expression(grouping);
     }
 
     fn visit_logical_expr(
@@ -253,5 +261,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
 
     fn visit_variable_expr(&mut self, name: &crate::lexer::Token<'a>) {
         let _ = name;
+        if let Some(scope) = self.scopes.last() {
+            if let Token::Identifier(id) = name {
+                if scope.contains_key(id) {
+                    // TODO: Error here
+                }
+            }
+        }
     }
 }
