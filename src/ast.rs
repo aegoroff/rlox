@@ -892,7 +892,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::Parser;
+    use crate::{parser::Parser, resolver::Resolver};
 
     use super::*;
     use test_case::test_case;
@@ -932,10 +932,12 @@ mod tests {
         // Arrange
         let mut parser = Parser::new(input);
         let mut stdout = Vec::new();
-        let mut interpreter = Interpreter::new(&mut stdout);
+        let interpreter = Interpreter::new(&mut stdout);
+        let resolver = Resolver::new(interpreter);
+        let stmts: Vec<miette::Result<crate::ast::Stmt>> = parser.collect();
 
         // Act
-        let iterpretation_result = interpreter.interpret(&mut parser);
+        let iterpretation_result = resolver.interpret(stmts);
 
         // Assert
         if let Err(e) = iterpretation_result {

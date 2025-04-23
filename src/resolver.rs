@@ -6,31 +6,44 @@ use crate::{
 };
 
 pub struct Resolver<'a, W: std::io::Write> {
-    interpreter: &'a mut Interpreter<'a, W>,
+    interpreter: Interpreter<'a, W>,
     scopes: Vec<HashMap<&'a str, bool>>,
 }
 
 impl<'a, W: std::io::Write> Resolver<'a, W> {
-    pub fn new(interpreter: &'a mut Interpreter<'a, W>) -> Self {
+    pub fn new(interpreter: Interpreter<'a, W>) -> Self {
         Self {
             interpreter,
             scopes: vec![],
         }
     }
 
-    pub fn resolve_statement(&mut self, stmt: &'a miette::Result<crate::ast::Stmt<'a>>) {
+    pub fn interpret(
+        mut self,
+        stmts: Vec<miette::Result<crate::ast::Stmt<'a>>>,
+    ) -> miette::Result<()> {
+        // let refs = stmts
+        //     .iter()
+        //     .map(|x| &*Box::leak(Box::new(x)))
+        //     .map(|x| Rc::new(RefCell::new(x)))
+        //     .collect();
+        self.resolve_statements(stmts);
+        self.interpreter.interpret(stmts.into_iter())
+    }
+
+    fn resolve_statement(&mut self, stmt: &'a miette::Result<crate::ast::Stmt<'a>>) {
         if let Ok(stmt) = stmt {
             stmt.accept(self);
         }
     }
 
-    pub fn resolve_statements(&mut self, stmts: &'a [miette::Result<crate::ast::Stmt<'a>>]) {
+    fn resolve_statements(&mut self, stmts: &'a [miette::Result<crate::ast::Stmt<'a>>]) {
         for stmt in stmts {
             self.resolve_statement(stmt);
         }
     }
 
-    pub fn resolve_expression(&mut self, expr: &Expr<'a>) {
+    fn resolve_expression(&mut self, expr: &Expr<'a>) {
         expr.accept(self);
     }
 
