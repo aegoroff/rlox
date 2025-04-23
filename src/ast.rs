@@ -715,12 +715,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_variable_expr(&mut self, name: &Token<'a>) -> miette::Result<LoxValue> {
         if let Token::Identifier(id) = name {
-            let val = self.environment.borrow().get(id)?;
-            if let LoxValue::Nil = val {
-                Err(miette!("Using uninitialized variable '{id}'"))
-            } else {
-                Ok(val)
-            }
+            self.lookup_variable(id)
         } else {
             Err(miette!("Invalid identifier"))
         }
