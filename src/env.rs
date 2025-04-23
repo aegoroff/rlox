@@ -33,11 +33,20 @@ impl Environment {
         }
     }
 
-    pub fn ancestor(&self, distance: usize) {
-        let mut env = self;
-        for _ in 0..distance {
-            if let Some(e) = &env.enclosing {
-                let s = e.borrow().enclosing.as_deref();
+    pub fn get_at(&self, distance: usize, id: &str) -> miette::Result<LoxValue> {
+        if distance == 0 {
+            self.get(id)
+        } else {
+            let mut child = self.enclosing.clone();
+            for _ in 1..distance {
+                if let Some(e) = child {
+                    child = e.borrow().enclosing.clone();
+                }
+            }
+            if let Some(e) = child {
+                e.borrow().get(id)
+            } else {
+                Err(miette!("Undefined identifier: '{id}'"))
             }
         }
     }

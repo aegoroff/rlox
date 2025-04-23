@@ -406,7 +406,12 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
 
     fn lookup_variable(&self, name: &'a str) -> miette::Result<LoxValue> {
         if let Some(distance) = self.locals.get(name) {
-            Ok(LoxValue::Nil) // TODO: lookup_variable
+            let val = self.globals.borrow().get_at(*distance, name)?;
+            if let LoxValue::Nil = val {
+                Err(miette!("Using uninitialized variable '{name}'"))
+            } else {
+                Ok(val)
+            }
         } else {
             let val = self.globals.borrow().get(name)?;
             if let LoxValue::Nil = val {
