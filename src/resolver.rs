@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, ExprKind, ExprVisitor, Interpreter, StmtVisitor},
+    ast::{Expr, ExprKind, ExprVisitor, Interpreter, Stmt, StmtVisitor},
     lexer::Token,
 };
 
@@ -18,21 +18,18 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         }
     }
 
-    pub fn interpret(
-        mut self,
-        stmts: &'a [miette::Result<crate::ast::Stmt<'a>>],
-    ) -> miette::Result<()> {
+    pub fn interpret(mut self, stmts: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         self.resolve_statements(stmts);
         self.interpreter.interpret(stmts)
     }
 
-    fn resolve_statement(&mut self, stmt: &'a miette::Result<crate::ast::Stmt<'a>>) {
+    fn resolve_statement(&mut self, stmt: &'a miette::Result<Stmt<'a>>) {
         if let Ok(stmt) = stmt {
             stmt.accept(self);
         }
     }
 
-    fn resolve_statements(&mut self, stmts: &'a [miette::Result<crate::ast::Stmt<'a>>]) {
+    fn resolve_statements(&mut self, stmts: &'a [miette::Result<Stmt<'a>>]) {
         for stmt in stmts {
             self.resolve_statement(stmt);
         }
@@ -86,7 +83,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     fn resolve_function(
         &mut self,
         params: &[Box<Expr<'a>>],
-        body: &'a Result<crate::ast::Stmt<'a>, miette::Error>,
+        body: &'a Result<Stmt<'a>, miette::Error>,
     ) {
         self.begin_scope();
         for p in params {
@@ -101,32 +98,27 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
 }
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<crate::ast::Stmt<'a>>]) {
+    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) {
         self.begin_scope();
         self.resolve_statements(body);
         self.end_scope();
     }
 
-    fn visit_class_stmt(
-        &self,
-        name: &crate::lexer::Token<'a>,
-        superclass: &crate::ast::Stmt<'a>,
-        methods: &[Box<crate::ast::Stmt<'a>>],
-    ) {
+    fn visit_class_stmt(&self, name: &Token<'a>, superclass: &Stmt<'a>, methods: &[Box<Stmt<'a>>]) {
         let _ = methods;
         let _ = superclass;
         let _ = name;
     }
 
-    fn visit_expression_stmt(&mut self, expr: &crate::ast::Expr<'a>) {
+    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) {
         self.resolve_expression(expr);
     }
 
     fn visit_function_decl_stmt(
         &mut self,
-        token: &crate::lexer::Token<'a>,
-        params: &[Box<crate::ast::Expr<'a>>],
-        body: &'a miette::Result<crate::ast::Stmt<'a>>,
+        token: &Token<'a>,
+        params: &[Box<Expr<'a>>],
+        body: &'a miette::Result<Stmt<'a>>,
     ) {
         self.declare(token);
         self.define(token);
@@ -135,9 +127,9 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
 
     fn visit_if_stmt(
         &mut self,
-        cond: &crate::ast::Expr<'a>,
-        then: &'a miette::Result<crate::ast::Stmt<'a>>,
-        otherwise: &'a Option<Box<miette::Result<crate::ast::Stmt<'a>>>>,
+        cond: &Expr<'a>,
+        then: &'a miette::Result<Stmt<'a>>,
+        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
     ) {
         self.resolve_expression(cond);
         self.resolve_statement(then);
@@ -146,24 +138,16 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         }
     }
 
-    fn visit_print_stmt(&mut self, expr: &crate::ast::Expr<'a>) {
+    fn visit_print_stmt(&mut self, expr: &Expr<'a>) {
         self.resolve_expression(expr);
     }
 
-    fn visit_return_stmt(
-        &mut self,
-        keyword: &crate::lexer::Token<'a>,
-        value: &crate::ast::Expr<'a>,
-    ) {
+    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) {
         let _ = keyword;
         self.resolve_expression(value);
     }
 
-    fn visit_variable_stmt(
-        &mut self,
-        name: &crate::lexer::Token<'a>,
-        initializer: &Option<Box<crate::ast::Expr<'a>>>,
-    ) {
+    fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) {
         self.declare(name);
         if let Some(init) = initializer {
             self.resolve_expression(init);
@@ -171,11 +155,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         self.define(name);
     }
 
-    fn visit_while_stmt(
-        &mut self,
-        cond: &crate::ast::Expr<'a>,
-        body: &'a miette::Result<crate::ast::Stmt<'a>>,
-    ) {
+    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) {
         self.resolve_expression(cond);
         self.resolve_statement(body);
     }
@@ -186,37 +166,23 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
         let _ = token;
     }
 
-    fn visit_binary_expr(
-        &mut self,
-        operator: &crate::lexer::Token<'a>,
-        left: &crate::ast::Expr<'a>,
-        right: &crate::ast::Expr<'a>,
-    ) {
+    fn visit_binary_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) {
         let _ = operator;
         self.resolve_expression(left);
         self.resolve_expression(right);
     }
 
-    fn visit_unary_expr(
-        &mut self,
-        operator: &crate::lexer::Token<'a>,
-        expr: &crate::ast::Expr<'a>,
-    ) {
+    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) {
         let _ = operator;
         self.resolve_expression(expr);
     }
 
-    fn visit_assign_expr(&mut self, name: &crate::lexer::Token<'a>, value: &crate::ast::Expr<'a>) {
+    fn visit_assign_expr(&mut self, name: &Token<'a>, value: &Expr<'a>) {
         self.resolve_expression(value);
         self.resolve_local(value, name);
     }
 
-    fn visit_call_expr(
-        &mut self,
-        paren: &crate::lexer::Token<'a>,
-        callee: &crate::ast::Expr<'a>,
-        args: &[Box<crate::ast::Expr<'a>>],
-    ) {
+    fn visit_call_expr(&mut self, paren: &Token<'a>, callee: &Expr<'a>, args: &[Box<Expr<'a>>]) {
         let _ = paren;
         self.resolve_expression(callee);
         for arg in args {
@@ -224,55 +190,43 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
         }
     }
 
-    fn visit_get_expr(&mut self, name: &crate::lexer::Token<'a>, object: &crate::ast::Expr<'a>) {
+    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) {
         let _ = object;
         let _ = name;
     }
 
-    fn visit_grouping_expr(&mut self, grouping: &crate::ast::Expr<'a>) {
+    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) {
         self.resolve_expression(grouping);
     }
 
-    fn visit_logical_expr(
-        &mut self,
-        operator: &crate::lexer::Token<'a>,
-        left: &crate::ast::Expr<'a>,
-        right: &crate::ast::Expr<'a>,
-    ) {
+    fn visit_logical_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) {
         let _ = right;
         let _ = left;
         let _ = operator;
     }
 
-    fn visit_set_expr(
-        &mut self,
-        name: &crate::lexer::Token<'a>,
-        obj: &crate::ast::Expr<'a>,
-        val: &crate::ast::Expr<'a>,
-    ) {
+    fn visit_set_expr(&mut self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) {
         let _ = val;
         let _ = obj;
         let _ = name;
     }
 
-    fn visit_super_expr(
-        &mut self,
-        keyword: &crate::lexer::Token<'a>,
-        method: &crate::lexer::Token<'a>,
-    ) {
+    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) {
         let _ = method;
         let _ = keyword;
     }
 
-    fn visit_this_expr(&mut self, keyword: &crate::lexer::Token<'a>) {
+    fn visit_this_expr(&mut self, keyword: &Token<'a>) {
         let _ = keyword;
     }
 
-    fn visit_variable_expr(&mut self, name: &crate::lexer::Token<'a>) {
+    fn visit_variable_expr(&mut self, name: &Token<'a>) {
         if let Some(scope) = self.scopes.last() {
             if let Token::Identifier(id) = name {
-                if scope.contains_key(id) {
-                    // TODO: Error here
+                if let Some(defined) = scope.get(id) {
+                    if !(*defined) {
+                        // TODO: Error here
+                    }
                 }
             }
         }
