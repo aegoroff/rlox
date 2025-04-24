@@ -336,14 +336,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         }
     }
 
-    pub fn interpret(
-        &mut self,
-        statements: &'a [miette::Result<crate::ast::Stmt<'a>>],
-    ) -> miette::Result<()> {
-        self.accept_all(statements)
-    }
-
-    fn accept_all(&mut self, statements: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
+    pub fn interpret(&mut self, statements: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         let mut errors = vec![];
 
         let mut spans = HashSet::new();
@@ -382,7 +375,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         }
     }
 
-    fn accept(&mut self, statement: &'a miette::Result<Stmt<'a>>) -> miette::Result<()> {
+    fn interpret_one(&mut self, statement: &'a miette::Result<Stmt<'a>>) -> miette::Result<()> {
         match statement {
             Ok(s) => s.accept(self),
             Err(e) => {
@@ -401,28 +394,6 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         }
     }
 
-    fn visit_block_many(
-        &mut self,
-        statements: &'a [miette::Result<Stmt<'a>>],
-        enclosing: Rc<RefCell<Environment>>,
-    ) -> miette::Result<()> {
-        let prev = self.begin_scope(enclosing);
-        let result = self.accept_all(statements);
-        self.end_scope(prev);
-        result
-    }
-
-    fn visit_block_single(
-        &mut self,
-        statement: &'a miette::Result<Stmt<'a>>,
-        enclosing: Rc<RefCell<Environment>>,
-    ) -> miette::Result<()> {
-        let prev = self.begin_scope(enclosing);
-        let result = self.accept(statement);
-        self.end_scope(prev);
-        result
-    }
-
     fn begin_scope(&mut self, enclosing: Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
         let prev = self.environment.clone();
         let child = Environment::child(enclosing);
@@ -436,7 +407,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
 
     fn lookup_variable(&self, name: &'a str) -> miette::Result<LoxValue> {
         if let Some(distance) = self.locals.get(name) {
-            let val = self.globals.borrow().get_at(*distance, name)?;
+            let val = self.environment.borrow().get_at(*distance, name)?;
             if let LoxValue::Nil = val {
                 Err(miette!("Using uninitialized variable '{name}'"))
             } else {
@@ -665,7 +636,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             match callee.call(arguments) {
                 CallResult::Value(lox_value) => Ok(lox_value),
                 CallResult::Code(stmt, closure) => {
-                    let result = self.visit_block_single(stmt, closure);
+                    let result = {
+                        let prev = self.begin_scope(closure);
+                        let result = self.interpret_one(stmt);
+                        self.end_scope(prev);
+                        result
+                    };
                     match result {
                         Ok(_) => Ok(LoxValue::Nil),
                         Err(e) => {
@@ -762,9 +738,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
-        // let it = body.iter().map(|item| Rc::new(RefCell::new(item)));
-        self.visit_block_many(body, self.environment.clone())?;
-        Ok(())
+        let prev = self.begin_scope(self.environment.clone());
+        let result = self.interpret(body);
+        self.end_scope(prev);
+        result
     }
 
     fn visit_class_stmt(
