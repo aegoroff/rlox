@@ -63,8 +63,8 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         }
     }
 
-    fn resolve_local(&mut self, expr: &Expr<'a>, name: &Token<'a>) {
-        let name = if let Token::Identifier(name) = name {
+    fn resolve_local(&mut self, name: &Token<'a>) {
+        let id = if let Token::Identifier(name) = name {
             name
         } else {
             return;
@@ -72,9 +72,9 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         let mut i = self.scopes.len();
         for scope in self.scopes.iter().rev() {
             i -= 1;
-            if scope.contains_key(name) {
+            if scope.contains_key(id) {
                 self.interpreter
-                    .resolve_expr(expr, self.scopes.len() - 1 - i);
+                    .resolve_token(name, self.scopes.len() - 1 - i);
                 return;
             }
         }
@@ -179,7 +179,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
 
     fn visit_assign_expr(&mut self, name: &Token<'a>, value: &Expr<'a>) {
         self.resolve_expression(value);
-        self.resolve_local(value, name);
+        self.resolve_local(name);
     }
 
     fn visit_call_expr(&mut self, paren: &Token<'a>, callee: &Expr<'a>, args: &[Box<Expr<'a>>]) {
@@ -230,19 +230,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
                 }
             }
         }
-        let id = if let Token::Identifier(name) = name {
-            name
-        } else {
-            return;
-        };
-        let mut i = self.scopes.len();
-        for scope in self.scopes.iter().rev() {
-            i -= 1;
-            if scope.contains_key(id) {
-                self.interpreter
-                    .resolve_token(name, self.scopes.len() - 1 - i);
-                return;
-            }
-        }
+        self.resolve_local(name);
     }
 }
