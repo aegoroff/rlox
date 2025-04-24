@@ -53,7 +53,7 @@ impl Environment {
 
     pub fn define(&mut self, id: String, initializer: LoxValue) {
         if self.values.contains_key(&id) {
-            let _ = self.assign(id, initializer);
+            self.values.entry(id).and_modify(|e| *e = initializer);
         } else {
             self.values.entry(id).or_insert(initializer);
         }
