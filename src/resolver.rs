@@ -48,17 +48,17 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     }
 
     fn declare(&mut self, token: &Token<'a>) {
-        if let Some(scope) = self.scopes.last_mut() {
-            if let Token::Identifier(id) = token {
-                scope.insert(id, false);
-            }
-        }
+        self.add_id_to_scope(token, false);
     }
 
     fn define(&mut self, token: &Token<'a>) {
+        self.add_id_to_scope(token, true);
+    }
+
+    fn add_id_to_scope(&mut self, token: &Token<'a>, defined: bool) {
         if let Some(scope) = self.scopes.last_mut() {
             if let Token::Identifier(id) = token {
-                scope.insert(id, true);
+                scope.insert(id, defined);
             }
         }
     }
