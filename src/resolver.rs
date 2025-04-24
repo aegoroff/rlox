@@ -23,7 +23,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         stmts: &'a [miette::Result<crate::ast::Stmt<'a>>],
     ) -> miette::Result<()> {
         self.resolve_statements(stmts);
-        self.interpreter.interpret(stmts.into_iter())
+        self.interpreter.interpret(stmts)
     }
 
     fn resolve_statement(&mut self, stmt: &'a miette::Result<crate::ast::Stmt<'a>>) {

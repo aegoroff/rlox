@@ -339,11 +339,12 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
 
     pub fn interpret(
         &mut self,
-        statements: impl Iterator<Item = miette::Result<Stmt<'a>>>,
+        statements: &'a [miette::Result<crate::ast::Stmt<'a>>],
     ) -> miette::Result<()> {
         // HACK: Box::leak dangerous thing
         let refs = statements
-            .map(|x| &*Box::leak(Box::new(x)))
+            .iter()
+            .map(|x| *Box::leak(Box::new(x)))
             .map(|x| Rc::new(RefCell::new(x)));
         self.accept_all(refs)
     }
