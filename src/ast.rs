@@ -569,20 +569,29 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     ) -> miette::Result<LoxValue> {
         let location = value.location.clone();
         if let Token::Identifier(id) = name {
-            match value.accept(self) {
-                Ok(val) => {
-                    self.environment
-                        .borrow_mut()
-                        .assign(id.to_string(), val.clone())
-                        .map_err(|e| {
-                            miette!(
-                                labels = vec![LabeledSpan::at(location, e.to_string())],
-                                "Assigment failed"
-                            )
-                        })?;
-                    Ok(val)
-                }
-                Err(e) => Err(e),
+            let val = value.accept(self)?;
+            if let Some(distance) = self.locals.get(id) {
+                self.environment
+                    .borrow_mut()
+                    .assign_at(*distance, id.to_string(), val.clone())
+                    .map_err(|e| {
+                        miette!(
+                            labels = vec![LabeledSpan::at(location, e.to_string())],
+                            "Assigment failed"
+                        )
+                    })?;
+                Ok(val)
+            } else {
+                self.globals
+                    .borrow_mut()
+                    .assign(id.to_string(), val.clone())
+                    .map_err(|e| {
+                        miette!(
+                            labels = vec![LabeledSpan::at(location, e.to_string())],
+                            "Assigment failed"
+                        )
+                    })?;
+                Ok(val)
             }
         } else {
             Err(miette!(

@@ -69,4 +69,27 @@ impl Environment {
             Err(miette!("assignment to undefined variable '{id}'"))
         }
     }
+
+    pub fn assign_at(
+        &mut self,
+        distance: usize,
+        id: String,
+        initializer: LoxValue,
+    ) -> miette::Result<()> {
+        if distance == 0 {
+            self.assign(id, initializer)
+        } else {
+            let mut child = self.enclosing.clone();
+            for _ in 1..distance {
+                if let Some(e) = child {
+                    child = e.borrow().enclosing.clone();
+                }
+            }
+            if let Some(e) = child {
+                e.borrow_mut().assign(id, initializer)
+            } else {
+                Err(miette!("Undefined identifier: '{id}'"))
+            }
+        }
+    }
 }
