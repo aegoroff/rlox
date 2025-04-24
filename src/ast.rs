@@ -318,19 +318,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         })
     }
 
-    pub fn resolve_expr(&mut self, expr: &Expr<'a>, depth: usize) {
-        match &expr.kind {
-            ExprKind::Call(name, _, _) => {
-                self.resolve_token(name, depth);
-            }
-            ExprKind::Variable(name) => {
-                self.resolve_token(name, depth);
-            }
-            _ => {}
-        }
-    }
-
-    pub fn resolve_token(&mut self, token: &Token<'a>, depth: usize) {
+    pub fn resolve(&mut self, token: &Token<'a>, depth: usize) {
         if let Token::Identifier(name) = token {
             self.locals.insert(name, depth);
         }

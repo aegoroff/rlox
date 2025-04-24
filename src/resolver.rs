@@ -73,8 +73,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         for scope in self.scopes.iter().rev() {
             i -= 1;
             if scope.contains_key(id) {
-                self.interpreter
-                    .resolve_token(name, self.scopes.len() - 1 - i);
+                self.interpreter.resolve(name, self.scopes.len() - 1 - i);
                 return;
             }
         }
