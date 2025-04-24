@@ -894,12 +894,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         cond: &Expr<'a>,
         body: &'a miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
-        let body = match body {
-            Ok(s) => s,
-            Err(e) => return Err(miette!(e.to_string())),
-        };
         while self.evaluate(cond)?.is_truthy() {
-            body.accept(self)?;
+            self.interpret_one(body)?;
         }
         Ok(())
     }
