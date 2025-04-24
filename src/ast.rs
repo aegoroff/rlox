@@ -937,7 +937,7 @@ mod tests {
         let stmts: Vec<miette::Result<crate::ast::Stmt>> = parser.collect();
 
         // Act
-        let iterpretation_result = resolver.interpret(stmts);
+        let iterpretation_result = resolver.interpret(&stmts);
 
         // Assert
         if let Err(e) = iterpretation_result {

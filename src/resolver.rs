@@ -20,13 +20,8 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
 
     pub fn interpret(
         mut self,
-        stmts: Vec<miette::Result<crate::ast::Stmt<'a>>>,
+        stmts: &'a [miette::Result<crate::ast::Stmt<'a>>],
     ) -> miette::Result<()> {
-        // let refs = stmts
-        //     .iter()
-        //     .map(|x| &*Box::leak(Box::new(x)))
-        //     .map(|x| Rc::new(RefCell::new(x)))
-        //     .collect();
         self.resolve_statements(stmts);
         self.interpreter.interpret(stmts.into_iter())
     }
