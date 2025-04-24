@@ -4,7 +4,6 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     fmt::Display,
-    iter::once,
     ops::RangeInclusive,
     rc::Rc,
 };
@@ -341,18 +340,10 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         &mut self,
         statements: &'a [miette::Result<crate::ast::Stmt<'a>>],
     ) -> miette::Result<()> {
-        // HACK: Box::leak dangerous thing
-        let refs = statements
-            .iter()
-            .map(|x| *Box::leak(Box::new(x)))
-            .map(|x| Rc::new(RefCell::new(x)));
-        self.accept_all(refs)
+        self.accept_all(statements)
     }
 
-    fn accept_all(
-        &mut self,
-        statements: impl Iterator<Item = Rc<RefCell<&'a miette::Result<Stmt<'a>>>>>,
-    ) -> miette::Result<()> {
+    fn accept_all(&mut self, statements: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         let mut errors = vec![];
 
         let mut spans = HashSet::new();
@@ -368,8 +359,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         };
 
         for stmt in statements {
-            let stmt = stmt.borrow();
-            match stmt.as_ref() {
+            match stmt {
                 Ok(s) => {
                     if let Err(e) = s.accept(self) {
                         if let Some(ProgramError::Return(_)) = e.downcast_ref::<ProgramError>() {
@@ -392,17 +382,56 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         }
     }
 
-    fn visit_block(
+    fn accept(&mut self, statement: &'a miette::Result<Stmt<'a>>) -> miette::Result<()> {
+        match statement {
+            Ok(s) => s.accept(self),
+            Err(e) => {
+                let mut errors = vec![];
+                let mut spans = HashSet::new();
+                if let Some(label) = e.labels() {
+                    for l in label {
+                        if !spans.contains(&(l.len(), l.offset())) {
+                            spans.insert((l.len(), l.offset()));
+                            errors.push(l);
+                        }
+                    }
+                }
+                Err(miette!(labels = errors, "Program completed with errors"))
+            }
+        }
+    }
+
+    fn visit_block_many(
         &mut self,
-        statements: impl Iterator<Item = Rc<RefCell<&'a miette::Result<Stmt<'a>>>>>,
+        statements: &'a [miette::Result<Stmt<'a>>],
         enclosing: Rc<RefCell<Environment>>,
     ) -> miette::Result<()> {
+        let prev = self.begin_scope(enclosing);
+        let result = self.accept_all(statements);
+        self.end_scope(prev);
+        result
+    }
+
+    fn visit_block_single(
+        &mut self,
+        statement: &'a miette::Result<Stmt<'a>>,
+        enclosing: Rc<RefCell<Environment>>,
+    ) -> miette::Result<()> {
+        let prev = self.begin_scope(enclosing);
+        let result = self.accept(statement);
+        self.end_scope(prev);
+        result
+    }
+
+    fn begin_scope(&mut self, enclosing: Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
         let prev = self.environment.clone();
         let child = Environment::child(enclosing);
         self.environment = Rc::new(RefCell::new(child));
-        let result = self.accept_all(statements);
+        prev
+    }
+
+    fn end_scope(&mut self, prev: Rc<RefCell<Environment>>) {
         self.environment = prev;
-        result
     }
 
     fn lookup_variable(&self, name: &'a str) -> miette::Result<LoxValue> {
@@ -636,8 +665,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             match callee.call(arguments) {
                 CallResult::Value(lox_value) => Ok(lox_value),
                 CallResult::Code(stmt, closure) => {
-                    let body = Rc::new(RefCell::new(stmt));
-                    let result = self.visit_block(once(body), closure);
+                    let result = self.visit_block_single(stmt, closure);
                     match result {
                         Ok(_) => Ok(LoxValue::Nil),
                         Err(e) => {
@@ -734,8 +762,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
     fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
-        let it = body.iter().map(|item| Rc::new(RefCell::new(item)));
-        self.visit_block(it, self.environment.clone())?;
+        // let it = body.iter().map(|item| Rc::new(RefCell::new(item)));
+        self.visit_block_many(body, self.environment.clone())?;
         Ok(())
     }
 
