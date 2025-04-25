@@ -77,15 +77,16 @@ impl<'a> LoxCallable<'a> for Function<'a> {
     }
 
     fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a> {
-        let new_env = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
+        // We need new closure here to support recursive calls for example fibonacci calculation
+        let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
         for (i, name) in self.parameters.iter().enumerate() {
-            new_env
+            closure
                 .borrow_mut()
                 .define(name.to_string(), arguments[i].clone());
         }
 
-        CallResult::Code(self.body, new_env)
+        CallResult::Code(self.body, closure)
     }
 }
 
