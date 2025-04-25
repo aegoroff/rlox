@@ -77,13 +77,15 @@ impl<'a> LoxCallable<'a> for Function<'a> {
     }
 
     fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a> {
+        let new_env = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
+
         for (i, name) in self.parameters.iter().enumerate() {
-            self.closure
+            new_env
                 .borrow_mut()
                 .define(name.to_string(), arguments[i].clone());
         }
 
-        CallResult::Code(self.body, self.closure.clone())
+        CallResult::Code(self.body, new_env)
     }
 }
 
