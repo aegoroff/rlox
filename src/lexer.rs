@@ -51,6 +51,12 @@ pub enum Token<'a> {
     While,
 }
 
+impl std::hash::Hash for Token<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+    }
+}
+
 impl<'a> Lexer<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {

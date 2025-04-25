@@ -29,7 +29,7 @@ pub struct Interpreter<'a, W: std::io::Write> {
     globals: Rc<RefCell<Environment>>,
     callables: Box<Catalogue<'a>>,
     writer: W,
-    locals: HashMap<&'a str, usize>,
+    locals: HashMap<u64, usize>,
 }
 
 impl<'a, W: std::io::Write> Interpreter<'a, W> {
@@ -65,10 +65,8 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         })
     }
 
-    pub fn resolve(&mut self, token: &Token<'a>, depth: usize) {
-        if let Token::Identifier(name) = token {
-            self.locals.insert(name, depth);
-        }
+    pub fn resolve(&mut self, obj: &Expr<'a>, depth: usize) {
+        self.locals.insert(obj.get_hash_code(), depth);
     }
 
     pub fn interpret(&mut self, statements: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
@@ -140,8 +138,8 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         self.environment = prev;
     }
 
-    fn lookup_variable(&self, name: &'a str) -> miette::Result<LoxValue> {
-        if let Some(distance) = self.locals.get(name) {
+    fn lookup_variable(&self, obj: &Expr<'a>, name: &'a str) -> miette::Result<LoxValue> {
+        if let Some(distance) = self.locals.get(&obj.get_hash_code()) {
             let val = self.environment.borrow().get_at(*distance, name)?;
             if let LoxValue::Nil = val {
                 Err(miette!("Using uninitialized variable '{name}'"))
@@ -305,7 +303,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let location = value.location.clone();
         if let Token::Identifier(id) = name {
             let val = value.accept(self)?;
-            if let Some(distance) = self.locals.get(id) {
+            if let Some(distance) = self.locals.get(&value.get_hash_code()) {
                 self.environment
                     .borrow_mut()
                     .assign_at(*distance, id.to_string(), val.clone())
@@ -462,9 +460,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         todo!()
     }
 
-    fn visit_variable_expr(&mut self, name: &Token<'a>) -> miette::Result<LoxValue> {
+    fn visit_variable_expr(
+        &mut self,
+        obj: &Expr<'a>,
+        name: &Token<'a>,
+    ) -> miette::Result<LoxValue> {
         if let Token::Identifier(id) = name {
-            self.lookup_variable(id)
+            self.lookup_variable(obj, id)
         } else {
             Err(miette!("Invalid identifier"))
         }

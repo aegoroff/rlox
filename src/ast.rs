@@ -1,6 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{fmt::Display, ops::RangeInclusive};
+use std::{fmt::Display, hash::DefaultHasher, hash::Hash, hash::Hasher, ops::RangeInclusive};
 
 use miette::miette;
 
@@ -25,7 +25,7 @@ pub trait ExprVisitor<'a, R> {
     fn visit_set_expr(&mut self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> R;
     fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> R;
     fn visit_this_expr(&mut self, keyword: &Token<'a>) -> R;
-    fn visit_variable_expr(&mut self, name: &Token<'a>) -> R;
+    fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> R;
 }
 
 pub trait StmtVisitor<'a, R> {
@@ -57,7 +57,7 @@ pub trait StmtVisitor<'a, R> {
 
 // Expressions
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub enum ExprKind<'a> {
     Literal(Option<Token<'a>>),
     Binary(Token<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
@@ -76,7 +76,7 @@ pub enum ExprKind<'a> {
     Variable(Token<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct Expr<'a> {
     pub kind: ExprKind<'a>,
     pub location: RangeInclusive<usize>,
@@ -98,8 +98,14 @@ impl<'a> Expr<'a> {
             ExprKind::Set(name, obj, val) => visitor.visit_set_expr(name, obj, val),
             ExprKind::Super(keyword, method) => visitor.visit_super_expr(keyword, method),
             ExprKind::This(keyword) => visitor.visit_this_expr(keyword),
-            ExprKind::Variable(name) => visitor.visit_variable_expr(name),
+            ExprKind::Variable(name) => visitor.visit_variable_expr(self, name),
         }
+    }
+
+    pub fn get_hash_code(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
     }
 }
 
