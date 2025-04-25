@@ -297,13 +297,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_assign_expr(
         &mut self,
+        to: &Expr<'a>,
         name: &Token<'a>,
         value: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
         let location = value.location.clone();
         if let Token::Identifier(id) = name {
             let val = value.accept(self)?;
-            if let Some(distance) = self.locals.get(&value.get_hash_code()) {
+            if let Some(distance) = self.locals.get(&to.get_hash_code()) {
                 self.environment
                     .borrow_mut()
                     .assign_at(*distance, id.to_string(), val.clone())

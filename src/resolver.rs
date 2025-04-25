@@ -177,9 +177,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
         self.resolve_expression(expr);
     }
 
-    fn visit_assign_expr(&mut self, name: &Token<'a>, value: &Expr<'a>) {
+    fn visit_assign_expr(&mut self, to: &Expr<'a>, name: &Token<'a>, value: &Expr<'a>) {
         self.resolve_expression(value);
-        self.resolve_local(value, name);
+        self.resolve_local(to, name);
     }
 
     fn visit_call_expr(&mut self, paren: &Token<'a>, callee: &Expr<'a>, args: &[Box<Expr<'a>>]) {
