@@ -9,9 +9,19 @@ use std::{
 };
 
 use crate::{
-    ast::{CallResult, LoxCallable, LoxValue, Stmt},
+    ast::{LoxValue, Stmt},
     env::Environment,
 };
+
+pub enum CallResult<'a> {
+    Value(LoxValue),
+    Code(&'a miette::Result<Stmt<'a>>, Rc<RefCell<Environment>>),
+}
+
+pub trait LoxCallable<'a> {
+    fn arity(&self) -> usize;
+    fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a>;
+}
 
 pub const CLOCK: &str = "clock";
 

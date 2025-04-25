@@ -1170,7 +1170,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use std::io::stdout;
 
-    use crate::ast::{Interpreter, LoxValue};
+    use crate::{ast::LoxValue, int::Interpreter};
 
     use super::*;
     use test_case::test_case;

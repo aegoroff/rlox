@@ -10,11 +10,7 @@ use bugreport::{
 };
 use clap::{ArgMatches, Command, command};
 use miette::{Context, IntoDiagnostic, miette};
-use rlox::{
-    ast::{Interpreter, Stmt},
-    parser::Parser,
-    resolver::Resolver,
-};
+use rlox::{ast::Stmt, int::Interpreter, parser::Parser, resolver::Resolver};
 
 #[macro_use]
 extern crate clap;

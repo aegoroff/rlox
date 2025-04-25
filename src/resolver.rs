@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, ExprKind, ExprVisitor, Interpreter, Stmt, StmtVisitor},
+    ast::{Expr, ExprKind, ExprVisitor, Stmt, StmtVisitor},
+    int::Interpreter,
     lexer::Token,
 };
 
