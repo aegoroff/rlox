@@ -128,7 +128,7 @@ impl<'a> LoxCallable<'a> for Class {
     }
 
     fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
-        Ok(CallResult::Value(LoxValue::Instance(self.name.clone())))
+        Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
     }
 }
 impl Class {

@@ -304,6 +304,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let location = value.location.clone();
         if let Token::Identifier(id) = name {
             let val = value.accept(self)?;
+            // Convert class to instance if needed
+            let val = if let LoxValue::Class(class) = val {
+                LoxValue::Instance(class.to_string(), id.to_string())
+            } else {
+                val
+            };
             if let Some(distance) = self.locals.get(&to.get_hash_code()) {
                 self.environment
                     .borrow_mut()
@@ -386,14 +392,24 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     }
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
-        let _ = name;
         let result = self.evaluate(object)?;
         match &result {
-            LoxValue::Instance(class) => {
+            LoxValue::Instance(_, id) => {
+                if let Token::Identifier(field) = name {
+                    let field = self.environment.borrow().get_field(id, field)?;
+                    Ok(field)
+                } else {
+                    Err(miette!("Field name must be an identifier"))
+                }
+            }
+            LoxValue::Class(class) => {
                 let callee = self.callables.get(class)?;
                 let callee = callee.borrow();
                 match callee.call(vec![])? {
-                    CallResult::Value(lox_value) => Ok(lox_value),
+                    CallResult::Value(lox_value) => {
+                        // TODO: Implement class instance creation without var
+                        Ok(lox_value)
+                    }
                     CallResult::Code(stmt, closure) => {
                         let result = {
                             let prev = self.begin_scope(closure);
@@ -457,11 +473,17 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         obj: &Expr<'a>,
         val: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
-        let _ = name;
-        let o = self.evaluate(obj)?;
-        if let LoxValue::Instance(_) = o {
+        let field = match name {
+            Token::Identifier(id) => id.to_string(),
+            _ => return Err(miette!("Field name must be an identifier")),
+        };
+        // obj.name = val
+        let object = self.evaluate(obj)?;
+        if let LoxValue::Instance(_, id) = object {
             let v = self.evaluate(val)?;
-            // TODO: set the field
+            self.environment
+                .borrow_mut()
+                .set_field(id, field.to_string(), v.clone());
             Ok(v)
         } else {
             Err(miette!("Only instances have fields"))
@@ -605,7 +627,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             LoxValue::String(_)
             | LoxValue::Number(_)
             | LoxValue::Callable(_, _)
-            | LoxValue::Instance(_) => {
+            | LoxValue::Instance(_, _)
+            | LoxValue::Class(_) => {
                 let then = match then {
                     Ok(s) => s,
                     Err(e) => return Err(miette!(e.to_string())),
@@ -652,7 +675,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if let Token::Identifier(id) = name {
             if let Some(v) = initializer {
                 match v.accept(self) {
-                    Ok(val) => self.environment.borrow_mut().define(id.to_string(), val),
+                    Ok(val) => {
+                        // Convert class to instance if needed
+                        let val = if let LoxValue::Class(class) = val {
+                            LoxValue::Instance(class.to_string(), id.to_string())
+                        } else {
+                            val
+                        };
+                        self.environment.borrow_mut().define(id.to_string(), val)
+                    }
                     Err(e) => return Err(e),
                 }
             } else {
@@ -720,7 +751,9 @@ mod tests {
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(1);", "1" ; "conditional return success")]
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
     #[test_case("class Foo { method(x) { print x;} }", "" ; "class")]
-    #[test_case("class Bagel{} var b =Bagel(); print b;", "Bagel instance" ; "class instance empty")]
+    #[test_case("class Bagel{} var b = Bagel(); print b;", "b: Bagel" ; "class instance empty")]
+    #[test_case("class Bagel{} var b = Bagel(); b.field = 1; print b.field;", "1" ; "get/set class field")]
+    #[test_case("class Bagel{} var b; b = Bagel(); b.field = 1; print b.field;", "1" ; "class instance assign and get/set class field")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

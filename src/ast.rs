@@ -170,7 +170,8 @@ pub enum LoxValue {
     Bool(bool),
     Nil,
     Callable(&'static str, String),
-    Instance(String),
+    Class(String),
+    Instance(String, String),
 }
 
 impl Display for LoxValue {
@@ -181,7 +182,8 @@ impl Display for LoxValue {
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
-            LoxValue::Instance(class) => write!(f, "{class} instance"),
+            LoxValue::Class(class) => write!(f, "{class} instance"),
+            LoxValue::Instance(class, instance) => write!(f, "{instance}: {class}"),
         }
     }
 }
