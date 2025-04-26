@@ -7,6 +7,7 @@ use crate::{
 };
 use miette::{LabeledSpan, miette};
 
+#[derive(Debug, Clone, Copy)]
 enum FunctionType {
     None,
     Function,
@@ -95,7 +96,9 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         &mut self,
         params: &[Box<Expr<'a>>],
         body: &'a Result<Stmt<'a>, miette::Error>,
+        kind: FunctionType,
     ) -> miette::Result<()> {
+        let enclosing_function = self.current_function;
         self.begin_scope();
         for p in params {
             if let ExprKind::Variable(p) = &p.kind {
@@ -103,8 +106,10 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
                 self.define(p);
             }
         }
+        self.current_function = kind;
         self.resolve_statement(body)?;
         self.end_scope();
+        self.current_function = enclosing_function;
         Ok(())
     }
 }
@@ -140,7 +145,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
     ) -> miette::Result<()> {
         self.declare(token);
         self.define(token);
-        self.resolve_function(params, body)
+        self.resolve_function(params, body, FunctionType::Function)
     }
 
     fn visit_if_stmt(
@@ -163,7 +168,17 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
 
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
         let _ = keyword;
-        self.resolve_expression(value)
+        if let FunctionType::None = self.current_function {
+            Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    value.location.clone(),
+                    "Cannot return from top level code"
+                )],
+                "Syntax error"
+            ))
+        } else {
+            self.resolve_expression(value)
+        }
     }
 
     fn visit_variable_stmt(
