@@ -353,21 +353,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             let callee = self.callables.get(id)?;
             let callee = callee.borrow();
 
-            let expected = callee.arity();
-            let actual = arguments.len();
-            if expected != actual {
-                return Err(miette!(
-                    labels = vec![LabeledSpan::at(
-                        location,
-                        format!(
-                            "Invalid arguments number passed to '{id}'. Expected: {expected} passed: {actual}"
-                        )
-                    )],
-                    "Invalid arguments number"
-                ));
-            }
-
-            match callee.call(arguments) {
+            match callee.call(arguments)? {
                 CallResult::Value(lox_value) => Ok(lox_value),
                 CallResult::Code(stmt, closure) => {
                     let result = {
@@ -491,6 +477,9 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         let _ = methods;
         let _ = superclass;
         if let Token::Identifier(id) = name {
+            if self.environment.borrow().get(id).is_ok() {
+                return Err(miette!("Class '{id}' redefinition"));
+            }
             self.environment
                 .borrow_mut()
                 .define(id.to_string(), LoxValue::Callable("class", id.to_string()));
@@ -543,7 +532,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                 }
             }
 
-            let callable = Function::new(parameters, body, self.environment.clone());
+            let callable = Function::new(id, parameters, body, self.environment.clone());
             let callable = Rc::new(RefCell::new(callable));
             self.callables.define(id, callable);
             Ok(())

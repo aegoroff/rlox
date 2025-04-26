@@ -20,7 +20,7 @@ pub enum CallResult<'a> {
 
 pub trait LoxCallable<'a> {
     fn arity(&self) -> usize;
-    fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a>;
+    fn call(&self, arguments: Vec<LoxValue>) -> miette::Result<CallResult<'a>>;
 }
 
 pub const CLOCK: &str = "clock";
@@ -56,16 +56,17 @@ impl<'a> LoxCallable<'a> for Clock {
         0
     }
 
-    fn call(&self, _: Vec<LoxValue>) -> CallResult<'a> {
+    fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
         let seconds = since_the_epoch.as_secs();
         let val = LoxValue::Number(seconds as f64);
-        CallResult::Value(val)
+        Ok(CallResult::Value(val))
     }
 }
 
 pub struct Function<'a> {
+    name: &'a str,
     parameters: Vec<&'a str>,
     body: &'a miette::Result<Stmt<'a>>,
     closure: Rc<RefCell<Environment>>,
@@ -76,7 +77,18 @@ impl<'a> LoxCallable<'a> for Function<'a> {
         self.parameters.len()
     }
 
-    fn call(&self, arguments: Vec<LoxValue>) -> CallResult<'a> {
+    fn call(&self, arguments: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
+        let expected = self.arity();
+        let actual = arguments.len();
+        if expected != actual {
+            return Err(miette!(
+                "Invalid arguments number passed to '{}'. Expected: {} passed: {}",
+                self.name,
+                expected,
+                actual
+            ));
+        }
+
         // We need new closure here to support recursive calls for example fibonacci calculation
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
@@ -86,17 +98,19 @@ impl<'a> LoxCallable<'a> for Function<'a> {
                 .define(name.to_string(), arguments[i].clone());
         }
 
-        CallResult::Code(self.body, closure)
+        Ok(CallResult::Code(self.body, closure))
     }
 }
 
 impl<'a> Function<'a> {
     pub fn new(
+        name: &'a str,
         parameters: Vec<&'a str>,
         body: &'a miette::Result<Stmt<'a>>,
         closure: Rc<RefCell<Environment>>,
     ) -> Self {
         Self {
+            name,
             parameters,
             body,
             closure,
@@ -113,7 +127,7 @@ impl<'a> LoxCallable<'a> for Class<'a> {
         0
     }
 
-    fn call(&self, _: Vec<LoxValue>) -> CallResult<'a> {
+    fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
         todo!()
     }
 }
