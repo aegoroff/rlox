@@ -162,10 +162,9 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-        }
-
-        if let Err(e) = self.consume(Token::RightBrace) {
-            return Some(Err(e));
+            if let Err(e) = self.consume(Token::RightBrace) {
+                return Some(Err(e));
+            }
         }
 
         let kind = StmtKind::Class(name, None, methods);
