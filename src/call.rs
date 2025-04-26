@@ -119,7 +119,7 @@ impl<'a> Function<'a> {
 }
 
 pub struct Class {
-    callee: LoxValue,
+    name: String,
 }
 
 impl<'a> LoxCallable<'a> for Class {
@@ -128,11 +128,11 @@ impl<'a> LoxCallable<'a> for Class {
     }
 
     fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
-        Ok(CallResult::Value(self.callee.clone()))
+        Ok(CallResult::Value(LoxValue::Instance(self.name.clone())))
     }
 }
 impl Class {
-    pub fn new(callee: LoxValue) -> Self {
-        Self { callee }
+    pub fn new(name: String) -> Self {
+        Self { name }
     }
 }

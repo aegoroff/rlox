@@ -483,9 +483,9 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             let definition = LoxValue::Callable("class", id.to_string());
             self.environment
                 .borrow_mut()
-                .define(id.to_string(), definition.clone());
+                .define(id.to_string(), definition);
 
-            let class = Class::new(definition);
+            let class = Class::new(id.to_string());
             let callable = Rc::new(RefCell::new(class));
             self.callables.define(id, callable);
             Ok(())
@@ -566,7 +566,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                     Ok(())
                 }
             }
-            LoxValue::String(_) | LoxValue::Number(_) | LoxValue::Callable(_, _) => {
+            LoxValue::String(_)
+            | LoxValue::Number(_)
+            | LoxValue::Callable(_, _)
+            | LoxValue::Instance(_) => {
                 let then = match then {
                     Ok(s) => s,
                     Err(e) => return Err(miette!(e.to_string())),
@@ -681,7 +684,7 @@ mod tests {
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(1);", "1" ; "conditional return success")]
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
     #[test_case("class Foo { method(x) { print x;} }", "" ; "class")]
-    #[test_case("class Bagel{} var b =Bagel(); print b;", "<class Bagel>" ; "class instance empty")]
+    #[test_case("class Bagel{} var b =Bagel(); print b;", "Bagel instance" ; "class instance empty")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
