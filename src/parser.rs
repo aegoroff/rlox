@@ -565,11 +565,22 @@ impl<'a> Parser<'a> {
                 match rhs {
                     Ok(rhs) => {
                         let rhs_finish = *rhs.location.end();
-                        match &lhs.kind {
+                        match lhs.kind {
                             ExprKind::Variable(token) => match token {
                                 Token::Identifier(id) => {
                                     let kind =
                                         ExprKind::Assign(Token::Identifier(id), Box::new(rhs));
+                                    Some(Ok(Expr {
+                                        kind,
+                                        location: start..=rhs_finish,
+                                    }))
+                                }
+                                _ => todo!(),
+                            },
+                            ExprKind::Get(token, expr) => match token {
+                                Token::Identifier(id) => {
+                                    let kind =
+                                        ExprKind::Set(Token::Identifier(id), expr, Box::new(rhs));
                                     Some(Ok(Expr {
                                         kind,
                                         location: start..=rhs_finish,

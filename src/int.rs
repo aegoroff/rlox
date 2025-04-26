@@ -457,10 +457,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         obj: &Expr<'a>,
         val: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
-        let _ = val;
-        let _ = obj;
         let _ = name;
-        todo!()
+        let o = self.evaluate(obj)?;
+        if let LoxValue::Instance(_) = o {
+            let v = self.evaluate(val)?;
+            // TODO: set the field
+            Ok(v)
+        } else {
+            Err(miette!("Only instances have fields"))
+        }
     }
 
     fn visit_super_expr(

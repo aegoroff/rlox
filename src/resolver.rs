@@ -305,8 +305,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         obj: &Expr<'a>,
         val: &Expr<'a>,
     ) -> miette::Result<()> {
-        let _ = val;
-        let _ = obj;
+        self.resolve_expression(val)?;
+        self.resolve_expression(obj)?;
         let _ = name;
         Ok(())
     }
