@@ -33,8 +33,8 @@ pub trait StmtVisitor<'a, R> {
     fn visit_class_stmt(
         &self,
         name: &Token<'a>,
-        superclass: &Stmt<'a>,
-        methods: &[Box<Stmt<'a>>],
+        superclass: &Option<Box<Stmt<'a>>>,
+        methods: &[miette::Result<Stmt<'a>>],
     ) -> R;
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
     fn visit_function_decl_stmt(
@@ -139,7 +139,11 @@ impl<'a> Stmt<'a> {
 pub enum StmtKind<'a> {
     Block(Vec<miette::Result<Stmt<'a>>>),
     /// name, superclass, methods
-    Class(Token<'a>, Box<Stmt<'a>>, Vec<Box<Stmt<'a>>>),
+    Class(
+        Token<'a>,
+        Option<Box<Stmt<'a>>>,
+        Vec<miette::Result<Stmt<'a>>>,
+    ),
     Expression(Box<Expr<'a>>),
     /// token, params, body
     Function(Token<'a>, Vec<Box<Expr<'a>>>, Box<miette::Result<Stmt<'a>>>),

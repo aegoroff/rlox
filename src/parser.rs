@@ -29,40 +29,19 @@ impl<'a> Parser<'a> {
 
     fn declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
         let current = self.tokens.peek()?;
-        if let Ok((_, Token::Var, _)) = current {
-            self.var_declaration()
-        } else if let Ok((_, Token::Fun, _)) = current {
-            self.function("function")
-        } else {
-            self.statement()
+        match current {
+            Ok((_, Token::Var, _)) => self.var_declaration(),
+            Ok((_, Token::Class, _)) => self.class_declaration(),
+            Ok((_, Token::Fun, _)) => self.function("function"),
+            _ => self.statement(),
         }
     }
 
     fn function(&mut self, kind: &'static str) -> Option<miette::Result<Stmt<'a>>> {
         let t = self.tokens.next(); // consume FUN token TODO: include FUN start position into stmt location
-        let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
-        // IMPORTANT: dont call expression here so as not to conflict with assignment
-        let name = match self.primary() {
-            Some(result) => match result {
-                Ok(expr) => {
-                    finish = *expr.location.end();
-                    match expr.kind {
-                        ExprKind::Literal(token) => Ok(token),
-                        ExprKind::Variable(token) => Ok(Some(token)),
-                        _ => Err(miette!("Invalid {kind} name")),
-                    }
-                }
-                Err(e) => Err(e),
-            },
-            None => Err(miette!(
-                labels = vec![LabeledSpan::at(
-                    start..=finish,
-                    format!("{kind} name expected after this")
-                )],
-                "Missing {kind} name"
-            )),
-        };
-        let name = match name {
+        let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
+
+        let name = match self.consume_name(kind, start, finish) {
             Ok(name) => name,
             Err(e) => return Some(Err(e)),
         };
@@ -148,6 +127,47 @@ impl<'a> Parser<'a> {
         Some(Ok(Stmt {
             kind,
             location: start..=finish,
+        }))
+    }
+
+    fn class_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+        let t = self.tokens.next(); // consume CLASS token TODO: include CLASS start position into stmt location
+        let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
+        let name = match self.consume_name("class", start, finish) {
+            Ok(name) => name,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let Some(name) = name else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    "class name expected after this"
+                )],
+                "Missing class name"
+            )));
+        };
+
+        if let Err(e) = self.consume(Token::LeftBrace) {
+            return Some(Err(e));
+        };
+
+        let mut methods = vec![];
+        if !self.matches(&[Token::RightBrace]) {
+            loop {
+                let method = self.function("method")?;
+                methods.push(method);
+
+                if self.matches(&[Token::RightBrace]) {
+                    break;
+                }
+            }
+        }
+        let kind = StmtKind::Class(name, None, methods);
+
+        Some(Ok(Stmt {
+            kind,
+            location: start..=finish, // TODO: include CLASS finish position into stmt location
         }))
     }
 
@@ -521,6 +541,34 @@ impl<'a> Parser<'a> {
             }
             Err(e) => Some(Err(e)),
         }
+    }
+
+    fn consume_name(
+        &mut self,
+        kind: &str,
+        start: usize,
+        finish: usize,
+    ) -> miette::Result<Option<Token<'a>>> {
+        // IMPORTANT: dont call expression here so as not to conflict with assignment
+        let name = match self.primary() {
+            Some(result) => match result {
+                Ok(expr) => match expr.kind {
+                    ExprKind::Literal(token) => Ok(token),
+                    ExprKind::Variable(token) => Ok(Some(token)),
+                    _ => Err(miette!("Invalid {kind} name")),
+                },
+                Err(e) => Err(e),
+            },
+            None => Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    format!("{kind} name expected after this")
+                )],
+                "Missing {kind} name"
+            )),
+        };
+        let name = name?;
+        Ok(name)
     }
 
     fn consume_semicolon(&mut self, position: usize) -> miette::Result<()> {

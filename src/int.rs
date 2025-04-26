@@ -485,8 +485,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     fn visit_class_stmt(
         &self,
         name: &Token<'a>,
-        superclass: &Stmt<'a>,
-        methods: &[Box<Stmt<'a>>],
+        superclass: &Option<Box<Stmt<'a>>>,
+        methods: &[miette::Result<Stmt<'a>>],
     ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
