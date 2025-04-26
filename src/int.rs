@@ -484,30 +484,31 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_set_expr(
         &mut self,
-        name: &Token<'a>,
+        field: &Token<'a>,
         obj: &Expr<'a>,
         val: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
-        let field = match name {
+        let field = match field {
             Token::Identifier(id) => id.to_string(),
             _ => return Err(miette!("Field name must be an identifier")),
         };
         // obj.field = val
 
-        let object = self.evaluate(obj)?;
-        if let LoxValue::Instance(_class, id) = object {
+        if let ExprKind::Get(_, instance) = &obj.kind {
             let v = self.evaluate(val)?;
-            if let Some(distance) = self.locals.get(&obj.get_hash_code()) {
-                self.environment.borrow_mut().set_field_at(
-                    *distance,
-                    id,
-                    field.to_string(),
-                    v.clone(),
-                );
-            } else {
-                self.globals
+            let ExprKind::Variable(id) = &instance.kind else {
+                return Err(miette!("Invalid instance"));
+            };
+            let id = match id {
+                Token::Identifier(id) => id.to_string(),
+                _ => return Err(miette!("Instance name must be an identifier")),
+            };
+            if let Some(distance) = self.locals.get(&instance.get_hash_code()) {
+                self.environment
                     .borrow_mut()
-                    .set_field(id, field.to_string(), v.clone());
+                    .set_field_at(*distance, id, field, v.clone());
+            } else {
+                self.globals.borrow_mut().set_field(id, field, v.clone());
             }
 
             Ok(v)
