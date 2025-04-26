@@ -103,3 +103,22 @@ impl<'a> Function<'a> {
         }
     }
 }
+
+pub struct Class<'a> {
+    name: &'a str,
+}
+
+impl<'a> LoxCallable<'a> for Class<'a> {
+    fn arity(&self) -> usize {
+        0
+    }
+
+    fn call(&self, _: Vec<LoxValue>) -> CallResult<'a> {
+        todo!()
+    }
+}
+impl<'a> Class<'a> {
+    pub fn new(name: &'a str) -> Self {
+        Self { name }
+    }
+}

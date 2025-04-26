@@ -145,14 +145,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
     }
 
     fn visit_class_stmt(
-        &self,
+        &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
         methods: &[miette::Result<Stmt<'a>>],
     ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
-        let _ = name;
+        self.declare(name);
+        self.define(name);
         Ok(())
     }
 

@@ -31,7 +31,7 @@ pub trait ExprVisitor<'a, R> {
 pub trait StmtVisitor<'a, R> {
     fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> R;
     fn visit_class_stmt(
-        &self,
+        &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
         methods: &[miette::Result<Stmt<'a>>],

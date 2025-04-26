@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::{
     ast::{Expr, ExprKind, ExprVisitor, LoxValue, Stmt, StmtVisitor},
-    call::{self, CallResult, Catalogue, Clock, Function},
+    call::{self, CallResult, Catalogue, Class, Clock, Function},
     env::Environment,
     lexer::Token,
 };
@@ -483,15 +483,25 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     }
 
     fn visit_class_stmt(
-        &self,
+        &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
         methods: &[miette::Result<Stmt<'a>>],
     ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
-        let _ = name;
-        todo!()
+        if let Token::Identifier(id) = name {
+            self.environment
+                .borrow_mut()
+                .define(id.to_string(), LoxValue::Callable("class", id.to_string()));
+
+            let class = Class::new(id);
+            let callable = Rc::new(RefCell::new(class));
+            self.callables.define(id, callable);
+            Ok(())
+        } else {
+            Err(miette!("Invalid class name"))
+        }
     }
 
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
