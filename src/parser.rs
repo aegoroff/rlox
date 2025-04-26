@@ -32,14 +32,23 @@ impl<'a> Parser<'a> {
         match current {
             Ok((_, Token::Var, _)) => self.var_declaration(),
             Ok((_, Token::Class, _)) => self.class_declaration(),
-            Ok((_, Token::Fun, _)) => self.function("function"),
+            Ok((_, Token::Fun, _)) => {
+                self.tokens.next(); // consume FUN token TODO: include FUN start position into stmt location
+                //let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
+                self.function("function")
+            }
             _ => self.statement(),
         }
     }
 
     fn function(&mut self, kind: &'static str) -> Option<miette::Result<Stmt<'a>>> {
-        let t = self.tokens.next(); // consume FUN token TODO: include FUN start position into stmt location
-        let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
+        let mut start = 0;
+        let mut finish = 0;
+        // CRUTCH: awkard way to get start and finish positions for function name
+        if let Some(Ok((s, _, f))) = self.tokens.peek() {
+            start = *s;
+            finish = *f;
+        }
 
         let name = match self.consume_name(kind, start, finish) {
             Ok(name) => name,
@@ -92,7 +101,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let Some(left_paren) = self.tokens.peek() else {
+        let Some(left_brace) = self.tokens.peek() else {
             return Some(Err(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
@@ -102,7 +111,7 @@ impl<'a> Parser<'a> {
             )));
         };
 
-        if let Err(e) = left_paren {
+        if let Err(e) = left_brace {
             return Some(Err(miette!(
                 labels = vec![LabeledSpan::at(start..=finish, e.to_string())],
                 "Missing {kind} block"
@@ -161,9 +170,6 @@ impl<'a> Parser<'a> {
                 if self.matches(&[Token::RightBrace]) {
                     break;
                 }
-            }
-            if let Err(e) = self.consume(Token::RightBrace) {
-                return Some(Err(e));
             }
         }
 
