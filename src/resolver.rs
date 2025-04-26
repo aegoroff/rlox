@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{Expr, ExprKind, ExprVisitor, Stmt, StmtVisitor},
@@ -41,11 +41,34 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         }
     }
 
-    fn resolve_statements(&mut self, stmts: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
-        for stmt in stmts {
-            self.resolve_statement(stmt)?;
+    fn resolve_statements(
+        &mut self,
+        statements: &'a [miette::Result<Stmt<'a>>],
+    ) -> miette::Result<()> {
+        let mut errors = vec![];
+
+        let mut spans = HashSet::new();
+        let mut add_error = |e: miette::Report| {
+            if let Some(label) = e.labels() {
+                for l in label {
+                    if !spans.contains(&(l.len(), l.offset())) {
+                        spans.insert((l.len(), l.offset()));
+                        errors.push(l);
+                    }
+                }
+            }
+        };
+
+        for stmt in statements {
+            if let Err(e) = self.resolve_statement(stmt) {
+                add_error(e)
+            }
         }
-        Ok(())
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(miette!(labels = errors, "Program completed with errors"))
+        }
     }
 
     fn resolve_expression(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
