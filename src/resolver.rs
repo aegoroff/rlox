@@ -278,7 +278,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
     }
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<()> {
-        let _ = object;
+        self.resolve_expression(object)?;
         let _ = name;
         Ok(())
     }

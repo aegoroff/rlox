@@ -387,7 +387,38 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
         let _ = name;
-        self.evaluate(object)
+        let result = self.evaluate(object)?;
+        match &result {
+            LoxValue::Instance(class) => {
+                let callee = self.callables.get(class)?;
+                let callee = callee.borrow();
+                match callee.call(vec![])? {
+                    CallResult::Value(lox_value) => Ok(lox_value),
+                    CallResult::Code(stmt, closure) => {
+                        let result = {
+                            let prev = self.begin_scope(closure);
+                            let result = self.interpret_one(stmt);
+                            self.end_scope(prev);
+                            result
+                        };
+                        match result {
+                            Ok(_) => Ok(LoxValue::Nil),
+                            Err(e) => {
+                                if let Some(ProgramError::Return(val)) =
+                                    e.downcast_ref::<ProgramError>()
+                                {
+                                    // Return handling case
+                                    Ok(val.clone())
+                                } else {
+                                    Err(e)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => Err(miette!("Only instances have properties")),
+        }
     }
 
     fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {

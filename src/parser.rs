@@ -547,47 +547,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn consume_name(
-        &mut self,
-        kind: &str,
-        start: usize,
-        finish: usize,
-    ) -> miette::Result<Option<Token<'a>>> {
-        // IMPORTANT: dont call expression here so as not to conflict with assignment
-        let name = match self.primary() {
-            Some(result) => match result {
-                Ok(expr) => match expr.kind {
-                    ExprKind::Literal(token) => Ok(token),
-                    ExprKind::Variable(token) => Ok(Some(token)),
-                    _ => Err(miette!("Invalid {kind} name")),
-                },
-                Err(e) => Err(e),
-            },
-            None => Err(miette!(
-                labels = vec![LabeledSpan::at(
-                    start..=finish,
-                    format!("{kind} name expected after this")
-                )],
-                "Missing {kind} name"
-            )),
-        };
-        let name = name?;
-        Ok(name)
-    }
-
-    fn consume_semicolon(&mut self, position: usize) -> miette::Result<()> {
-        if !self.matches(&[Token::Semicolon]) {
-            return Err(miette!(
-                labels = vec![LabeledSpan::at(
-                    position..=position,
-                    "Semicolon expected here"
-                )],
-                "Missing semicolon"
-            ));
-        }
-        Ok(())
-    }
-
     fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
         self.assignment()
     }
@@ -1036,6 +995,28 @@ impl<'a> Parser<'a> {
                     Some(Err(e)) => return Some(Err(e)),
                     None => return None,
                 };
+            } else if self.matches(&[Token::Dot]) {
+                let (start, _, finish) = match self.tokens.peek() {
+                    Some(Ok(t)) => t,
+                    Some(Err(_)) => return Some(Err(miette!("Invalid dot operator"))),
+                    None => return None,
+                };
+                let start = *start;
+                let finish = *finish;
+                let Ok(name) = self.consume_identifier(start, finish) else {
+                    return Some(Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            start..=finish,
+                            "Missing identifier after dot operator"
+                        )],
+                        "Invalid syntax"
+                    )));
+                };
+                let start = *expr.location.start();
+                expr = Expr {
+                    kind: ExprKind::Get(name, Box::new(expr)),
+                    location: start..=finish,
+                };
             } else {
                 break;
             }
@@ -1145,6 +1126,72 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn consume_name(
+        &mut self,
+        kind: &str,
+        start: usize,
+        finish: usize,
+    ) -> miette::Result<Option<Token<'a>>> {
+        // IMPORTANT: dont call expression here so as not to conflict with assignment
+        let name = match self.primary() {
+            Some(result) => match result {
+                Ok(expr) => match expr.kind {
+                    ExprKind::Literal(token) => Ok(token),
+                    ExprKind::Variable(token) => Ok(Some(token)),
+                    _ => Err(miette!("Invalid {kind} name")),
+                },
+                Err(e) => Err(e),
+            },
+            None => Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    format!("{kind} name expected after this")
+                )],
+                "Missing {kind} name"
+            )),
+        };
+        let name = name?;
+        Ok(name)
+    }
+
+    fn consume_identifier(&mut self, start: usize, finish: usize) -> miette::Result<Token<'a>> {
+        // IMPORTANT: dont call expression here so as not to conflict with assignment
+        let name = match self.primary() {
+            Some(result) => match result {
+                Ok(expr) => match expr.kind {
+                    ExprKind::Variable(token) => Ok(Some(token)),
+                    _ => Err(miette!("Invalid identifier name")),
+                },
+                Err(e) => Err(e),
+            },
+            None => Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    "Identifier expected after this"
+                )],
+                "Missing identifier"
+            )),
+        };
+        let name = name?;
+        match name {
+            Some(name) => Ok(name),
+            None => Err(miette!("Missing identifier")),
+        }
+    }
+
+    fn consume_semicolon(&mut self, position: usize) -> miette::Result<()> {
+        if !self.matches(&[Token::Semicolon]) {
+            return Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    position..=position,
+                    "Semicolon expected here"
+                )],
+                "Missing semicolon"
+            ));
+        }
+        Ok(())
+    }
+
     fn consume_right_parent(&mut self, position: usize) -> miette::Result<RangeInclusive<usize>> {
         if self.tokens.peek().is_none() {
             return Err(miette!(
@@ -1190,7 +1237,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn consume(&mut self, token: Token) -> miette::Result<RangeInclusive<usize>> {
+    fn consume(&mut self, token: Token<'a>) -> miette::Result<RangeInclusive<usize>> {
         let Some(current) = self.tokens.peek() else {
             return Err(miette!("Expected {token} here"));
         };
