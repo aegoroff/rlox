@@ -74,6 +74,28 @@ impl Environment {
         }
     }
 
+    pub fn set_field_at(
+        &mut self,
+        distance: usize,
+        id: String,
+        field: String,
+        initializer: LoxValue,
+    ) {
+        if distance == 0 {
+            self.set_field(id, field, initializer)
+        } else {
+            let mut parent = self.enclosing.clone();
+            for _ in 1..distance {
+                if let Some(e) = parent {
+                    parent = e.borrow().enclosing.clone();
+                }
+            }
+            if let Some(e) = parent {
+                e.borrow_mut().set_field(id, field, initializer)
+            }
+        }
+    }
+
     pub fn get_field(&self, id: &str, field: &str) -> miette::Result<LoxValue> {
         if let Some(fields) = self.fields.get(id) {
             if let Some(field) = fields.get(field) {
@@ -85,6 +107,24 @@ impl Environment {
             enclosing.borrow().get_field(id, field)
         } else {
             Err(miette!("No any field set for: '{id}'"))
+        }
+    }
+
+    pub fn get_field_at(&self, distance: usize, id: &str, field: &str) -> miette::Result<LoxValue> {
+        if distance == 0 {
+            self.get_field(id, field)
+        } else {
+            let mut parent = self.enclosing.clone();
+            for _ in 1..distance {
+                if let Some(e) = parent {
+                    parent = e.borrow().enclosing.clone();
+                }
+            }
+            if let Some(e) = parent {
+                e.borrow().get_field(id, field)
+            } else {
+                Err(miette!("Undefined identifier: '{id}'"))
+            }
         }
     }
 

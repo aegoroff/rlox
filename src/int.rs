@@ -404,7 +404,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             LoxValue::Instance(_, id) => {
                 if let Token::Identifier(field) = name {
                     // TODO: Implement class instance calls here
-                    let field = self.environment.borrow().get_field(id, field)?;
+
+                    let field = if let Some(distance) = self.locals.get(&object.get_hash_code()) {
+                        self.environment
+                            .borrow()
+                            .get_field_at(*distance, id, field)?
+                    } else {
+                        self.globals.borrow().get_field(id, field)?
+                    };
                     Ok(field)
                 } else {
                     Err(miette!("Field name must be an identifier"))
@@ -488,19 +495,21 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         // obj.field = val
 
         let object = self.evaluate(obj)?;
-        if let LoxValue::Instance(_, id) = object {
-            // TODO: Take into account scope here
-
+        if let LoxValue::Instance(_class, id) = object {
+            let v = self.evaluate(val)?;
             if let Some(distance) = self.locals.get(&obj.get_hash_code()) {
-                println!("id {id} distance: {distance}");
+                self.environment.borrow_mut().set_field_at(
+                    *distance,
+                    id,
+                    field.to_string(),
+                    v.clone(),
+                );
             } else {
-                println!("No distance: {id}");
+                self.globals
+                    .borrow_mut()
+                    .set_field(id, field.to_string(), v.clone());
             }
 
-            let v = self.evaluate(val)?;
-            self.environment
-                .borrow_mut()
-                .set_field(id, field.to_string(), v.clone());
             Ok(v)
         } else {
             Err(miette!("Only instances have fields"))
