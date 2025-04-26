@@ -478,7 +478,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             Token::Identifier(id) => id.to_string(),
             _ => return Err(miette!("Field name must be an identifier")),
         };
-        // obj.name = val
+        // obj.field = val
+
+        // TODO: Take into account scope here
         let object = self.evaluate(obj)?;
         if let LoxValue::Instance(_, id) = object {
             let v = self.evaluate(val)?;
@@ -755,6 +757,7 @@ mod tests {
     #[test_case("class Bagel{} var b = Bagel(); print b;", "b: Bagel" ; "class instance empty")]
     #[test_case("class Bagel{} var b = Bagel(); { var b = Bagel(); b.field = 1; print b.field; } b.field = 2; print b.field;", "1\n2" ; "get/set class field complex")]
     #[test_case("class Bagel{} var b = Bagel(); { b.field = 1; } print b.field; b.field = 2; print b.field;", "1\n2" ; "get/set class field complex no shadowing")]
+    #[test_case("class Bagel{} var b; b = Bagel(); { b.field = 1; } print b.field; b.field = 2; print b.field;", "1\n2" ; "get/set class field complex no shadowing assignment")]
     #[test_case("class Bagel{} var b = Bagel(); b.field = 1; print b.field;", "1" ; "get/set class field")]
     #[test_case("class Bagel{} var b; b = Bagel(); b.field = 1; print b.field;", "1" ; "class instance assign and get/set class field")]
     #[test_case("class Bagel { method() { print 10;} } var b = Bagel(); b.method();", "10" ; "call class method")]
