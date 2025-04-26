@@ -480,11 +480,12 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             if self.environment.borrow().get(id).is_ok() {
                 return Err(miette!("Class '{id}' redefinition"));
             }
+            let definition = LoxValue::Callable("class", id.to_string());
             self.environment
                 .borrow_mut()
-                .define(id.to_string(), LoxValue::Callable("class", id.to_string()));
+                .define(id.to_string(), definition.clone());
 
-            let class = Class::new(id);
+            let class = Class::new(definition);
             let callable = Rc::new(RefCell::new(class));
             self.callables.define(id, callable);
             Ok(())

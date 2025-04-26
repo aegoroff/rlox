@@ -118,21 +118,21 @@ impl<'a> Function<'a> {
     }
 }
 
-pub struct Class<'a> {
-    name: &'a str,
+pub struct Class {
+    callee: LoxValue,
 }
 
-impl<'a> LoxCallable<'a> for Class<'a> {
+impl<'a> LoxCallable<'a> for Class {
     fn arity(&self) -> usize {
         0
     }
 
     fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
-        todo!()
+        Ok(CallResult::Value(self.callee.clone()))
     }
 }
-impl<'a> Class<'a> {
-    pub fn new(name: &'a str) -> Self {
-        Self { name }
+impl Class {
+    pub fn new(callee: LoxValue) -> Self {
+        Self { callee }
     }
 }
