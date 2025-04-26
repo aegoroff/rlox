@@ -396,6 +396,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         match &result {
             LoxValue::Instance(_, id) => {
                 if let Token::Identifier(field) = name {
+                    // TODO: Implement class instance calls here
                     let field = self.environment.borrow().get_field(id, field)?;
                     Ok(field)
                 } else {
@@ -754,6 +755,7 @@ mod tests {
     #[test_case("class Bagel{} var b = Bagel(); print b;", "b: Bagel" ; "class instance empty")]
     #[test_case("class Bagel{} var b = Bagel(); b.field = 1; print b.field;", "1" ; "get/set class field")]
     #[test_case("class Bagel{} var b; b = Bagel(); b.field = 1; print b.field;", "1" ; "class instance assign and get/set class field")]
+    #[test_case("class Bagel { method() { print 10;} } var b = Bagel(); b.method();", "10" ; "call class method")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

@@ -84,7 +84,7 @@ impl Environment {
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow().get_field(id, field)
         } else {
-            Err(miette!("Undefined identifier: '{id}'"))
+            Err(miette!("No any field set for: '{id}'"))
         }
     }
 
