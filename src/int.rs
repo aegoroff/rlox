@@ -768,6 +768,7 @@ mod tests {
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
     #[test_case("if (clock() > 0) print \"good\"; else print \"impossible\";", "good" ; "call in predicate")]
+    #[test_case("fun x(v) { } print x(10);", "" ; "empty function body")]
     #[test_case("fun x(v) { print v; } print x(10);", "10" ; "simple call one arg")]
     #[test_case("fun sum(a1, a2) { print a1 + a2; } sum(1, 2);", "3" ; "simple call two args")]
     #[test_case("fun sum_and_decr(a1, a2) { var x = a1 + a2 - 1; print x; } sum_and_decr(1, 2);", "2" ; "function with two statements")]
@@ -786,6 +787,8 @@ mod tests {
     #[test_case("class Bagel{} var b; b = Bagel(); b.field = 1; print b.field;", "1" ; "class instance assign and get/set class field")]
     #[test_case("class Bagel{} var b; { b = Bagel(); b.field = 1; } b.field = 2; print b.field;", "2" ; "class instance init inside child scope and get/set class field")]
     #[test_case("class Bagel { method() { print 10;} } var b = Bagel(); b.method();", "10" ; "call class method")]
+    #[test_case("class Foo { method() { } } var foo = Foo(); foo.a = 1; var i = 0; while (i < 2) { print foo.a; i = i + 1; }", "1\n1" ; "class with empty body method and use it from while")]
+    #[test_case("class Foo { method() { } } var foo = Foo(); foo.a = 1; print foo.a;", "1" ; "class with empty body method and use it")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
