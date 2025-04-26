@@ -295,22 +295,26 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         }
     }
 
-    fn visit_assign_expr(
-        &mut self,
-        to: &Expr<'a>,
-        name: &Token<'a>,
-        value: &Expr<'a>,
-    ) -> miette::Result<LoxValue> {
-        let location = value.location.clone();
-        if let Token::Identifier(id) = name {
-            let val = value.accept(self)?;
+    fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> miette::Result<LoxValue> {
+        let location = rhs.location.clone();
+        if let ExprKind::Variable(id) = &lhs.kind {
+            let Token::Identifier(id) = id else {
+                return Err(miette!(
+                    labels = vec![LabeledSpan::at(
+                        lhs.location.clone(),
+                        "Invalid l-value expression"
+                    )],
+                    "Assigment failed"
+                ));
+            };
+            let val = rhs.accept(self)?;
             // Convert class to instance if needed
             let val = if let LoxValue::Class(class) = val {
                 LoxValue::Instance(class.to_string(), id.to_string())
             } else {
                 val
             };
-            if let Some(distance) = self.locals.get(&to.get_hash_code()) {
+            if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
                 self.environment
                     .borrow_mut()
                     .assign_at(*distance, id.to_string(), val.clone())
@@ -335,7 +339,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             }
         } else {
             Err(miette!(
-                labels = vec![LabeledSpan::at(location, "Invalid l-value expression")],
+                labels = vec![LabeledSpan::at(
+                    lhs.location.clone(),
+                    "Invalid l-value expression"
+                )],
                 "Assigment failed"
             ))
         }
@@ -480,9 +487,16 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         };
         // obj.field = val
 
-        // TODO: Take into account scope here
         let object = self.evaluate(obj)?;
         if let LoxValue::Instance(_, id) = object {
+            // TODO: Take into account scope here
+
+            if let Some(distance) = self.locals.get(&obj.get_hash_code()) {
+                println!("id {id} distance: {distance}");
+            } else {
+                println!("No distance: {id}");
+            }
+
             let v = self.evaluate(val)?;
             self.environment
                 .borrow_mut()

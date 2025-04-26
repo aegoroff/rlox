@@ -12,7 +12,7 @@ pub trait ExprVisitor<'a, R> {
     fn visit_literal(&self, token: &Option<Token<'a>>) -> R;
     fn visit_binary_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
     fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) -> R;
-    fn visit_assign_expr(&mut self, to: &Expr<'a>, name: &Token<'a>, value: &Expr<'a>) -> R;
+    fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> R;
     fn visit_call_expr(
         &mut self,
         paren: &Token<'a>,
@@ -62,7 +62,7 @@ pub enum ExprKind<'a> {
     Literal(Option<Token<'a>>),
     Binary(Token<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
     Unary(Token<'a>, Box<Expr<'a>>),
-    Assign(Token<'a>, Box<Expr<'a>>),
+    Assign(Box<Expr<'a>>, Box<Expr<'a>>),
     /// paren, callee, args
     Call(Token<'a>, Box<Expr<'a>>, Vec<Box<Expr<'a>>>),
     Get(Token<'a>, Box<Expr<'a>>),
@@ -90,7 +90,7 @@ impl<'a> Expr<'a> {
                 visitor.visit_binary_expr(operator, left, right)
             }
             ExprKind::Unary(operator, expr) => visitor.visit_unary_expr(operator, expr),
-            ExprKind::Assign(name, value) => visitor.visit_assign_expr(self, name, value),
+            ExprKind::Assign(lhs, rhs) => visitor.visit_assign_expr(lhs, rhs),
             ExprKind::Call(paren, callee, args) => visitor.visit_call_expr(paren, callee, args),
             ExprKind::Get(name, object) => visitor.visit_get_expr(name, object),
             ExprKind::Grouping(grouping) => visitor.visit_grouping_expr(grouping),

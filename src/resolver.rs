@@ -109,7 +109,8 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         for scope in self.scopes.iter().rev() {
             i -= 1;
             if scope.contains_key(id) {
-                self.interpreter.resolve(value, self.scopes.len() - 1 - i);
+                let depth = self.scopes.len() - 1 - i;
+                self.interpreter.resolve(value, depth);
                 return;
             }
         }
@@ -252,14 +253,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         self.resolve_expression(expr)
     }
 
-    fn visit_assign_expr(
-        &mut self,
-        to: &Expr<'a>,
-        name: &Token<'a>,
-        value: &Expr<'a>,
-    ) -> miette::Result<()> {
-        self.resolve_expression(value)?;
-        self.resolve_local(to, name);
+    fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> miette::Result<()> {
+        self.resolve_expression(rhs)?;
+        if let ExprKind::Variable(name) = &lhs.kind {
+            self.resolve_local(lhs, name);
+        }
         Ok(())
     }
 
@@ -301,13 +299,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
 
     fn visit_set_expr(
         &mut self,
-        name: &Token<'a>,
+        _: &Token<'a>,
         obj: &Expr<'a>,
         val: &Expr<'a>,
     ) -> miette::Result<()> {
         self.resolve_expression(val)?;
         self.resolve_expression(obj)?;
-        let _ = name;
         Ok(())
     }
 

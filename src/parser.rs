@@ -565,22 +565,21 @@ impl<'a> Parser<'a> {
                 match rhs {
                     Ok(rhs) => {
                         let rhs_finish = *rhs.location.end();
-                        match lhs.kind {
-                            ExprKind::Variable(token) => match token {
+                        match &lhs.kind {
+                            ExprKind::Variable(_) => {
+                                let kind = ExprKind::Assign(Box::new(lhs), Box::new(rhs));
+                                Some(Ok(Expr {
+                                    kind,
+                                    location: start..=rhs_finish,
+                                }))
+                            }
+                            ExprKind::Get(field, _value) => match field {
                                 Token::Identifier(id) => {
-                                    let kind =
-                                        ExprKind::Assign(Token::Identifier(id), Box::new(rhs));
-                                    Some(Ok(Expr {
-                                        kind,
-                                        location: start..=rhs_finish,
-                                    }))
-                                }
-                                _ => todo!(),
-                            },
-                            ExprKind::Get(token, expr) => match token {
-                                Token::Identifier(id) => {
-                                    let kind =
-                                        ExprKind::Set(Token::Identifier(id), expr, Box::new(rhs));
+                                    let kind = ExprKind::Set(
+                                        Token::Identifier(id),
+                                        Box::new(lhs),
+                                        Box::new(rhs),
+                                    );
                                     Some(Ok(Expr {
                                         kind,
                                         location: start..=rhs_finish,
@@ -1014,7 +1013,7 @@ impl<'a> Parser<'a> {
                 };
                 let start = *start;
                 let finish = *finish;
-                let Ok(name) = self.consume_identifier(start, finish) else {
+                let Ok(field) = self.consume_identifier(start, finish) else {
                     return Some(Err(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
@@ -1025,7 +1024,7 @@ impl<'a> Parser<'a> {
                 };
                 let start = *expr.location.start();
                 expr = Expr {
-                    kind: ExprKind::Get(name, Box::new(expr)),
+                    kind: ExprKind::Get(field, Box::new(expr)),
                     location: start..=finish,
                 };
             } else {
