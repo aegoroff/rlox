@@ -5,10 +5,17 @@ use crate::{
     int::Interpreter,
     lexer::Token,
 };
+use miette::{LabeledSpan, miette};
+
+enum FunctionType {
+    None,
+    Function,
+}
 
 pub struct Resolver<'a, W: std::io::Write> {
     interpreter: Interpreter<'a, W>,
     scopes: Vec<HashMap<&'a str, bool>>,
+    current_function: FunctionType,
 }
 
 impl<'a, W: std::io::Write> Resolver<'a, W> {
@@ -16,28 +23,32 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         Self {
             interpreter,
             scopes: vec![],
+            current_function: FunctionType::None,
         }
     }
 
     pub fn interpret(mut self, stmts: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
-        self.resolve_statements(stmts);
+        self.resolve_statements(stmts)?;
         self.interpreter.interpret(stmts)
     }
 
-    fn resolve_statement(&mut self, stmt: &'a miette::Result<Stmt<'a>>) {
+    fn resolve_statement(&mut self, stmt: &'a miette::Result<Stmt<'a>>) -> miette::Result<()> {
         if let Ok(stmt) = stmt {
-            stmt.accept(self);
+            stmt.accept(self)
+        } else {
+            Err(miette!("Failed to resolve statement"))
         }
     }
 
-    fn resolve_statements(&mut self, stmts: &'a [miette::Result<Stmt<'a>>]) {
+    fn resolve_statements(&mut self, stmts: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         for stmt in stmts {
-            self.resolve_statement(stmt);
+            self.resolve_statement(stmt)?;
         }
+        Ok(())
     }
 
-    fn resolve_expression(&mut self, expr: &Expr<'a>) {
-        expr.accept(self);
+    fn resolve_expression(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+        expr.accept(self)
     }
 
     fn begin_scope(&mut self) {
@@ -84,7 +95,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         &mut self,
         params: &[Box<Expr<'a>>],
         body: &'a Result<Stmt<'a>, miette::Error>,
-    ) {
+    ) -> miette::Result<()> {
         self.begin_scope();
         for p in params {
             if let ExprKind::Variable(p) = &p.kind {
@@ -92,26 +103,33 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
                 self.define(p);
             }
         }
-        self.resolve_statement(body);
+        self.resolve_statement(body)?;
         self.end_scope();
+        Ok(())
     }
 }
-
-impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) {
+impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a, W> {
+    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         self.begin_scope();
-        self.resolve_statements(body);
+        self.resolve_statements(body)?;
         self.end_scope();
+        Ok(())
     }
 
-    fn visit_class_stmt(&self, name: &Token<'a>, superclass: &Stmt<'a>, methods: &[Box<Stmt<'a>>]) {
+    fn visit_class_stmt(
+        &self,
+        name: &Token<'a>,
+        superclass: &Stmt<'a>,
+        methods: &[Box<Stmt<'a>>],
+    ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
         let _ = name;
+        Ok(())
     }
 
-    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) {
-        self.resolve_expression(expr);
+    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+        self.resolve_expression(expr)
     }
 
     fn visit_function_decl_stmt(
@@ -119,10 +137,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
         body: &'a miette::Result<Stmt<'a>>,
-    ) {
+    ) -> miette::Result<()> {
         self.declare(token);
         self.define(token);
-        self.resolve_function(params, body);
+        self.resolve_function(params, body)
     }
 
     fn visit_if_stmt(
@@ -130,106 +148,158 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, ()> for Resolver<'a, W> {
         cond: &Expr<'a>,
         then: &'a miette::Result<Stmt<'a>>,
         otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
-    ) {
-        self.resolve_expression(cond);
-        self.resolve_statement(then);
+    ) -> miette::Result<()> {
+        self.resolve_expression(cond)?;
+        self.resolve_statement(then)?;
         if let Some(other) = otherwise {
-            self.resolve_statement(other);
+            self.resolve_statement(other)?;
         }
+        Ok(())
     }
 
-    fn visit_print_stmt(&mut self, expr: &Expr<'a>) {
-        self.resolve_expression(expr);
+    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+        self.resolve_expression(expr)
     }
 
-    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) {
+    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
         let _ = keyword;
-        self.resolve_expression(value);
+        self.resolve_expression(value)
     }
 
-    fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) {
+    fn visit_variable_stmt(
+        &mut self,
+        name: &Token<'a>,
+        initializer: &Option<Box<Expr<'a>>>,
+    ) -> miette::Result<()> {
         self.declare(name);
         if let Some(init) = initializer {
-            self.resolve_expression(init);
+            self.resolve_expression(init)?;
         }
         self.define(name);
+        Ok(())
     }
 
-    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) {
-        self.resolve_expression(cond);
-        self.resolve_statement(body);
+    fn visit_while_stmt(
+        &mut self,
+        cond: &Expr<'a>,
+        body: &'a miette::Result<Stmt<'a>>,
+    ) -> miette::Result<()> {
+        self.resolve_expression(cond)?;
+        self.resolve_statement(body)?;
+        Ok(())
     }
 }
 
-impl<'a, W: std::io::Write> ExprVisitor<'a, ()> for Resolver<'a, W> {
-    fn visit_literal(&self, token: &Option<crate::lexer::Token<'a>>) {
+impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a, W> {
+    fn visit_literal(&self, token: &Option<crate::lexer::Token<'a>>) -> miette::Result<()> {
         let _ = token;
+        Ok(())
     }
 
-    fn visit_binary_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) {
+    fn visit_binary_expr(
+        &mut self,
+        operator: &Token<'a>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+    ) -> miette::Result<()> {
         let _ = operator;
-        self.resolve_expression(left);
-        self.resolve_expression(right);
+        self.resolve_expression(left)?;
+        self.resolve_expression(right)?;
+        Ok(())
     }
 
-    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) {
+    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) -> miette::Result<()> {
         let _ = operator;
-        self.resolve_expression(expr);
+        self.resolve_expression(expr)
     }
 
-    fn visit_assign_expr(&mut self, to: &Expr<'a>, name: &Token<'a>, value: &Expr<'a>) {
-        self.resolve_expression(value);
+    fn visit_assign_expr(
+        &mut self,
+        to: &Expr<'a>,
+        name: &Token<'a>,
+        value: &Expr<'a>,
+    ) -> miette::Result<()> {
+        self.resolve_expression(value)?;
         self.resolve_local(to, name);
+        Ok(())
     }
 
-    fn visit_call_expr(&mut self, paren: &Token<'a>, callee: &Expr<'a>, args: &[Box<Expr<'a>>]) {
+    fn visit_call_expr(
+        &mut self,
+        paren: &Token<'a>,
+        callee: &Expr<'a>,
+        args: &[Box<Expr<'a>>],
+    ) -> miette::Result<()> {
         let _ = paren;
-        self.resolve_expression(callee);
+        self.resolve_expression(callee)?;
         for arg in args {
-            self.resolve_expression(arg);
+            self.resolve_expression(arg)?;
         }
+        Ok(())
     }
 
-    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) {
+    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<()> {
         let _ = object;
         let _ = name;
+        Ok(())
     }
 
-    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) {
-        self.resolve_expression(grouping);
+    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> miette::Result<()> {
+        self.resolve_expression(grouping)
     }
 
-    fn visit_logical_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) {
+    fn visit_logical_expr(
+        &mut self,
+        operator: &Token<'a>,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+    ) -> miette::Result<()> {
         let _ = right;
         let _ = left;
         let _ = operator;
+        Ok(())
     }
 
-    fn visit_set_expr(&mut self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) {
+    fn visit_set_expr(
+        &mut self,
+        name: &Token<'a>,
+        obj: &Expr<'a>,
+        val: &Expr<'a>,
+    ) -> miette::Result<()> {
         let _ = val;
         let _ = obj;
         let _ = name;
+        Ok(())
     }
 
-    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) {
+    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> miette::Result<()> {
         let _ = method;
         let _ = keyword;
+        Ok(())
     }
 
-    fn visit_this_expr(&mut self, keyword: &Token<'a>) {
+    fn visit_this_expr(&mut self, keyword: &Token<'a>) -> miette::Result<()> {
         let _ = keyword;
+        Ok(())
     }
 
-    fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) {
+    fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> miette::Result<()> {
         if let Some(scope) = self.scopes.last() {
             if let Token::Identifier(id) = name {
                 if let Some(defined) = scope.get(id) {
                     if !(*defined) {
-                        // TODO: Error here
+                        return Err(miette!(
+                            labels = vec![LabeledSpan::at(
+                                obj.location.clone(),
+                                format!("Cant read local variable '{id}' in its own initializer")
+                            )],
+                            "Variable is not defined"
+                        ));
                     }
                 }
             }
         }
         self.resolve_local(obj, name);
+        Ok(())
     }
 }
