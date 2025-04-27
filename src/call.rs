@@ -25,6 +25,7 @@ pub trait LoxCallable<'a> {
 
 pub const CLOCK: &str = "clock";
 
+#[derive(Default)]
 pub struct Catalogue<'a> {
     storage: HashMap<&'a str, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
 }
@@ -36,8 +37,8 @@ impl<'a> Catalogue<'a> {
         }
     }
 
-    pub fn get(&mut self, id: &str) -> miette::Result<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        if let Some(var) = self.storage.get_mut(id) {
+    pub fn get(&self, id: &str) -> miette::Result<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        if let Some(var) = self.storage.get(id) {
             Ok(var.clone())
         } else {
             Err(miette!("Undefined identifier: '{id}'"))
