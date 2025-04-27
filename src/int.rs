@@ -460,9 +460,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 Ok(field)
             }
             LoxValue::Class(class) => {
-                let callee = self.callables.get(class)?;
-                let callee = callee.borrow();
-                self.call_code(vec![], callee)
+                let Token::Identifier(field_or_method) = name else {
+                    return Err(miette!("Field name must be an identifier"));
+                };
+                Ok(LoxValue::Instance(
+                    class.to_string(),
+                    (*field_or_method).to_string(),
+                ))
             }
             _ => Err(miette!("Only instances have properties")),
         }
