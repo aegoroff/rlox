@@ -440,12 +440,16 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                     return Err(miette!("Field name must be an identifier"));
                 };
 
-                if let Ok(class) = self.callables.get(class_name) {
-                    let class = class.borrow();
-                    if let Ok(CallResult::Value(lox_value)) =
-                        class.call(vec![LoxValue::String(field_or_method.to_string())])
-                    {
-                        return Ok(lox_value);
+                if let Some(methods) = self.all_class_methods.get(class_name) {
+                    if methods.contains_key(*field_or_method) {
+                        if let Ok(class) = self.callables.get(class_name) {
+                            let class = class.borrow();
+                            if let Ok(CallResult::Value(lox_value)) =
+                                class.call(vec![LoxValue::String(field_or_method.to_string())])
+                            {
+                                return Ok(lox_value);
+                            }
+                        }
                     }
                 }
                 let field = if let Some(distance) = self.locals.get(&object.get_hash_code()) {
