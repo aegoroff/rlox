@@ -462,33 +462,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             LoxValue::Class(class) => {
                 let callee = self.callables.get(class)?;
                 let callee = callee.borrow();
-                match callee.call(vec![])? {
-                    CallResult::Value(lox_value) => {
-                        // TODO: Implement class instance creation without var
-                        Ok(lox_value)
-                    }
-                    CallResult::Code(stmt, closure) => {
-                        let result = {
-                            let prev = self.begin_scope(closure);
-                            let result = self.interpret_one(stmt);
-                            self.end_scope(prev);
-                            result
-                        };
-                        match result {
-                            Ok(()) => Ok(LoxValue::Nil),
-                            Err(e) => {
-                                if let Some(ProgramError::Return(val)) =
-                                    e.downcast_ref::<ProgramError>()
-                                {
-                                    // Return handling case
-                                    Ok(val.clone())
-                                } else {
-                                    Err(e)
-                                }
-                            }
-                        }
-                    }
-                }
+                self.call_code(vec![], callee)
             }
             _ => Err(miette!("Only instances have properties")),
         }
