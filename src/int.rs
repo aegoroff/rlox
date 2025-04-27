@@ -839,6 +839,7 @@ mod tests {
     #[test_case("class Foo { method() { } } var foo = Foo(); foo.a = 1; print foo.a;", "1" ; "class with empty body method and use it")]
     #[test_case("class Foo {} var foo = Foo(); fun bar() { print 10; } foo.meth = bar; print foo.meth();", "10" ; "call property with stored function")]
     #[test_case("class Bagel { method() { print 10;} } Bagel().method();", "10" ; "call class method without instance in var")]
+    #[test_case("class Bagel { method() { print 10;} } var b = Bagel().method; b();", "10" ; "call class method from assigned var")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
