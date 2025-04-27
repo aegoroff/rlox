@@ -3,7 +3,7 @@ use std::{iter::Peekable, ops::RangeInclusive};
 use miette::{LabeledSpan, miette};
 
 use crate::{
-    ast::{Expr, ExprKind, Stmt, StmtKind},
+    ast::{Expr, ExprKind, FunctionKind, Stmt, StmtKind},
     lexer::{Lexer, Token},
 };
 
@@ -35,13 +35,13 @@ impl<'a> Parser<'a> {
             Ok((_, Token::Fun, _)) => {
                 self.tokens.next(); // consume FUN token TODO: include FUN start position into stmt location
                 //let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
-                self.function("function")
+                self.function(FunctionKind::Function)
             }
             _ => self.statement(),
         }
     }
 
-    fn function(&mut self, kind: &'static str) -> Option<miette::Result<Stmt<'a>>> {
+    fn function(&mut self, kind: FunctionKind) -> Option<miette::Result<Stmt<'a>>> {
         let mut start = 0;
         let mut finish = 0;
         // CRUTCH: awkard way to get start and finish positions for function name
@@ -50,7 +50,7 @@ impl<'a> Parser<'a> {
             finish = *f;
         }
 
-        let name = match self.consume_name(kind, start, finish) {
+        let name = match self.consume_name(&kind.to_string(), start, finish) {
             Ok(name) => name,
             Err(e) => return Some(Err(e)),
         };
@@ -131,7 +131,7 @@ impl<'a> Parser<'a> {
             }
         };
 
-        let kind = StmtKind::Function(name?, args, Box::new(block));
+        let kind = StmtKind::Function(kind, name?, args, Box::new(block));
 
         Some(Ok(Stmt {
             kind,
@@ -164,7 +164,7 @@ impl<'a> Parser<'a> {
         let mut methods = vec![];
         if !self.matches(&[Token::RightBrace]) {
             loop {
-                let method = self.function("method")?;
+                let method = self.function(FunctionKind::Method)?;
                 methods.push(method);
 
                 if self.matches(&[Token::RightBrace]) {

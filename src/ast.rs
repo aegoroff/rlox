@@ -34,11 +34,12 @@ pub trait StmtVisitor<'a, R> {
         &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
-        methods: &[miette::Result<Stmt<'a>>],
+        methods: &'a [miette::Result<Stmt<'a>>],
     ) -> R;
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
     fn visit_function_decl_stmt(
         &mut self,
+        kind: FunctionKind,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
         body: &'a miette::Result<Stmt<'a>>,
@@ -123,14 +124,31 @@ impl<'a> Stmt<'a> {
             StmtKind::Block(stmts) => visitor.visit_block_stmt(stmts),
             StmtKind::Class(token, stmt, stmts) => visitor.visit_class_stmt(token, stmt, stmts),
             StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
-            StmtKind::Function(token, params, body) => {
-                visitor.visit_function_decl_stmt(token, params, body)
+            StmtKind::Function(kind, token, params, body) => {
+                visitor.visit_function_decl_stmt(*kind, token, params, body)
             }
             StmtKind::If(cond, then, otherwise) => visitor.visit_if_stmt(cond, then, otherwise),
             StmtKind::Print(expr) => visitor.visit_print_stmt(expr),
             StmtKind::Return(keyword, value) => visitor.visit_return_stmt(keyword, value),
             StmtKind::Variable(name, initializer) => visitor.visit_variable_stmt(name, initializer),
             StmtKind::While(cond, body) => visitor.visit_while_stmt(cond, body),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FunctionKind {
+    None = 0,
+    Function = 1,
+    Method = 2,
+}
+
+impl Display for FunctionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FunctionKind::None => write!(f, "none"),
+            FunctionKind::Function => write!(f, "function"),
+            FunctionKind::Method => write!(f, "method"),
         }
     }
 }
@@ -145,8 +163,13 @@ pub enum StmtKind<'a> {
         Vec<miette::Result<Stmt<'a>>>,
     ),
     Expression(Box<Expr<'a>>),
-    /// token, params, body
-    Function(Token<'a>, Vec<Box<Expr<'a>>>, Box<miette::Result<Stmt<'a>>>),
+    /// kind, token, params, body
+    Function(
+        FunctionKind,
+        Token<'a>,
+        Vec<Box<Expr<'a>>>,
+        Box<miette::Result<Stmt<'a>>>,
+    ),
     /// condition, then, else
     If(
         Box<Expr<'a>>,

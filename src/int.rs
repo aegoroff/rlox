@@ -10,7 +10,7 @@ use miette::{Diagnostic, LabeledSpan, SourceSpan, miette};
 use thiserror::Error;
 
 use crate::{
-    ast::{Expr, ExprKind, ExprVisitor, LoxValue, Stmt, StmtVisitor},
+    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor},
     call::{self, CallResult, Catalogue, Class, Clock, Function},
     env::Environment,
     lexer::Token,
@@ -557,7 +557,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
-        methods: &[miette::Result<Stmt<'a>>],
+        methods: &'a [miette::Result<Stmt<'a>>],
     ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
@@ -586,6 +586,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
     fn visit_function_decl_stmt(
         &mut self,
+        _kind: FunctionKind,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
         body: &'a miette::Result<Stmt<'a>>,

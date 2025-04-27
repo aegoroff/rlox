@@ -1,22 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{Expr, ExprKind, ExprVisitor, Stmt, StmtVisitor},
+    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtVisitor},
     int::Interpreter,
     lexer::Token,
 };
 use miette::{LabeledSpan, miette};
 
-#[derive(Debug, Clone, Copy)]
-enum FunctionType {
-    None,
-    Function,
-}
-
 pub struct Resolver<'a, W: std::io::Write> {
     interpreter: Interpreter<'a, W>,
     scopes: Vec<HashMap<&'a str, bool>>,
-    current_function: FunctionType,
+    current_function: FunctionKind,
 }
 
 impl<'a, W: std::io::Write> Resolver<'a, W> {
@@ -24,7 +18,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         Self {
             interpreter,
             scopes: vec![],
-            current_function: FunctionType::None,
+            current_function: FunctionKind::None,
         }
     }
 
@@ -120,7 +114,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         &mut self,
         params: &[Box<Expr<'a>>],
         body: &'a Result<Stmt<'a>, miette::Error>,
-        kind: FunctionType,
+        kind: FunctionKind,
     ) -> miette::Result<()> {
         let enclosing_function = self.current_function;
         self.begin_scope();
@@ -149,12 +143,14 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
         &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
-        methods: &[miette::Result<Stmt<'a>>],
+        methods: &'a [miette::Result<Stmt<'a>>],
     ) -> miette::Result<()> {
-        let _ = methods;
         let _ = superclass;
         self.declare(name);
         self.define(name);
+        for method in methods {
+            self.resolve_statement(method)?;
+        }
         Ok(())
     }
 
@@ -164,13 +160,14 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
 
     fn visit_function_decl_stmt(
         &mut self,
+        kind: FunctionKind,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
         body: &'a miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
         self.declare(token);
         self.define(token);
-        self.resolve_function(params, body, FunctionType::Function)
+        self.resolve_function(params, body, kind)
     }
 
     fn visit_if_stmt(
@@ -193,7 +190,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
 
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
         let _ = keyword;
-        if let FunctionType::None = self.current_function {
+        if let FunctionKind::None = self.current_function {
             Err(miette!(
                 labels = vec![LabeledSpan::at(
                     value.location.clone(),
