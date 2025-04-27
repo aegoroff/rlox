@@ -30,6 +30,7 @@ pub struct Interpreter<'a, W: std::io::Write> {
     callables: Box<Catalogue<'a>>,
     writer: W,
     locals: HashMap<u64, usize>,
+    class_methods: Vec<Function<'a>>,
 }
 
 impl<'a, W: std::io::Write> Interpreter<'a, W> {
@@ -49,6 +50,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             writer,
             callables,
             locals: HashMap::new(),
+            class_methods: Vec::new(),
         }
     }
 
@@ -567,7 +569,6 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         superclass: &Option<Box<Stmt<'a>>>,
         methods: &'a [miette::Result<Stmt<'a>>],
     ) -> miette::Result<()> {
-        let _ = methods;
         let _ = superclass;
         let Token::Identifier(id) = name else {
             return Err(miette!("Invalid class name"));
@@ -576,13 +577,21 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             return Err(miette!("Class '{id}' redefinition"));
         }
 
-        for method in methods {}
+        for method in methods {
+            let method = match method {
+                Ok(m) => m,
+                Err(e) => return Err(miette!(e.to_string())), // TODO: Handle all errors
+            };
+            method.accept(self)?;
+        }
         let definition = LoxValue::Callable("class", id.to_string());
         self.environment
             .borrow_mut()
             .define(id.to_string(), definition);
 
-        let class = Class::new(id.to_string());
+        let mut methods = vec![];
+        methods.append(&mut self.class_methods);
+        let class = Class::new(id.to_string(), methods);
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
         Ok(())
@@ -595,16 +604,16 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
     fn visit_function_decl_stmt(
         &mut self,
-        _kind: FunctionKind,
+        kind: FunctionKind,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
         body: &'a miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
         let Token::Identifier(id) = token else {
-            return Err(miette!("Invalid function"));
+            return Err(miette!("Invalid {kind}"));
         };
         if self.environment.borrow().get(id).is_ok() {
-            return Err(miette!("function or variable with '{id}' redefinition"));
+            return Err(miette!("{kind} or variable with '{id}' redefinition"));
         }
         self.environment
             .borrow_mut()
@@ -629,10 +638,19 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                 }
             }
         }
+        match kind {
+            FunctionKind::Function => {
+                let callable = Function::new(id, parameters, body, self.environment.clone());
+                let callable = Rc::new(RefCell::new(callable));
+                self.callables.define(id, callable);
+            }
+            FunctionKind::Method => {
+                let callable = Function::new(id, parameters, body, self.environment.clone());
+                self.class_methods.push(callable);
+            }
+            _ => (),
+        }
 
-        let callable = Function::new(id, parameters, body, self.environment.clone());
-        let callable = Rc::new(RefCell::new(callable));
-        self.callables.define(id, callable);
         Ok(())
     }
 

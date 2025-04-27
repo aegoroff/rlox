@@ -118,11 +118,12 @@ impl<'a> Function<'a> {
     }
 }
 
-pub struct Class {
+pub struct Class<'a> {
     name: String,
+    methods: Vec<Function<'a>>,
 }
 
-impl<'a> LoxCallable<'a> for Class {
+impl<'a> LoxCallable<'a> for Class<'a> {
     fn arity(&self) -> usize {
         0
     }
@@ -131,8 +132,8 @@ impl<'a> LoxCallable<'a> for Class {
         Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
     }
 }
-impl Class {
-    pub fn new(name: String) -> Self {
-        Self { name }
+impl<'a> Class<'a> {
+    pub fn new(name: String, methods: Vec<Function<'a>>) -> Self {
+        Self { name, methods }
     }
 }
