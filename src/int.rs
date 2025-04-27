@@ -568,9 +568,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             return Err(miette!("Class '{id}' redefinition"));
         }
 
-        for method in methods {
-            
-        }
+        for method in methods {}
         let definition = LoxValue::Callable("class", id.to_string());
         self.environment
             .borrow_mut()
@@ -594,41 +592,40 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         params: &[Box<Expr<'a>>],
         body: &'a miette::Result<Stmt<'a>>,
     ) -> miette::Result<()> {
-        if let Token::Identifier(id) = token {
-            if self.environment.borrow().get(id).is_ok() {
-                return Err(miette!("function or variable with '{id}' redefinition"));
-            }
-            self.environment
-                .borrow_mut()
-                .define(id.to_string(), LoxValue::Callable("fn", id.to_string()));
+        let Token::Identifier(id) = token else {
+            return Err(miette!("Invalid function"));
+        };
+        if self.environment.borrow().get(id).is_ok() {
+            return Err(miette!("function or variable with '{id}' redefinition"));
+        }
+        self.environment
+            .borrow_mut()
+            .define(id.to_string(), LoxValue::Callable("fn", id.to_string()));
 
-            let mut parameters = vec![];
-            let mut names = HashSet::new();
-            for param in params {
-                if let ExprKind::Variable(Token::Identifier(name)) = &param.kind {
-                    if !names.contains(name) {
-                        names.insert(*name);
-                        parameters.push(*name);
-                    } else {
-                        let location = param.location.clone();
-                        return Err(miette!(
-                            labels = vec![LabeledSpan::at(
-                                location,
-                                format!("Parameter '{name}' redefinition")
-                            )],
-                            "Parameter names must be unique"
-                        ));
-                    }
+        let mut parameters = vec![];
+        let mut names = HashSet::new();
+        for param in params {
+            if let ExprKind::Variable(Token::Identifier(name)) = &param.kind {
+                if !names.contains(name) {
+                    names.insert(*name);
+                    parameters.push(*name);
+                } else {
+                    let location = param.location.clone();
+                    return Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            location,
+                            format!("Parameter '{name}' redefinition")
+                        )],
+                        "Parameter names must be unique"
+                    ));
                 }
             }
-
-            let callable = Function::new(id, parameters, body, self.environment.clone());
-            let callable = Rc::new(RefCell::new(callable));
-            self.callables.define(id, callable);
-            Ok(())
-        } else {
-            Err(miette!("Invalid function"))
         }
+
+        let callable = Function::new(id, parameters, body, self.environment.clone());
+        let callable = Rc::new(RefCell::new(callable));
+        self.callables.define(id, callable);
+        Ok(())
     }
 
     fn visit_if_stmt(
