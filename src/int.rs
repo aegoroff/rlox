@@ -789,6 +789,7 @@ mod tests {
     #[test_case("class Bagel { method() { print 10;} } var b = Bagel(); b.method();", "10" ; "call class method")]
     #[test_case("class Foo { method() { } } var foo = Foo(); foo.a = 1; var i = 0; while (i < 2) { print foo.a; i = i + 1; }", "1\n1" ; "class with empty body method and use it from while")]
     #[test_case("class Foo { method() { } } var foo = Foo(); foo.a = 1; print foo.a;", "1" ; "class with empty body method and use it")]
+    #[test_case("class Foo {} var foo = Foo(); fun bar() { print 10; } foo.meth = bar; print foo.meth();", "10" ; "call property with stored function")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
