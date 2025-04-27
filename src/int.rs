@@ -561,22 +561,25 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     ) -> miette::Result<()> {
         let _ = methods;
         let _ = superclass;
-        if let Token::Identifier(id) = name {
-            if self.environment.borrow().get(id).is_ok() {
-                return Err(miette!("Class '{id}' redefinition"));
-            }
-            let definition = LoxValue::Callable("class", id.to_string());
-            self.environment
-                .borrow_mut()
-                .define(id.to_string(), definition);
-
-            let class = Class::new(id.to_string());
-            let callable = Rc::new(RefCell::new(class));
-            self.callables.define(id, callable);
-            Ok(())
-        } else {
-            Err(miette!("Invalid class name"))
+        let Token::Identifier(id) = name else {
+            return Err(miette!("Invalid class name"));
+        };
+        if self.environment.borrow().get(id).is_ok() {
+            return Err(miette!("Class '{id}' redefinition"));
         }
+
+        for method in methods {
+            
+        }
+        let definition = LoxValue::Callable("class", id.to_string());
+        self.environment
+            .borrow_mut()
+            .define(id.to_string(), definition);
+
+        let class = Class::new(id.to_string());
+        let callable = Rc::new(RefCell::new(class));
+        self.callables.define(id, callable);
+        Ok(())
     }
 
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
