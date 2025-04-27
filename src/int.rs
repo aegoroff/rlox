@@ -726,29 +726,28 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         name: &Token<'a>,
         initializer: &Option<Box<Expr<'a>>>,
     ) -> miette::Result<()> {
-        if let Token::Identifier(id) = name {
-            if let Some(v) = initializer {
-                match v.accept(self) {
-                    Ok(val) => {
-                        // Convert class to instance if needed
-                        let val = if let LoxValue::Class(class) = val {
-                            LoxValue::Instance(class.to_string(), id.to_string())
-                        } else {
-                            val
-                        };
-                        self.environment.borrow_mut().define(id.to_string(), val)
-                    }
-                    Err(e) => return Err(e),
+        let Token::Identifier(id) = name else {
+            return Err(miette!("Invalid identifier"));
+        };
+        if let Some(v) = initializer {
+            match v.accept(self) {
+                Ok(val) => {
+                    // Convert class to instance if needed
+                    let val = if let LoxValue::Class(class) = val {
+                        LoxValue::Instance(class.to_string(), id.to_string())
+                    } else {
+                        val
+                    };
+                    self.environment.borrow_mut().define(id.to_string(), val)
                 }
-            } else {
-                self.environment
-                    .borrow_mut()
-                    .define(id.to_string(), LoxValue::Nil);
+                Err(e) => return Err(e),
             }
-            Ok(())
         } else {
-            Err(miette!("Invalid identifier"))
+            self.environment
+                .borrow_mut()
+                .define(id.to_string(), LoxValue::Nil);
         }
+        Ok(())
     }
 
     fn visit_while_stmt(
