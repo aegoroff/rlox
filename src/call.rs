@@ -20,6 +20,7 @@ pub enum CallResult<'a> {
 
 pub trait LoxCallable<'a> {
     fn arity(&self) -> usize;
+    fn name(&self) -> &'a str;
     fn call(&self, arguments: Vec<LoxValue>) -> miette::Result<CallResult<'a>>;
 }
 
@@ -64,10 +65,14 @@ impl<'a> LoxCallable<'a> for Clock {
         let val = LoxValue::Number(seconds as f64);
         Ok(CallResult::Value(val))
     }
+
+    fn name(&self) -> &'a str {
+        ""
+    }
 }
 
 pub struct Function<'a> {
-    name: &'a str,
+    pub name: &'a str,
     parameters: Vec<&'a str>,
     body: &'a miette::Result<Stmt<'a>>,
     closure: Rc<RefCell<Environment>>,
@@ -101,6 +106,10 @@ impl<'a> LoxCallable<'a> for Function<'a> {
 
         Ok(CallResult::Code(self.body, closure))
     }
+
+    fn name(&self) -> &'a str {
+        self.name
+    }
 }
 
 impl<'a> Function<'a> {
@@ -119,12 +128,11 @@ impl<'a> Function<'a> {
     }
 }
 
-pub struct Class<'a> {
+pub struct Class {
     name: String,
-    methods: HashMap<String, Function<'a>>,
 }
 
-impl<'a> LoxCallable<'a> for Class<'a> {
+impl<'a> LoxCallable<'a> for Class {
     fn arity(&self) -> usize {
         0
     }
@@ -133,14 +141,10 @@ impl<'a> LoxCallable<'a> for Class<'a> {
         if args.len() == 1 {
             let method = &args[0];
             if let LoxValue::String(method) = method {
-                if self.methods.contains_key(method) {
-                    Ok(CallResult::Value(LoxValue::Instance(
-                        self.name.clone(),
-                        method.clone(),
-                    )))
-                } else {
-                    Err(miette!("Undefined method: '{method}'"))
-                }
+                Ok(CallResult::Value(LoxValue::Instance(
+                    self.name.clone(),
+                    method.clone(),
+                )))
             } else {
                 Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
             }
@@ -148,14 +152,14 @@ impl<'a> LoxCallable<'a> for Class<'a> {
             Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
         }
     }
+
+    fn name(&self) -> &'a str {
+        ""
+    }
 }
 
-impl<'a> Class<'a> {
-    pub fn new(name: String, methods: Vec<Function<'a>>) -> Self {
-        let methods = methods
-            .into_iter()
-            .map(|f| (f.name.to_string(), f))
-            .collect();
-        Self { name, methods }
+impl Class {
+    pub fn new(name: String) -> Self {
+        Self { name }
     }
 }

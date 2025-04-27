@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::{
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor},
-    call::{self, CallResult, Catalogue, Class, Clock, Function},
+    call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable},
     env::Environment,
     lexer::Token,
 };
@@ -30,7 +30,8 @@ pub struct Interpreter<'a, W: std::io::Write> {
     callables: Box<Catalogue<'a>>,
     writer: W,
     locals: HashMap<u64, usize>,
-    class_methods: Vec<Function<'a>>,
+    all_class_methods: HashMap<String, HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>>,
+    class_methods: Vec<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
 }
 
 impl<'a, W: std::io::Write> Interpreter<'a, W> {
@@ -50,6 +51,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             writer,
             callables,
             locals: HashMap::new(),
+            all_class_methods: HashMap::new(),
             class_methods: Vec::new(),
         }
     }
@@ -154,6 +156,35 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                 Err(miette!("Using uninitialized variable '{name}'"))
             } else {
                 Ok(val)
+            }
+        }
+    }
+
+    fn call_code(
+        &mut self,
+        arguments: Vec<LoxValue>,
+        callee: std::cell::Ref<'_, dyn LoxCallable<'a>>,
+    ) -> Result<LoxValue, miette::Error> {
+        match callee.call(arguments)? {
+            CallResult::Value(lox_value) => Ok(lox_value),
+            CallResult::Code(stmt, closure) => {
+                let result = {
+                    let prev = self.begin_scope(closure);
+                    let result = self.interpret_one(stmt);
+                    self.end_scope(prev);
+                    result
+                };
+                match result {
+                    Ok(_) => Ok(LoxValue::Nil),
+                    Err(e) => {
+                        if let Some(ProgramError::Return(val)) = e.downcast_ref::<ProgramError>() {
+                            // Return handling case
+                            Ok(val.clone())
+                        } else {
+                            Err(e)
+                        }
+                    }
+                }
             }
         }
     }
@@ -375,7 +406,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             LoxValue::Callable(_, ref id) => function = id,
             LoxValue::Instance(ref class_name, ref method) => {
                 class = Some(class_name);
-                function = method
+                function = method;
             }
             _ => {
                 return Err(miette!(
@@ -384,35 +415,20 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 ));
             }
         };
-        let callee = if let Some(class) = class {
-            self.callables.get(class)?
+        if let Some(class) = class {
+            let Some(methods) = self.all_class_methods.get(class) else {
+                return Err(miette!("Undefined class: '{class}'"));
+            };
+            let Some(method) = methods.get(function) else {
+                return Err(miette!("Undefined method: '{function}' in class '{class}'"));
+            };
+            let callee = method.clone();
+            let callee = callee.borrow();
+            self.call_code(arguments, callee)
         } else {
-            self.callables.get(function)?
-        };
-
-        let callee = callee.borrow();
-
-        match callee.call(arguments)? {
-            CallResult::Value(lox_value) => Ok(lox_value),
-            CallResult::Code(stmt, closure) => {
-                let result = {
-                    let prev = self.begin_scope(closure);
-                    let result = self.interpret_one(stmt);
-                    self.end_scope(prev);
-                    result
-                };
-                match result {
-                    Ok(_) => Ok(LoxValue::Nil),
-                    Err(e) => {
-                        if let Some(ProgramError::Return(val)) = e.downcast_ref::<ProgramError>() {
-                            // Return handling case
-                            Ok(val.clone())
-                        } else {
-                            Err(e)
-                        }
-                    }
-                }
-            }
+            let callee = self.callables.get(function)?;
+            let callee = callee.borrow();
+            self.call_code(arguments, callee)
         }
     }
 
@@ -611,7 +627,14 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
 
         let mut methods = vec![];
         methods.append(&mut self.class_methods);
-        let class = Class::new(id.to_string(), methods);
+
+        let methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>> = methods
+            .into_iter()
+            .map(|f| (f.borrow().name().to_string(), f.clone()))
+            .collect();
+        self.all_class_methods.insert(id.to_string(), methods);
+
+        let class = Class::new(id.to_string());
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
         Ok(())
@@ -658,14 +681,13 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                 }
             }
         }
+        let callable = Function::new(id, parameters, body, self.environment.clone());
+        let callable = Rc::new(RefCell::new(callable));
         match kind {
             FunctionKind::Function => {
-                let callable = Function::new(id, parameters, body, self.environment.clone());
-                let callable = Rc::new(RefCell::new(callable));
                 self.callables.define(id, callable);
             }
             FunctionKind::Method => {
-                let callable = Function::new(id, parameters, body, self.environment.clone());
                 self.class_methods.push(callable);
             }
             _ => (),
