@@ -55,7 +55,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
 
         for stmt in statements {
             if let Err(e) = self.resolve_statement(stmt) {
-                add_error(e)
+                add_error(e);
             }
         }
         if errors.is_empty() {
@@ -94,9 +94,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     }
 
     fn resolve_local(&mut self, value: &Expr<'a>, name: &Token<'a>) {
-        let id = if let Token::Identifier(name) = name {
-            name
-        } else {
+        let Token::Identifier(id) = name else {
             return;
         };
         let mut i = self.scopes.len();

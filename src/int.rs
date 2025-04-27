@@ -96,8 +96,6 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                             // break interpretation
                             // error will be handled later
                             return Err(e);
-                        } else {
-                            add_error(&e);
                         }
                         add_error(&e);
                     }
@@ -175,7 +173,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     result
                 };
                 match result {
-                    Ok(_) => Ok(LoxValue::Nil),
+                    Ok(()) => Ok(LoxValue::Nil),
                     Err(e) => {
                         if let Some(ProgramError::Return(val)) = e.downcast_ref::<ProgramError>() {
                             // Return handling case
@@ -356,7 +354,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
         // Convert class to instance if needed
         let val = if let LoxValue::Class(class) = val {
-            LoxValue::Instance(class.to_string(), id.to_string())
+            LoxValue::Instance(class.to_string(), (*id).to_string())
         } else {
             val
         };
@@ -364,7 +362,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
             self.environment
                 .borrow_mut()
-                .assign_at(*distance, id.to_string(), val.clone())
+                .assign_at(*distance, (*id).to_string(), val.clone())
                 .map_err(|e| {
                     miette!(
                         labels = vec![LabeledSpan::at(location, e.to_string())],
@@ -374,7 +372,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         } else {
             self.globals
                 .borrow_mut()
-                .assign(id.to_string(), val.clone())
+                .assign((*id).to_string(), val.clone())
                 .map_err(|e| {
                     miette!(
                         labels = vec![LabeledSpan::at(location, e.to_string())],
@@ -414,7 +412,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                     "Invalid callable type"
                 ));
             }
-        };
+        }
         if let Some(class) = class {
             let Some(methods) = self.all_class_methods.get(class) else {
                 return Err(miette!("Undefined class: '{class}'"));
@@ -445,7 +443,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                         if let Ok(class) = self.callables.get(class_name) {
                             let class = class.borrow();
                             if let Ok(CallResult::Value(lox_value)) =
-                                class.call(vec![LoxValue::String(field_or_method.to_string())])
+                                class.call(vec![LoxValue::String((*field_or_method).to_string())])
                             {
                                 return Ok(lox_value);
                             }
@@ -477,7 +475,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                             result
                         };
                         match result {
-                            Ok(_) => Ok(LoxValue::Nil),
+                            Ok(()) => Ok(LoxValue::Nil),
                             Err(e) => {
                                 if let Some(ProgramError::Return(val)) =
                                     e.downcast_ref::<ProgramError>()
@@ -534,7 +532,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     ) -> miette::Result<LoxValue> {
         // Early return for invalid field name
         let field = match field {
-            Token::Identifier(id) => id.to_string(),
+            Token::Identifier(id) => (*id).to_string(),
             _ => return Err(miette!("Field name must be an identifier")),
         };
 
@@ -550,7 +548,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
         // Early return for invalid instance name
         let id = match id {
-            Token::Identifier(id) => id.to_string(),
+            Token::Identifier(id) => (*id).to_string(),
             _ => return Err(miette!("Instance name must be an identifier")),
         };
 
@@ -624,10 +622,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             };
             method.accept(self)?;
         }
-        let definition = LoxValue::Callable("class", id.to_string());
+        let definition = LoxValue::Callable("class", (*id).to_string());
         self.environment
             .borrow_mut()
-            .define(id.to_string(), definition);
+            .define((*id).to_string(), definition);
 
         let mut methods = vec![];
         methods.append(&mut self.class_methods);
@@ -636,9 +634,9 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             .into_iter()
             .map(|f| (f.borrow().name().to_string(), f.clone()))
             .collect();
-        self.all_class_methods.insert(id.to_string(), methods);
+        self.all_class_methods.insert((*id).to_string(), methods);
 
-        let class = Class::new(id.to_string());
+        let class = Class::new((*id).to_string());
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
         Ok(())
@@ -662,18 +660,16 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if self.environment.borrow().get(id).is_ok() {
             return Err(miette!("{kind} or variable with '{id}' redefinition"));
         }
-        self.environment
-            .borrow_mut()
-            .define(id.to_string(), LoxValue::Callable("fn", id.to_string()));
+        self.environment.borrow_mut().define(
+            (*id).to_string(),
+            LoxValue::Callable("fn", (*id).to_string()),
+        );
 
         let mut parameters = vec![];
         let mut names = HashSet::new();
         for param in params {
             if let ExprKind::Variable(Token::Identifier(name)) = &param.kind {
-                if !names.contains(name) {
-                    names.insert(*name);
-                    parameters.push(*name);
-                } else {
+                if names.contains(name) {
                     let location = param.location.clone();
                     return Err(miette!(
                         labels = vec![LabeledSpan::at(
@@ -683,6 +679,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                         "Parameter names must be unique"
                     ));
                 }
+                names.insert(*name);
+                parameters.push(*name);
             }
         }
         let callable = Function::new(id, parameters, body, self.environment.clone());
@@ -694,7 +692,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             FunctionKind::Method => {
                 self.class_methods.push(callable);
             }
-            _ => (),
+            FunctionKind::None => (),
         }
 
         Ok(())
@@ -780,18 +778,18 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
                 Ok(val) => {
                     // Convert class to instance if needed
                     let val = if let LoxValue::Class(class) = val {
-                        LoxValue::Instance(class.to_string(), id.to_string())
+                        LoxValue::Instance(class.to_string(), (*id).to_string())
                     } else {
                         val
                     };
-                    self.environment.borrow_mut().define(id.to_string(), val)
+                    self.environment.borrow_mut().define((*id).to_string(), val);
                 }
                 Err(e) => return Err(e),
             }
         } else {
             self.environment
                 .borrow_mut()
-                .define(id.to_string(), LoxValue::Nil);
+                .define((*id).to_string(), LoxValue::Nil);
         }
         Ok(())
     }

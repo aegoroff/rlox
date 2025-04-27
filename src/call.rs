@@ -101,7 +101,7 @@ impl<'a> LoxCallable<'a> for Function<'a> {
         for (i, name) in self.parameters.iter().enumerate() {
             closure
                 .borrow_mut()
-                .define(name.to_string(), arguments[i].clone());
+                .define((*name).to_string(), arguments[i].clone());
         }
 
         Ok(CallResult::Code(self.body, closure))

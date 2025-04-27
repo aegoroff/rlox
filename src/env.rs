@@ -82,7 +82,7 @@ impl Environment {
         initializer: LoxValue,
     ) {
         if distance == 0 {
-            self.set_field(id, field, initializer)
+            self.set_field(id, field, initializer);
         } else {
             let mut parent = self.enclosing.clone();
             for _ in 1..distance {
@@ -91,7 +91,7 @@ impl Environment {
                 }
             }
             if let Some(e) = parent {
-                e.borrow_mut().set_field(id, field, initializer)
+                e.borrow_mut().set_field(id, field, initializer);
             }
         }
     }

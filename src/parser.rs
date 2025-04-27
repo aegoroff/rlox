@@ -57,7 +57,7 @@ impl<'a> Parser<'a> {
 
         if let Err(e) = self.consume(Token::LeftParen) {
             return Some(Err(e));
-        };
+        }
         let mut args = vec![];
         if !self.matches(&[Token::RightParen]) {
             loop {
@@ -118,17 +118,14 @@ impl<'a> Parser<'a> {
             )));
         }
 
-        let block = match self.block() {
-            Some(b) => b,
-            None => {
-                return Some(Err(miette!(
-                    labels = vec![LabeledSpan::at(
-                        start..=finish,
-                        format!("Missing {kind} block")
-                    )],
-                    "Missing {kind} block"
-                )));
-            }
+        let Some(block) = self.block() else {
+            return Some(Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    format!("Missing {kind} block")
+                )],
+                "Missing {kind} block"
+            )));
         };
 
         let kind = StmtKind::Function(kind, name?, args, Box::new(block));
@@ -159,7 +156,7 @@ impl<'a> Parser<'a> {
 
         if let Err(e) = self.consume(Token::LeftBrace) {
             return Some(Err(e));
-        };
+        }
 
         let mut methods = vec![];
         if !self.matches(&[Token::RightBrace]) {
