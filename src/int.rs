@@ -369,14 +369,27 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        let LoxValue::Callable(_, ref id) = callee else {
-            return Err(miette!(
-                labels = vec![LabeledSpan::at(location, "Invalid callable type")],
-                "Invalid callable type"
-            ));
+        let function;
+        let mut class: Option<&String> = None;
+        match callee {
+            LoxValue::Callable(_, ref id) => function = id,
+            LoxValue::Instance(ref class_name, ref method) => {
+                class = Some(class_name);
+                function = method
+            }
+            _ => {
+                return Err(miette!(
+                    labels = vec![LabeledSpan::at(location, "Invalid callable type")],
+                    "Invalid callable type"
+                ));
+            }
+        };
+        let callee = if let Some(class) = class {
+            self.callables.get(class)?
+        } else {
+            self.callables.get(function)?
         };
 
-        let callee = self.callables.get(id)?;
         let callee = callee.borrow();
 
         match callee.call(arguments)? {
@@ -406,18 +419,25 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
         let result = self.evaluate(object)?;
         match &result {
-            LoxValue::Instance(_, id) => {
-                let Token::Identifier(field) = name else {
+            LoxValue::Instance(class_name, id) => {
+                let Token::Identifier(field_or_method) = name else {
                     return Err(miette!("Field name must be an identifier"));
                 };
-                // TODO: Implement class instance calls here
 
+                if let Ok(class) = self.callables.get(class_name) {
+                    let class = class.borrow();
+                    if let Ok(CallResult::Value(lox_value)) =
+                        class.call(vec![LoxValue::String(field_or_method.to_string())])
+                    {
+                        return Ok(lox_value);
+                    }
+                }
                 let field = if let Some(distance) = self.locals.get(&object.get_hash_code()) {
                     self.environment
                         .borrow()
-                        .get_field_at(*distance, id, field)?
+                        .get_field_at(*distance, id, field_or_method)?
                 } else {
-                    self.globals.borrow().get_field(id, field)?
+                    self.globals.borrow().get_field(id, field_or_method)?
                 };
                 Ok(field)
             }

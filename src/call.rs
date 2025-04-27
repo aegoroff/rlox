@@ -120,7 +120,7 @@ impl<'a> Function<'a> {
 
 pub struct Class<'a> {
     name: String,
-    methods: Vec<Function<'a>>,
+    methods: HashMap<String, Function<'a>>,
 }
 
 impl<'a> LoxCallable<'a> for Class<'a> {
@@ -128,12 +128,33 @@ impl<'a> LoxCallable<'a> for Class<'a> {
         0
     }
 
-    fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
-        Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
+    fn call(&self, args: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
+        if args.len() == 1 {
+            let method = &args[0];
+            if let LoxValue::String(method) = method {
+                if self.methods.contains_key(method) {
+                    Ok(CallResult::Value(LoxValue::Instance(
+                        self.name.clone(),
+                        method.clone(),
+                    )))
+                } else {
+                    Err(miette!("Undefined method: '{method}'"))
+                }
+            } else {
+                Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
+            }
+        } else {
+            Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
+        }
     }
 }
+
 impl<'a> Class<'a> {
     pub fn new(name: String, methods: Vec<Function<'a>>) -> Self {
+        let methods = methods
+            .into_iter()
+            .map(|f| (f.name.to_string(), f))
+            .collect();
         Self { name, methods }
     }
 }
