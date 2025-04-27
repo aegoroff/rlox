@@ -296,56 +296,61 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
     }
 
     fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> miette::Result<LoxValue> {
-        let location = rhs.location.clone();
-        if let ExprKind::Variable(id) = &lhs.kind {
-            let Token::Identifier(id) = id else {
-                return Err(miette!(
-                    labels = vec![LabeledSpan::at(
-                        lhs.location.clone(),
-                        "Invalid l-value expression"
-                    )],
-                    "Assigment failed"
-                ));
-            };
-            let val = rhs.accept(self)?;
-            // Convert class to instance if needed
-            let val = if let LoxValue::Class(class) = val {
-                LoxValue::Instance(class.to_string(), id.to_string())
-            } else {
-                val
-            };
-            if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
-                self.environment
-                    .borrow_mut()
-                    .assign_at(*distance, id.to_string(), val.clone())
-                    .map_err(|e| {
-                        miette!(
-                            labels = vec![LabeledSpan::at(location, e.to_string())],
-                            "Assigment failed"
-                        )
-                    })?;
-                Ok(val)
-            } else {
-                self.globals
-                    .borrow_mut()
-                    .assign(id.to_string(), val.clone())
-                    .map_err(|e| {
-                        miette!(
-                            labels = vec![LabeledSpan::at(location, e.to_string())],
-                            "Assigment failed"
-                        )
-                    })?;
-                Ok(val)
-            }
-        } else {
-            Err(miette!(
+        // Early return for invalid l-value expression
+        let ExprKind::Variable(id) = &lhs.kind else {
+            return Err(miette!(
                 labels = vec![LabeledSpan::at(
                     lhs.location.clone(),
                     "Invalid l-value expression"
                 )],
                 "Assigment failed"
-            ))
+            ));
+        };
+
+        // Early return for invalid identifier
+        let Token::Identifier(id) = id else {
+            return Err(miette!(
+                labels = vec![LabeledSpan::at(
+                    lhs.location.clone(),
+                    "Invalid l-value expression"
+                )],
+                "Assigment failed"
+            ));
+        };
+
+        let location = rhs.location.clone();
+        let val = rhs.accept(self)?;
+
+        // Convert class to instance if needed
+        let val = if let LoxValue::Class(class) = val {
+            LoxValue::Instance(class.to_string(), id.to_string())
+        } else {
+            val
+        };
+
+        if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
+            self.environment
+                .borrow_mut()
+                .assign_at(*distance, id.to_string(), val.clone())
+                .map_err(|e| {
+                    miette!(
+                        labels = vec![LabeledSpan::at(location, e.to_string())],
+                        "Assigment failed"
+                    )
+                })?;
+        } else {
+            self.globals
+                .borrow_mut()
+                .assign(id.to_string(), val.clone())
+                .map_err(|e| {
+                    miette!(
+                        labels = vec![LabeledSpan::at(location, e.to_string())],
+                        "Assigment failed"
+                    )
+                })?;
         }
+
+        Ok(val)
     }
 
     fn visit_call_expr(
@@ -362,39 +367,37 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        if let LoxValue::Callable(_, ref id) = callee {
-            let callee = self.callables.get(id)?;
-            let callee = callee.borrow();
+        let LoxValue::Callable(_, ref id) = callee else {
+            return Err(miette!(
+                labels = vec![LabeledSpan::at(location, "Invalid callable type")],
+                "Invalid callable type"
+            ));
+        };
 
-            match callee.call(arguments)? {
-                CallResult::Value(lox_value) => Ok(lox_value),
-                CallResult::Code(stmt, closure) => {
-                    let result = {
-                        let prev = self.begin_scope(closure);
-                        let result = self.interpret_one(stmt);
-                        self.end_scope(prev);
-                        result
-                    };
-                    match result {
-                        Ok(_) => Ok(LoxValue::Nil),
-                        Err(e) => {
-                            if let Some(ProgramError::Return(val)) =
-                                e.downcast_ref::<ProgramError>()
-                            {
-                                // Return handling case
-                                Ok(val.clone())
-                            } else {
-                                Err(e)
-                            }
+        let callee = self.callables.get(id)?;
+        let callee = callee.borrow();
+
+        match callee.call(arguments)? {
+            CallResult::Value(lox_value) => Ok(lox_value),
+            CallResult::Code(stmt, closure) => {
+                let result = {
+                    let prev = self.begin_scope(closure);
+                    let result = self.interpret_one(stmt);
+                    self.end_scope(prev);
+                    result
+                };
+                match result {
+                    Ok(_) => Ok(LoxValue::Nil),
+                    Err(e) => {
+                        if let Some(ProgramError::Return(val)) = e.downcast_ref::<ProgramError>() {
+                            // Return handling case
+                            Ok(val.clone())
+                        } else {
+                            Err(e)
                         }
                     }
                 }
             }
-        } else {
-            Err(miette!(
-                labels = vec![LabeledSpan::at(location, "Invalid callable type")],
-                "Invalid callable type"
-            ))
         }
     }
 
@@ -402,20 +405,19 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let result = self.evaluate(object)?;
         match &result {
             LoxValue::Instance(_, id) => {
-                if let Token::Identifier(field) = name {
-                    // TODO: Implement class instance calls here
+                let Token::Identifier(field) = name else {
+                    return Err(miette!("Field name must be an identifier"));
+                };
+                // TODO: Implement class instance calls here
 
-                    let field = if let Some(distance) = self.locals.get(&object.get_hash_code()) {
-                        self.environment
-                            .borrow()
-                            .get_field_at(*distance, id, field)?
-                    } else {
-                        self.globals.borrow().get_field(id, field)?
-                    };
-                    Ok(field)
+                let field = if let Some(distance) = self.locals.get(&object.get_hash_code()) {
+                    self.environment
+                        .borrow()
+                        .get_field_at(*distance, id, field)?
                 } else {
-                    Err(miette!("Field name must be an identifier"))
-                }
+                    self.globals.borrow().get_field(id, field)?
+                };
+                Ok(field)
             }
             LoxValue::Class(class) => {
                 let callee = self.callables.get(class)?;
@@ -488,33 +490,39 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         obj: &Expr<'a>,
         val: &Expr<'a>,
     ) -> miette::Result<LoxValue> {
+        // Early return for invalid field name
         let field = match field {
             Token::Identifier(id) => id.to_string(),
             _ => return Err(miette!("Field name must be an identifier")),
         };
-        // obj.field = val
 
-        if let ExprKind::Get(_, instance) = &obj.kind {
-            let v = self.evaluate(val)?;
-            let ExprKind::Variable(id) = &instance.kind else {
-                return Err(miette!("Invalid instance"));
-            };
-            let id = match id {
-                Token::Identifier(id) => id.to_string(),
-                _ => return Err(miette!("Instance name must be an identifier")),
-            };
-            if let Some(distance) = self.locals.get(&instance.get_hash_code()) {
-                self.environment
-                    .borrow_mut()
-                    .set_field_at(*distance, id, field, v.clone());
-            } else {
-                self.globals.borrow_mut().set_field(id, field, v.clone());
-            }
+        // Early return for invalid object type
+        let ExprKind::Get(_, instance) = &obj.kind else {
+            return Err(miette!("Only instances have fields"));
+        };
 
-            Ok(v)
+        // Early return for invalid instance
+        let ExprKind::Variable(id) = &instance.kind else {
+            return Err(miette!("Invalid instance"));
+        };
+
+        // Early return for invalid instance name
+        let id = match id {
+            Token::Identifier(id) => id.to_string(),
+            _ => return Err(miette!("Instance name must be an identifier")),
+        };
+
+        let v = self.evaluate(val)?;
+
+        if let Some(distance) = self.locals.get(&instance.get_hash_code()) {
+            self.environment
+                .borrow_mut()
+                .set_field_at(*distance, id, field, v.clone());
         } else {
-            Err(miette!("Only instances have fields"))
+            self.globals.borrow_mut().set_field(id, field, v.clone());
         }
+
+        Ok(v)
     }
 
     fn visit_super_expr(
