@@ -461,6 +461,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 Ok(field)
             }
             LoxValue::Class(class) => {
+                // TODO: Bind this to the instance
                 // support calls like `Class().method()`
                 let Token::Identifier(field_or_method) = name else {
                     return Err(miette!("Field name must be an identifier"));
@@ -759,6 +760,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if let Some(v) = initializer {
             match v.accept(self) {
                 Ok(val) => {
+                    // TODO: Handle class instance
                     // Convert class to instance if needed
                     let val = if let LoxValue::Class(class) = val {
                         LoxValue::Instance(class.to_string(), (*id).to_string())
