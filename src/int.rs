@@ -359,6 +359,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             val
         };
 
+        if let LoxValue::Instance(_, _) = val {
+            self.environment
+                .borrow_mut()
+                .define("this".to_string(), val.clone());
+        }
+
         if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
             self.environment
                 .borrow_mut()
@@ -460,6 +466,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 Ok(field)
             }
             LoxValue::Class(class) => {
+                // support calls like `Class().method()`
                 let Token::Identifier(field_or_method) = name else {
                     return Err(miette!("Field name must be an identifier"));
                 };
@@ -843,6 +850,7 @@ mod tests {
     #[test_case("class Foo {} var foo = Foo(); fun bar() { print 10; } foo.meth = bar; print foo.meth();", "10" ; "call property with stored function")]
     #[test_case("class Bagel { method() { print 10;} } Bagel().method();", "10" ; "call class method without instance in var")]
     #[test_case("class Bagel { method() { print 10;} } var b = Bagel().method; b();", "10" ; "call class method from assigned var")]
+    #[test_case("class Class { method() { print this.field;} } var c = Class(); c.field = 10; c.method();", "10" ; "this usage")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
