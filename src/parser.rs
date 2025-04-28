@@ -1129,6 +1129,10 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Variable(tok),
                 location: start..=finish,
             })),
+            Token::This => Some(Ok(Expr {
+                kind: ExprKind::This(tok),
+                location: start..=finish,
+            })),
             _ => Some(Err(miette!(
                 labels = vec![LabeledSpan::at(
                     start..finish,

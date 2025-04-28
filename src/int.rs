@@ -553,9 +553,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         todo!()
     }
 
-    fn visit_this_expr(&mut self, keyword: &Token<'a>) -> miette::Result<LoxValue> {
+    fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> miette::Result<LoxValue> {
         let _ = keyword;
-        todo!()
+        self.lookup_variable(obj, "this")
     }
 
     fn visit_variable_expr(

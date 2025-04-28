@@ -129,6 +129,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         Ok(())
     }
 }
+
 impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a, W> {
     fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
         self.begin_scope();
@@ -146,9 +147,13 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
         let _ = superclass;
         self.declare(name);
         self.define(name);
+        self.begin_scope();
+        self.define(&Token::Identifier("this"));
+
         for method in methods {
             self.resolve_statement(method)?;
         }
+        self.end_scope();
         Ok(())
     }
 
@@ -309,8 +314,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         Ok(())
     }
 
-    fn visit_this_expr(&mut self, keyword: &Token<'a>) -> miette::Result<()> {
-        let _ = keyword;
+    fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> miette::Result<()> {
+        self.resolve_local(obj, keyword);
         Ok(())
     }
 
