@@ -638,10 +638,13 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if self.environment.borrow().get(id).is_ok() {
             return Err(miette!("{kind} or variable with '{id}' redefinition"));
         }
-        self.environment.borrow_mut().define(
-            (*id).to_string(),
-            LoxValue::Callable("fn", (*id).to_string()),
-        );
+
+        if let FunctionKind::Function = kind {
+            self.environment.borrow_mut().define(
+                (*id).to_string(),
+                LoxValue::Callable("fn", (*id).to_string()),
+            );
+        }
 
         let mut parameters = vec![];
         let mut names = HashSet::new();
