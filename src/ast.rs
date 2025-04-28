@@ -1,16 +1,10 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{
-    cell::RefCell,
-    fmt::Display,
-    hash::{DefaultHasher, Hash, Hasher},
-    ops::RangeInclusive,
-    rc::Rc,
-};
+use std::{fmt::Display, hash::DefaultHasher, hash::Hash, hash::Hasher, ops::RangeInclusive};
 
 use miette::miette;
 
-use crate::{env::Environment, lexer::Token};
+use crate::lexer::Token;
 
 // Traits
 
@@ -104,7 +98,7 @@ impl<'a> Expr<'a> {
             ExprKind::Logical(token, left, right) => visitor.visit_logical_expr(token, left, right),
             ExprKind::Set(name, obj, val) => visitor.visit_set_expr(name, obj, val),
             ExprKind::Super(keyword, method) => visitor.visit_super_expr(keyword, method),
-            ExprKind::This(keyword) => visitor.visit_this_expr(self, keyword),
+            ExprKind::This(keyword) => visitor.visit_this_expr(self,keyword),
             ExprKind::Variable(name) => visitor.visit_variable_expr(self, name),
         }
     }
@@ -200,7 +194,7 @@ pub enum LoxValue {
     Nil,
     Callable(&'static str, String),
     Class(String),
-    Instance(String, Rc<RefCell<Environment>>),
+    Instance(String, String),
 }
 
 impl Display for LoxValue {
@@ -212,7 +206,7 @@ impl Display for LoxValue {
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
             LoxValue::Class(class) => write!(f, "{class} instance"),
-            LoxValue::Instance(class, _) => write!(f, "{class} instance"),
+            LoxValue::Instance(class, instance) => write!(f, "{instance}: {class}"),
         }
     }
 }

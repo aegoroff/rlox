@@ -184,10 +184,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     }
                 }
             }
-            CallResult::Instance(name, env) => {
-                // TODO: Bind this to the instance
-                todo!()
-            }
+            CallResult::Instance(_, _) => todo!(),
         }
     }
 }
@@ -358,11 +355,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
         // TODO: Bind this to the instance
         // Convert class to instance if needed
-        // let val = if let LoxValue::Class(class) = val {
-        //     LoxValue::Instance(class.to_string(), (*id).to_string())
-        // } else {
-        //     val
-        // };
+        let val = if let LoxValue::Class(class) = val {
+            LoxValue::Instance(class.to_string(), (*id).to_string())
+        } else {
+            val
+        };
 
         if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
             self.environment
