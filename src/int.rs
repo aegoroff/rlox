@@ -184,7 +184,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     }
                 }
             }
-            CallResult::Instance(_, _) => todo!(),
+            CallResult::Instance(class, env) => todo!(),
         }
     }
 }

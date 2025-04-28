@@ -139,11 +139,18 @@ impl<'a> LoxCallable<'a> for Class {
         0
     }
 
-    fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
+    fn call(&self, arguments: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
         closure
             .borrow_mut()
             .define("this".to_string(), LoxValue::Nil);
+
+        for (i, name) in arguments.iter().enumerate() {
+            closure
+                .borrow_mut()
+                .define((*name).to_string(), arguments[i].clone());
+        }
+
         Ok(CallResult::Instance(self.name.clone(), closure))
     }
 
