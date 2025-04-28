@@ -98,7 +98,7 @@ impl<'a> Expr<'a> {
             ExprKind::Logical(token, left, right) => visitor.visit_logical_expr(token, left, right),
             ExprKind::Set(name, obj, val) => visitor.visit_set_expr(name, obj, val),
             ExprKind::Super(keyword, method) => visitor.visit_super_expr(keyword, method),
-            ExprKind::This(keyword) => visitor.visit_this_expr(self,keyword),
+            ExprKind::This(keyword) => visitor.visit_this_expr(self, keyword),
             ExprKind::Variable(name) => visitor.visit_variable_expr(self, name),
         }
     }
@@ -205,7 +205,7 @@ impl Display for LoxValue {
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
-            LoxValue::Class(class) => write!(f, "{class} instance"),
+            LoxValue::Class(class) => write!(f, "{class}"),
             LoxValue::Instance(class, instance) => write!(f, "{instance}: {class}"),
         }
     }

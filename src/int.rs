@@ -184,7 +184,10 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     }
                 }
             }
-            CallResult::Instance(class, env) => todo!(),
+            CallResult::Instance(class, env) => {
+                // TODO: return instance of the class
+                todo!()
+            }
         }
     }
 }
@@ -355,11 +358,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
         // TODO: Bind this to the instance
         // Convert class to instance if needed
-        let val = if let LoxValue::Class(class) = val {
-            LoxValue::Instance(class.to_string(), (*id).to_string())
-        } else {
-            val
-        };
+        // let val = if let LoxValue::Class(class) = val {
+        //     LoxValue::Instance(class.to_string(), (*id).to_string())
+        // } else {
+        //     val
+        // };
 
         if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
             self.environment
@@ -434,12 +437,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
         let result = self.evaluate(object)?;
+        let Token::Identifier(field_or_method) = name else {
+            return Err(miette!("Field name must be an identifier"));
+        };
         match &result {
             LoxValue::Instance(class_name, id) => {
-                let Token::Identifier(field_or_method) = name else {
-                    return Err(miette!("Field name must be an identifier"));
-                };
-
                 if let Some(methods) = self.all_class_methods.get(class_name) {
                     if methods.contains_key(*field_or_method) {
                         if let Ok(class) = self.callables.get(class_name) {
@@ -464,9 +466,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             LoxValue::Class(class) => {
                 // TODO: Bind this to the instance
                 // support calls like `Class().method()`
-                let Token::Identifier(field_or_method) = name else {
-                    return Err(miette!("Field name must be an identifier"));
-                };
                 Ok(LoxValue::Instance(
                     class.to_string(),
                     (*field_or_method).to_string(),
@@ -474,6 +473,53 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             }
             _ => Err(miette!("Only instances have properties")),
         }
+    }
+
+    fn visit_set_expr(
+        &mut self,
+        field: &Token<'a>,
+        obj: &Expr<'a>,
+        val: &Expr<'a>,
+    ) -> miette::Result<LoxValue> {
+        // Early return for invalid field name
+        let field = match field {
+            Token::Identifier(id) => (*id).to_string(),
+            _ => return Err(miette!("Field name must be an identifier")),
+        };
+
+        // Early return for invalid object type
+        let ExprKind::Get(_, instance) = &obj.kind else {
+            return Err(miette!("Only instances have fields"));
+        };
+
+        // Early return for invalid instance
+        let ExprKind::Variable(id) = &instance.kind else {
+            return Err(miette!("Invalid instance"));
+        };
+
+        // Early return for invalid instance name
+        let instance_name = if let Token::Identifier(id) = id {
+            (*id).to_string()
+        } else {
+            return Err(miette!("Instance name must be an identifier"));
+        };
+
+        let value = self.evaluate(val)?;
+
+        if let Some(distance) = self.locals.get(&instance.get_hash_code()) {
+            self.environment.borrow_mut().set_field_at(
+                *distance,
+                instance_name,
+                field,
+                value.clone(),
+            );
+        } else {
+            self.globals
+                .borrow_mut()
+                .set_field(instance_name, field, value.clone());
+        }
+
+        Ok(value)
     }
 
     fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {
@@ -504,47 +550,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
             }
             _ => Err(miette!("Invalid logical operator")),
         }
-    }
-
-    fn visit_set_expr(
-        &mut self,
-        field: &Token<'a>,
-        obj: &Expr<'a>,
-        val: &Expr<'a>,
-    ) -> miette::Result<LoxValue> {
-        // Early return for invalid field name
-        let field = match field {
-            Token::Identifier(id) => (*id).to_string(),
-            _ => return Err(miette!("Field name must be an identifier")),
-        };
-
-        // Early return for invalid object type
-        let ExprKind::Get(_, instance) = &obj.kind else {
-            return Err(miette!("Only instances have fields"));
-        };
-
-        // Early return for invalid instance
-        let ExprKind::Variable(id) = &instance.kind else {
-            return Err(miette!("Invalid instance"));
-        };
-
-        // Early return for invalid instance name
-        let id = match id {
-            Token::Identifier(id) => (*id).to_string(),
-            _ => return Err(miette!("Instance name must be an identifier")),
-        };
-
-        let v = self.evaluate(val)?;
-
-        if let Some(distance) = self.locals.get(&instance.get_hash_code()) {
-            self.environment
-                .borrow_mut()
-                .set_field_at(*distance, id, field, v.clone());
-        } else {
-            self.globals.borrow_mut().set_field(id, field, v.clone());
-        }
-
-        Ok(v)
     }
 
     fn visit_super_expr(
@@ -761,13 +766,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         if let Some(v) = initializer {
             match v.accept(self) {
                 Ok(val) => {
-                    // TODO: Handle class instance
+                    // TODO: Initializer may be class call (constructor) so we need to return instance
                     // Convert class to instance if needed
-                    let val = if let LoxValue::Class(class) = val {
-                        LoxValue::Instance(class.to_string(), (*id).to_string())
-                    } else {
-                        val
-                    };
+                    // let val = if let LoxValue::Class(class) = val {
+                    //     LoxValue::Instance(class.to_string(), (*id).to_string())
+                    // } else {
+                    //     val
+                    // };
+                    // var id = Class(); or var id = 1; or var id;
+                    // so val may be Class() call or other value
                     self.environment.borrow_mut().define((*id).to_string(), val);
                 }
                 Err(e) => return Err(e),
