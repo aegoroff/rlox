@@ -2,7 +2,7 @@ use crate::ast::LoxValue;
 use miette::miette;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Environment {
     values: HashMap<String, LoxValue>,
     fields: HashMap<String, HashMap<String, LoxValue>>,
