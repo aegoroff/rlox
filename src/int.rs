@@ -353,6 +353,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let location = rhs.location.clone();
         let val = rhs.accept(self)?;
 
+        // TODO: Bind this to the instance
         // Convert class to instance if needed
         let val = if let LoxValue::Class(class) = val {
             LoxValue::Instance(class.to_string(), (*id).to_string())
