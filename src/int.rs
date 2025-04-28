@@ -184,6 +184,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     }
                 }
             }
+            CallResult::Instance(_, _) => todo!(),
         }
     }
 }
@@ -358,12 +359,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         } else {
             val
         };
-
-        if let LoxValue::Instance(_, _) = val {
-            self.environment
-                .borrow_mut()
-                .define("this".to_string(), val.clone());
-        }
 
         if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
             self.environment
@@ -621,7 +616,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             .collect();
         self.all_class_methods.insert((*id).to_string(), methods);
 
-        let class = Class::new((*id).to_string());
+        let class = Class::new((*id).to_string(), self.environment.clone());
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
         Ok(())

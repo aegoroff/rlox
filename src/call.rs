@@ -16,6 +16,7 @@ use crate::{
 pub enum CallResult<'a> {
     Value(LoxValue),
     Code(&'a miette::Result<Stmt<'a>>, Rc<RefCell<Environment>>),
+    Instance(String, Rc<RefCell<Environment>>),
 }
 
 pub trait LoxCallable<'a> {
@@ -130,6 +131,7 @@ impl<'a> Function<'a> {
 
 pub struct Class {
     name: String,
+    closure: Rc<RefCell<Environment>>,
 }
 
 impl<'a> LoxCallable<'a> for Class {
@@ -137,20 +139,12 @@ impl<'a> LoxCallable<'a> for Class {
         0
     }
 
-    fn call(&self, args: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
-        if args.len() == 1 {
-            let method = &args[0];
-            if let LoxValue::String(method) = method {
-                Ok(CallResult::Value(LoxValue::Instance(
-                    self.name.clone(),
-                    method.clone(),
-                )))
-            } else {
-                Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
-            }
-        } else {
-            Ok(CallResult::Value(LoxValue::Class(self.name.clone())))
-        }
+    fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
+        let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
+        closure
+            .borrow_mut()
+            .define("this".to_string(), LoxValue::Nil);
+        Ok(CallResult::Instance(self.name.clone(), closure))
     }
 
     fn name(&self) -> &'a str {
@@ -159,7 +153,7 @@ impl<'a> LoxCallable<'a> for Class {
 }
 
 impl Class {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(name: String, closure: Rc<RefCell<Environment>>) -> Self {
+        Self { name, closure }
     }
 }
