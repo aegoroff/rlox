@@ -198,7 +198,7 @@ fn map_operand_err<T>(
     err.map_err(|e| {
         LoxError::Error(miette!(
             labels = vec![LabeledSpan::at(span, label)],
-            "Invalid operand"
+            "{e}"
         ))
     })
 }
