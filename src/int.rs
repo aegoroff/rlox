@@ -390,39 +390,16 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        let function;
-        let mut class: Option<&String> = None;
-        match callee {
-            LoxValue::Callable(_, ref id) => function = id,
-            // TODO: Implement instance methods
-            // LoxValue::Instance(ref class_name, ref method) => {
-            //     class = Some(class_name);
-            //     function = method;
-            // }
-            _ => {
-                return Err(LoxError::Error(miette!(
-                    labels = vec![LabeledSpan::at(location, "Invalid callable type")],
-                    "Invalid callable type"
-                )));
-            }
-        }
-        if let Some(class) = class {
-            let Some(methods) = self.all_class_methods.get(class) else {
-                return Err(LoxError::Error(miette!("Undefined class: '{class}'")));
-            };
-            let Some(method) = methods.get(function) else {
-                return Err(LoxError::Error(miette!(
-                    "Undefined method: '{function}' in class '{class}'"
-                )));
-            };
-            let callee = method.clone();
-            let callee = callee.borrow();
-            self.call_code(arguments, callee)
-        } else {
-            let callee = self.callables.get(function)?;
-            let callee = callee.borrow();
-            self.call_code(arguments, callee)
-        }
+        // TODO: Think over new callable type or extend existing to support methods
+        let LoxValue::Callable(_, ref function) = callee else {
+            return Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(location, "Invalid callable type")],
+                "Invalid callable type"
+            )));
+        };
+        let callee = self.callables.get(function)?;
+        let callee = callee.borrow();
+        self.call_code(arguments, callee)
     }
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
@@ -433,14 +410,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         if let LoxValue::Instance(class_name, closure) = &result {
             if let Some(methods) = self.all_class_methods.get(class_name) {
                 if methods.contains_key(*field_or_method) {
-                    if let Ok(class) = self.callables.get(class_name) {
-                        let class = class.borrow();
-                        if let Ok(CallResult::Value(lox_value)) =
-                            class.call(vec![LoxValue::String((*field_or_method).to_string())])
-                        {
-                            return Ok(lox_value);
-                        }
-                    }
+                    // TODO: Think over new callable type or extend existing to support methods
+                    return Ok(LoxValue::Callable("fn", field_or_method.to_string()));
                 }
             }
             let field = closure.borrow().get_field(field_or_method)?;
@@ -787,7 +758,7 @@ mod tests {
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(1);", "1" ; "conditional return success")]
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
     #[test_case("class Foo { method(x) { print x;} }", "" ; "class")]
-    #[test_case("class Bagel{} var b = Bagel(); print b;", "b: Bagel" ; "class instance empty")]
+    #[test_case("class Bagel{} var b = Bagel(); print b;", "insstance of Bagel" ; "class instance empty")]
     #[test_case("class Bagel{} var b = Bagel(); { var b = Bagel(); b.field = 1; print b.field; } b.field = 2; print b.field;", "1\n2" ; "get/set class field complex")]
     #[test_case("class Bagel{} var b = Bagel(); { b.field = 1; } print b.field; b.field = 2; print b.field;", "1\n2" ; "get/set class field complex no shadowing")]
     #[test_case("class Bagel{} var b; b = Bagel(); { b.field = 1; } print b.field; b.field = 2; print b.field;", "1\n2" ; "get/set class field complex no shadowing assignment")]
