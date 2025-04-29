@@ -186,7 +186,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             }
             CallResult::Instance(class, env) => {
                 // TODO: return instance of the class
-                todo!()
+                Ok(LoxValue::Instance(class, "this".to_string()))
             }
         }
     }
