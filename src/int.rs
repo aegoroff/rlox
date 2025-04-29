@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use miette::{Diagnostic, LabeledSpan, SourceSpan, miette};
+use miette::{LabeledSpan, SourceSpan, miette};
 
 use crate::{
     LoxError,
@@ -52,12 +52,18 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     pub fn evaluate(&mut self, expr: &Expr<'a>) -> crate::Result<LoxValue> {
         let loc = expr.location.clone();
         expr.accept(self).map_err(|e| {
-            let mut labels = if let Some(labels) = e.labels() {
-                labels.collect()
+            let labels = if let LoxError::Error(e) = e {
+                if let Some(labels) = e.labels() {
+                    let mut l: Vec<LabeledSpan> = labels.collect();
+                    l.push(LabeledSpan::at(loc, e.to_string()));
+                    l
+                } else {
+                    vec![LabeledSpan::at(loc, e.to_string())]
+                }
             } else {
                 vec![]
             };
-            labels.push(LabeledSpan::at(loc, e.to_string()));
+
             LoxError::Error(miette!(labels = labels, "Evaluation failed"))
         })
     }
@@ -195,12 +201,7 @@ fn map_operand_err<T>(
     span: impl Into<SourceSpan>,
     label: &str,
 ) -> crate::Result<T> {
-    err.map_err(|e| {
-        LoxError::Error(miette!(
-            labels = vec![LabeledSpan::at(span, label)],
-            "{e}"
-        ))
-    })
+    err.map_err(|e| LoxError::Error(miette!(labels = vec![LabeledSpan::at(span, label)], "{e}")))
 }
 
 const RIGHT_OPERAND_ERR: &str = "right operand type not match left one";

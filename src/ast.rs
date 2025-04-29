@@ -235,6 +235,7 @@ impl LoxValue {
     pub fn try_bool(&self) -> crate::Result<bool> {
         match self {
             LoxValue::Bool(b) => Ok(*b),
+            LoxValue::Nil => Ok(false),
             _ => Err(LoxError::Error(miette::miette!("Expected boolean"))),
         }
     }
@@ -273,6 +274,12 @@ impl LoxValue {
     pub fn less(&self, other: &LoxValue) -> crate::Result<bool> {
         if let Ok(l) = self.try_num() {
             let r = other.try_num()?;
+            Ok(l < r)
+        } else if let Ok(l) = self.try_bool() {
+            let r = other.try_bool()?;
+            Ok(!l & r)
+        } else if let Ok(l) = self.try_str() {
+            let r = other.try_str()?;
             Ok(l < r)
         } else {
             Err(LoxError::Error(miette::miette!("Operands must be numbers")))
