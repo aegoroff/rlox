@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtVisitor},
     int::Interpreter,
+    int::ProgramError,
     lexer::Token,
 };
 use miette::{LabeledSpan, miette};
@@ -22,32 +23,34 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         }
     }
 
-    pub fn interpret(mut self, stmts: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
+    pub fn interpret(mut self, stmts: &'a [crate::Result<Stmt<'a>>]) -> crate::Result<()> {
         self.resolve_statements(stmts)?;
         self.interpreter.interpret(stmts)
     }
 
-    fn resolve_statement(&mut self, stmt: &'a miette::Result<Stmt<'a>>) -> miette::Result<()> {
+    fn resolve_statement(&mut self, stmt: &'a crate::Result<Stmt<'a>>) -> crate::Result<()> {
         if let Ok(stmt) = stmt {
             stmt.accept(self)
         } else {
-            Err(miette!("Failed to resolve statement"))
+            Err(ProgramError::Error(miette!("Failed to resolve statement")))
         }
     }
 
     fn resolve_statements(
         &mut self,
-        statements: &'a [miette::Result<Stmt<'a>>],
-    ) -> miette::Result<()> {
+        statements: &'a [crate::Result<Stmt<'a>>],
+    ) -> crate::Result<()> {
         let mut errors = vec![];
 
         let mut spans = HashSet::new();
-        let mut add_error = |e: miette::Report| {
-            if let Some(label) = e.labels() {
-                for l in label {
-                    if !spans.contains(&(l.len(), l.offset())) {
-                        spans.insert((l.len(), l.offset()));
-                        errors.push(l);
+        let mut add_error = |e: ProgramError| {
+            if let ProgramError::Error(report) = e {
+                if let Some(label) = report.labels() {
+                    for l in label {
+                        if !spans.contains(&(l.len(), l.offset())) {
+                            spans.insert((l.len(), l.offset()));
+                            errors.push(l);
+                        }
                     }
                 }
             }
@@ -61,11 +64,14 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(miette!(labels = errors, "Program completed with errors"))
+            Err(ProgramError::Error(miette!(
+                labels = errors,
+                "Program completed with errors"
+            )))
         }
     }
 
-    fn resolve_expression(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+    fn resolve_expression(&mut self, expr: &Expr<'a>) -> crate::Result<()> {
         expr.accept(self)
     }
 
@@ -111,9 +117,9 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     fn resolve_function(
         &mut self,
         params: &[Box<Expr<'a>>],
-        body: &'a Result<Stmt<'a>, miette::Error>,
+        body: &'a crate::Result<Stmt<'a>>,
         kind: FunctionKind,
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         let enclosing_function = self.current_function;
         self.begin_scope();
         for p in params {
@@ -130,8 +136,8 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     }
 }
 
-impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a, W> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
+impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, W> {
+    fn visit_block_stmt(&mut self, body: &'a [crate::Result<Stmt<'a>>]) -> crate::Result<()> {
         self.begin_scope();
         self.resolve_statements(body)?;
         self.end_scope();
@@ -142,8 +148,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
         &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
-        methods: &'a [miette::Result<Stmt<'a>>],
-    ) -> miette::Result<()> {
+        methods: &'a [crate::Result<Stmt<'a>>],
+    ) -> crate::Result<()> {
         let _ = superclass;
         self.declare(name);
         self.define(name);
@@ -157,7 +163,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
         Ok(())
     }
 
-    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> crate::Result<()> {
         self.resolve_expression(expr)
     }
 
@@ -166,8 +172,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
         kind: FunctionKind,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
-        body: &'a miette::Result<Stmt<'a>>,
-    ) -> miette::Result<()> {
+        body: &'a crate::Result<Stmt<'a>>,
+    ) -> crate::Result<()> {
         self.declare(token);
         self.define(token);
         self.resolve_function(params, body, kind)
@@ -176,9 +182,9 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
     fn visit_if_stmt(
         &mut self,
         cond: &Expr<'a>,
-        then: &'a miette::Result<Stmt<'a>>,
-        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
-    ) -> miette::Result<()> {
+        then: &'a crate::Result<Stmt<'a>>,
+        otherwise: &'a Option<Box<crate::Result<Stmt<'a>>>>,
+    ) -> crate::Result<()> {
         self.resolve_expression(cond)?;
         self.resolve_statement(then)?;
         if let Some(other) = otherwise {
@@ -187,20 +193,20 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
         Ok(())
     }
 
-    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> crate::Result<()> {
         self.resolve_expression(expr)
     }
 
-    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
+    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> crate::Result<()> {
         let _ = keyword;
         if let FunctionKind::None = self.current_function {
-            Err(miette!(
+            Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     value.location.clone(),
                     "Cannot return from top level code"
                 )],
                 "Syntax error"
-            ))
+            )))
         } else {
             self.resolve_expression(value)
         }
@@ -210,7 +216,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
         &mut self,
         name: &Token<'a>,
         initializer: &Option<Box<Expr<'a>>>,
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         self.declare(name);
         if let Some(init) = initializer {
             self.resolve_expression(init)?;
@@ -222,16 +228,16 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Resolver<'a,
     fn visit_while_stmt(
         &mut self,
         cond: &Expr<'a>,
-        body: &'a miette::Result<Stmt<'a>>,
-    ) -> miette::Result<()> {
+        body: &'a crate::Result<Stmt<'a>>,
+    ) -> crate::Result<()> {
         self.resolve_expression(cond)?;
         self.resolve_statement(body)?;
         Ok(())
     }
 }
 
-impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a, W> {
-    fn visit_literal(&self, token: &Option<crate::lexer::Token<'a>>) -> miette::Result<()> {
+impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, W> {
+    fn visit_literal(&self, token: &Option<crate::lexer::Token<'a>>) -> crate::Result<()> {
         let _ = token;
         Ok(())
     }
@@ -241,19 +247,19 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         let _ = operator;
         self.resolve_expression(left)?;
         self.resolve_expression(right)?;
         Ok(())
     }
 
-    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) -> miette::Result<()> {
+    fn visit_unary_expr(&mut self, operator: &Token<'a>, expr: &Expr<'a>) -> crate::Result<()> {
         let _ = operator;
         self.resolve_expression(expr)
     }
 
-    fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> miette::Result<()> {
+    fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> crate::Result<()> {
         self.resolve_expression(rhs)?;
         if let ExprKind::Variable(name) = &lhs.kind {
             self.resolve_local(lhs, name);
@@ -266,7 +272,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         paren: &Token<'a>,
         callee: &Expr<'a>,
         args: &[Box<Expr<'a>>],
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         let _ = paren;
         self.resolve_expression(callee)?;
         for arg in args {
@@ -275,13 +281,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         Ok(())
     }
 
-    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<()> {
+    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<()> {
         self.resolve_expression(object)?;
         let _ = name;
         Ok(())
     }
 
-    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> miette::Result<()> {
+    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> crate::Result<()> {
         self.resolve_expression(grouping)
     }
 
@@ -290,7 +296,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         let _ = right;
         let _ = left;
         let _ = operator;
@@ -302,35 +308,35 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<()>> for Resolver<'a,
         _: &Token<'a>,
         obj: &Expr<'a>,
         val: &Expr<'a>,
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         self.resolve_expression(val)?;
         self.resolve_expression(obj)?;
         Ok(())
     }
 
-    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> miette::Result<()> {
+    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> crate::Result<()> {
         let _ = method;
         let _ = keyword;
         Ok(())
     }
 
-    fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> miette::Result<()> {
+    fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> crate::Result<()> {
         self.resolve_local(obj, keyword);
         Ok(())
     }
 
-    fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> miette::Result<()> {
+    fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<()> {
         if let Some(scope) = self.scopes.last() {
             if let Token::Identifier(id) = name {
                 if let Some(defined) = scope.get(id) {
                     if !(*defined) {
-                        return Err(miette!(
+                        return Err(ProgramError::Error(miette!(
                             labels = vec![LabeledSpan::at(
                                 obj.location.clone(),
                                 format!("Cant read local variable '{id}' in its own initializer")
                             )],
                             "Variable is not defined"
-                        ));
+                        )));
                     }
                 }
             }

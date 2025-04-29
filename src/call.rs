@@ -11,18 +11,19 @@ use std::{
 use crate::{
     ast::{LoxValue, Stmt},
     env::Environment,
+    int::ProgramError,
 };
 
 pub enum CallResult<'a> {
     Value(LoxValue),
-    Code(&'a miette::Result<Stmt<'a>>, Rc<RefCell<Environment>>),
+    Code(&'a crate::Result<Stmt<'a>>, Rc<RefCell<Environment>>),
     Instance(String, Rc<RefCell<Environment>>),
 }
 
 pub trait LoxCallable<'a> {
     fn arity(&self) -> usize;
     fn name(&self) -> &'a str;
-    fn call(&self, arguments: Vec<LoxValue>) -> miette::Result<CallResult<'a>>;
+    fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>>;
 }
 
 pub const CLOCK: &str = "clock";
@@ -39,11 +40,12 @@ impl<'a> Catalogue<'a> {
         }
     }
 
-    pub fn get(&self, id: &str) -> miette::Result<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+    pub fn get(&self, id: &str) -> crate::Result<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
         if let Some(var) = self.storage.get(id) {
             Ok(var.clone())
         } else {
-            Err(miette!("Undefined identifier: '{id}'"))
+            let report = miette!("Undefined identifier: '{id}'");
+            Err(ProgramError::Error(report))
         }
     }
 
@@ -59,7 +61,7 @@ impl<'a> LoxCallable<'a> for Clock {
         0
     }
 
-    fn call(&self, _: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
+    fn call(&self, _: Vec<LoxValue>) -> crate::Result<CallResult<'a>> {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
         let seconds = since_the_epoch.as_secs();
@@ -75,7 +77,7 @@ impl<'a> LoxCallable<'a> for Clock {
 pub struct Function<'a> {
     pub name: &'a str,
     parameters: Vec<&'a str>,
-    body: &'a miette::Result<Stmt<'a>>,
+    body: &'a crate::Result<Stmt<'a>>,
     closure: Rc<RefCell<Environment>>,
 }
 
@@ -84,16 +86,17 @@ impl<'a> LoxCallable<'a> for Function<'a> {
         self.parameters.len()
     }
 
-    fn call(&self, arguments: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
+    fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>> {
         let expected = self.arity();
         let actual = arguments.len();
         if expected != actual {
-            return Err(miette!(
+            let report = miette!(
                 "Invalid arguments number passed to '{}'. Expected: {} passed: {}",
                 self.name,
                 expected,
                 actual
-            ));
+            );
+            return Err(ProgramError::Error(report));
         }
 
         // We need new closure here to support recursive calls for example fibonacci calculation
@@ -117,7 +120,7 @@ impl<'a> Function<'a> {
     pub fn new(
         name: &'a str,
         parameters: Vec<&'a str>,
-        body: &'a miette::Result<Stmt<'a>>,
+        body: &'a crate::Result<Stmt<'a>>,
         closure: Rc<RefCell<Environment>>,
     ) -> Self {
         Self {
@@ -139,7 +142,7 @@ impl<'a> LoxCallable<'a> for Class {
         0
     }
 
-    fn call(&self, arguments: Vec<LoxValue>) -> miette::Result<CallResult<'a>> {
+    fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>> {
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
         closure
             .borrow_mut()

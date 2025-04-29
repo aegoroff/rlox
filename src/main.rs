@@ -71,12 +71,11 @@ fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     let interpreter = Interpreter::new(stdout());
     let resolver = Resolver::new(interpreter);
-    let stmts: Vec<miette::Result<Stmt>> = parser.collect();
-    resolver
-        .interpret(&stmts)
-        .map_err(|err| err.with_source_code(content.clone()))?;
-
-    Ok(())
+    let stmts: Vec<rlox::Result<Stmt>> = parser.collect();
+    resolver.interpret(&stmts).map_err(|err| match err {
+        rlox::int::ProgramError::Error(e) => e.with_source_code(content),
+        _ => miette!("Failed to interpret"),
+    })
 }
 
 fn print_bugreport(_matches: &ArgMatches) {

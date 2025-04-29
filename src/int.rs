@@ -20,6 +20,7 @@ use crate::{
 #[error("Program flow error")]
 #[diagnostic()]
 pub enum ProgramError {
+    Error(miette::Report),
     Return(LoxValue),
 }
 
@@ -56,7 +57,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         }
     }
 
-    pub fn evaluate(&mut self, expr: &Expr<'a>) -> miette::Result<LoxValue> {
+    pub fn evaluate(&mut self, expr: &Expr<'a>) -> crate::Result<LoxValue> {
         let loc = expr.location.clone();
         expr.accept(self).map_err(|e| {
             let mut labels = if let Some(labels) = e.labels() {
@@ -65,7 +66,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                 vec![]
             };
             labels.push(LabeledSpan::at(loc, e.to_string()));
-            miette!(labels = labels, "Evaluation failed")
+            ProgramError::Error(miette!(labels = labels, "Evaluation failed"))
         })
     }
 
@@ -73,11 +74,11 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         self.locals.insert(obj.get_hash_code(), depth);
     }
 
-    pub fn interpret(&mut self, statements: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
+    pub fn interpret(&mut self, statements: &'a [crate::Result<Stmt<'a>>]) -> crate::Result<()> {
         let mut errors = vec![];
 
         let mut spans = HashSet::new();
-        let mut add_error = |e: &miette::Report| {
+        let mut add_error = |e: &crate::ProgramError| {
             if let Some(label) = e.labels() {
                 for l in label {
                     if !spans.contains(&(l.len(), l.offset())) {
@@ -92,7 +93,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             match stmt {
                 Ok(s) => {
                     if let Err(e) = s.accept(self) {
-                        if let Some(ProgramError::Return(_)) = e.downcast_ref::<ProgramError>() {
+                        if let ProgramError::Return(_) = e {
                             // break interpretation
                             // error will be handled later
                             return Err(e);
@@ -106,11 +107,14 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(miette!(labels = errors, "Program completed with errors"))
+            Err(ProgramError::Error(miette!(
+                labels = errors,
+                "Program completed with errors"
+            )))
         }
     }
 
-    fn interpret_one(&mut self, statement: &'a miette::Result<Stmt<'a>>) -> miette::Result<()> {
+    fn interpret_one(&mut self, statement: &'a crate::Result<Stmt<'a>>) -> crate::Result<()> {
         match statement {
             Ok(s) => s.accept(self),
             Err(e) => {
@@ -124,7 +128,10 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                         }
                     }
                 }
-                Err(miette!(labels = errors, "Program completed with errors"))
+                Err(ProgramError::Error(miette!(
+                    labels = errors,
+                    "Program completed with errors"
+                )))
             }
         }
     }
@@ -140,18 +147,22 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         self.environment = prev;
     }
 
-    fn lookup_variable(&self, obj: &Expr<'a>, name: &'a str) -> miette::Result<LoxValue> {
+    fn lookup_variable(&self, obj: &Expr<'a>, name: &'a str) -> crate::Result<LoxValue> {
         if let Some(distance) = self.locals.get(&obj.get_hash_code()) {
             let val = self.environment.borrow().get_at(*distance, name)?;
             if let LoxValue::Nil = val {
-                Err(miette!("Using uninitialized variable '{name}'"))
+                Err(ProgramError::Error(miette!(
+                    "Using uninitialized variable '{name}'"
+                )))
             } else {
                 Ok(val)
             }
         } else {
             let val = self.globals.borrow().get(name)?;
             if let LoxValue::Nil = val {
-                Err(miette!("Using uninitialized variable '{name}'"))
+                Err(ProgramError::Error(miette!(
+                    "Using uninitialized variable '{name}'"
+                )))
             } else {
                 Ok(val)
             }
@@ -162,7 +173,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         &mut self,
         arguments: Vec<LoxValue>,
         callee: std::cell::Ref<'_, dyn LoxCallable<'a>>,
-    ) -> Result<LoxValue, miette::Error> {
+    ) -> crate::Result<LoxValue> {
         match callee.call(arguments)? {
             CallResult::Value(lox_value) => Ok(lox_value),
             CallResult::Code(stmt, closure) => {
@@ -174,35 +185,25 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                 };
                 match result {
                     Ok(()) => Ok(LoxValue::Nil),
-                    Err(e) => {
-                        if let Some(ProgramError::Return(val)) = e.downcast_ref::<ProgramError>() {
-                            // Return handling case
-                            Ok(val.clone())
-                        } else {
-                            Err(e)
-                        }
-                    }
+                    Err(ProgramError::Return(val)) => Ok(val),
+                    Err(e) => Err(e),
                 }
             }
-            CallResult::Instance(class, env) => {
-                // TODO: return instance of the class
-                Ok(LoxValue::Instance(class, "this".to_string()))
-            }
+            CallResult::Instance(class, env) => Ok(LoxValue::Instance(class, env)),
         }
     }
 }
 
 fn map_operand_err<T>(
-    err: miette::Result<T>,
+    err: crate::Result<T>,
     span: impl Into<SourceSpan>,
     label: &str,
-) -> miette::Result<T> {
+) -> crate::Result<T> {
     err.map_err(|e| {
-        miette!(
+        ProgramError::Error(miette!(
             labels = vec![LabeledSpan::at(span, label)],
             "Invalid operand"
-        )
-        .wrap_err(e)
+        ))
     })
 }
 
@@ -210,8 +211,8 @@ const RIGHT_OPERAND_ERR: &str = "right operand type not match left one";
 const RIGHT_NUMBER_ERR: &str = "right operand must be number";
 const LEFT_NUMBER_ERR: &str = "left operand must be number";
 
-impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interpreter<'a, W> {
-    fn visit_literal(&self, token: &Option<Token<'a>>) -> miette::Result<LoxValue> {
+impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpreter<'a, W> {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> crate::Result<LoxValue> {
         match token {
             Some(t) => match t {
                 Token::String(s) => Ok(LoxValue::String((*s).to_string())),
@@ -219,7 +220,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 Token::False => Ok(LoxValue::Bool(false)),
                 Token::True => Ok(LoxValue::Bool(true)),
                 Token::Nil => Ok(LoxValue::Nil),
-                _ => Err(miette!("Invalid literal")),
+                _ => Err(ProgramError::Error(miette!("Invalid literal"))),
             },
             None => Ok(LoxValue::Nil),
         }
@@ -230,7 +231,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> miette::Result<LoxValue> {
+    ) -> crate::Result<LoxValue> {
         let left_loc = left.location.clone();
         let right_loc = right.location.clone();
         let lhs = self.evaluate(left)?;
@@ -262,10 +263,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 }
                 let start = *left_loc.start();
                 let end = *right_loc.end();
-                Err(miette!(
+                Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(start..=end, "Problem expression")],
                     "Invalid operands types for plus"
-                ))
+                )))
             }
             Token::Slash => {
                 let err_loc = right_loc.clone();
@@ -273,10 +274,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 let r = map_operand_err(rhs.try_num(), right_loc, RIGHT_NUMBER_ERR)?;
 
                 if !r.is_normal() && !r.is_infinite() {
-                    Err(miette!(
+                    Err(ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(err_loc, "Zero division detected here")],
                         "Zero division detected"
-                    ))
+                    )))
                 } else {
                     let result = l / r;
                     Ok(LoxValue::Number(result))
@@ -309,7 +310,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                 let le = lt || lhs.equal(&rhs);
                 Ok(LoxValue::Bool(le))
             }
-            _ => Err(miette!("Invalid binary operator")),
+            _ => Err(ProgramError::Error(miette!("Invalid binary operator"))),
         }
     }
 
@@ -317,72 +318,61 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         &mut self,
         operator: &Token<'a>,
         expr: &Expr<'a>,
-    ) -> miette::Result<LoxValue> {
+    ) -> crate::Result<LoxValue> {
         let expr_loc = expr.location.clone();
         let val = self.evaluate(expr)?;
         match operator {
             Token::Minus => Ok(LoxValue::Number(-val.try_num()?)),
             Token::Bang => Ok(LoxValue::Bool(!val.is_truthy())),
-            _ => Err(miette!(
+            _ => Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(expr_loc, "Problem expression")],
                 "Invalid unary operator"
-            )),
+            ))),
         }
     }
 
-    fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> miette::Result<LoxValue> {
+    fn visit_assign_expr(&mut self, lhs: &Expr<'a>, rhs: &Expr<'a>) -> crate::Result<LoxValue> {
         // Early return for invalid l-value expression
         let ExprKind::Variable(id) = &lhs.kind else {
-            return Err(miette!(
+            return Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     lhs.location.clone(),
                     "Invalid l-value expression"
                 )],
                 "Assigment failed"
-            ));
+            )));
         };
 
         // Early return for invalid identifier
         let Token::Identifier(id) = id else {
-            return Err(miette!(
-                labels = vec![LabeledSpan::at(
-                    lhs.location.clone(),
-                    "Invalid l-value expression"
-                )],
+            return Err(ProgramError::Error(miette!(
+                labels = vec![LabeledSpan::at(lhs.location.clone(), "Assigment failed")],
                 "Assigment failed"
-            ));
+            )));
         };
 
         let location = rhs.location.clone();
         let val = rhs.accept(self)?;
-
-        // TODO: Bind this to the instance
-        // Convert class to instance if needed
-        // let val = if let LoxValue::Class(class) = val {
-        //     LoxValue::Instance(class.to_string(), (*id).to_string())
-        // } else {
-        //     val
-        // };
 
         if let Some(distance) = self.locals.get(&lhs.get_hash_code()) {
             self.environment
                 .borrow_mut()
                 .assign_at(*distance, (*id).to_string(), val.clone())
                 .map_err(|e| {
-                    miette!(
+                    ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(location, e.to_string())],
                         "Assigment failed"
-                    )
+                    ))
                 })?;
         } else {
             self.globals
                 .borrow_mut()
                 .assign((*id).to_string(), val.clone())
                 .map_err(|e| {
-                    miette!(
+                    ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(location, e.to_string())],
                         "Assigment failed"
-                    )
+                    ))
                 })?;
         }
 
@@ -394,7 +384,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         paren: &Token<'a>,
         callee: &Expr<'a>,
         args: &[Box<Expr<'a>>],
-    ) -> miette::Result<LoxValue> {
+    ) -> crate::Result<LoxValue> {
         let _ = paren;
         let location = callee.location.clone();
         let callee = self.evaluate(callee)?;
@@ -407,23 +397,25 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         let mut class: Option<&String> = None;
         match callee {
             LoxValue::Callable(_, ref id) => function = id,
-            LoxValue::Instance(ref class_name, ref method) => {
-                class = Some(class_name);
-                function = method;
-            }
+            // LoxValue::Instance(ref class_name, ref method) => {
+            //     class = Some(class_name);
+            //     function = method;
+            // }
             _ => {
-                return Err(miette!(
+                return Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(location, "Invalid callable type")],
                     "Invalid callable type"
-                ));
+                )));
             }
         }
         if let Some(class) = class {
             let Some(methods) = self.all_class_methods.get(class) else {
-                return Err(miette!("Undefined class: '{class}'"));
+                return Err(ProgramError::Error(miette!("Undefined class: '{class}'")));
             };
             let Some(method) = methods.get(function) else {
-                return Err(miette!("Undefined method: '{function}' in class '{class}'"));
+                return Err(ProgramError::Error(miette!(
+                    "Undefined method: '{function}' in class '{class}'"
+                )));
             };
             let callee = method.clone();
             let callee = callee.borrow();
@@ -435,13 +427,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         }
     }
 
-    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> miette::Result<LoxValue> {
+    fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
         let result = self.evaluate(object)?;
         let Token::Identifier(field_or_method) = name else {
-            return Err(miette!("Field name must be an identifier"));
+            return Err(ProgramError::Error(miette!(
+                "Field name must be an identifier"
+            )));
         };
         match &result {
-            LoxValue::Instance(class_name, id) => {
+            LoxValue::Instance(class_name, closure) => {
                 if let Some(methods) = self.all_class_methods.get(class_name) {
                     if methods.contains_key(*field_or_method) {
                         if let Ok(class) = self.callables.get(class_name) {
@@ -454,24 +448,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                         }
                     }
                 }
-                let field = if let Some(distance) = self.locals.get(&object.get_hash_code()) {
-                    self.environment
-                        .borrow()
-                        .get_field_at(*distance, id, field_or_method)?
-                } else {
-                    self.globals.borrow().get_field(id, field_or_method)?
-                };
+                let field = closure.borrow().get_field("this", field_or_method)?;
                 Ok(field)
             }
-            LoxValue::Class(class) => {
-                // TODO: Bind this to the instance
-                // support calls like `Class().method()`
-                Ok(LoxValue::Instance(
-                    class.to_string(),
-                    (*field_or_method).to_string(),
-                ))
-            }
-            _ => Err(miette!("Only instances have properties")),
+            _ => Err(ProgramError::Error(miette!(
+                "Only instances have properties"
+            ))),
         }
     }
 
@@ -480,28 +462,34 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         field: &Token<'a>,
         obj: &Expr<'a>,
         val: &Expr<'a>,
-    ) -> miette::Result<LoxValue> {
+    ) -> crate::Result<LoxValue> {
         // Early return for invalid field name
         let field = match field {
             Token::Identifier(id) => (*id).to_string(),
-            _ => return Err(miette!("Field name must be an identifier")),
+            _ => {
+                return Err(ProgramError::Error(miette!(
+                    "Field name must be an identifier"
+                )));
+            }
         };
 
         // Early return for invalid object type
         let ExprKind::Get(_, instance) = &obj.kind else {
-            return Err(miette!("Only instances have fields"));
+            return Err(ProgramError::Error(miette!("Only instances have fields")));
         };
 
         // Early return for invalid instance
         let ExprKind::Variable(id) = &instance.kind else {
-            return Err(miette!("Invalid instance"));
+            return Err(ProgramError::Error(miette!("Invalid instance")));
         };
 
         // Early return for invalid instance name
         let instance_name = if let Token::Identifier(id) = id {
             (*id).to_string()
         } else {
-            return Err(miette!("Instance name must be an identifier"));
+            return Err(ProgramError::Error(miette!(
+                "Instance name must be an identifier"
+            )));
         };
 
         let value = self.evaluate(val)?;
@@ -522,7 +510,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         Ok(value)
     }
 
-    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> miette::Result<LoxValue> {
+    fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> crate::Result<LoxValue> {
         self.evaluate(grouping)
     }
 
@@ -531,7 +519,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
-    ) -> miette::Result<LoxValue> {
+    ) -> crate::Result<LoxValue> {
         let lhs = self.evaluate(left)?;
         match operator {
             Token::And => {
@@ -548,7 +536,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
                     self.evaluate(right)
                 }
             }
-            _ => Err(miette!("Invalid logical operator")),
+            _ => Err(ProgramError::Error(miette!("Invalid logical operator"))),
         }
     }
 
@@ -556,32 +544,28 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, miette::Result<LoxValue>> for Interp
         &mut self,
         keyword: &Token<'a>,
         method: &Token<'a>,
-    ) -> miette::Result<LoxValue> {
+    ) -> crate::Result<LoxValue> {
         let _ = method;
         let _ = keyword;
         todo!()
     }
 
-    fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> miette::Result<LoxValue> {
+    fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> crate::Result<LoxValue> {
         let _ = keyword;
         self.lookup_variable(obj, "this")
     }
 
-    fn visit_variable_expr(
-        &mut self,
-        obj: &Expr<'a>,
-        name: &Token<'a>,
-    ) -> miette::Result<LoxValue> {
+    fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<LoxValue> {
         if let Token::Identifier(id) = name {
             self.lookup_variable(obj, id)
         } else {
-            Err(miette!("Invalid identifier"))
+            Err(ProgramError::Error(miette!("Invalid identifier")))
         }
     }
 }
 
-impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<'a, W> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> miette::Result<()> {
+impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'a, W> {
+    fn visit_block_stmt(&mut self, body: &'a [crate::Result<Stmt<'a>>]) -> crate::Result<()> {
         let prev = self.begin_scope(self.environment.clone());
         let result = self.interpret(body);
         self.end_scope(prev);
@@ -592,20 +576,20 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
-        methods: &'a [miette::Result<Stmt<'a>>],
-    ) -> miette::Result<()> {
+        methods: &'a [crate::Result<Stmt<'a>>],
+    ) -> crate::Result<()> {
         let _ = superclass;
         let Token::Identifier(id) = name else {
-            return Err(miette!("Invalid class name"));
+            return Err(ProgramError::Error(miette!("Invalid class name")));
         };
         if self.environment.borrow().get(id).is_ok() {
-            return Err(miette!("Class '{id}' redefinition"));
+            return Err(ProgramError::Error(miette!("Class '{id}' redefinition")));
         }
 
         for method in methods {
             let method = match method {
                 Ok(m) => m,
-                Err(e) => return Err(miette!(e.to_string())), // TODO: Handle all errors
+                Err(e) => return Err(ProgramError::Error(miette!(e.to_string()))), // TODO: Handle all errors
             };
             method.accept(self)?;
         }
@@ -629,7 +613,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         Ok(())
     }
 
-    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+    fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> crate::Result<()> {
         self.evaluate(expr)?;
         Ok(())
     }
@@ -639,13 +623,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         kind: FunctionKind,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
-        body: &'a miette::Result<Stmt<'a>>,
-    ) -> miette::Result<()> {
+        body: &'a crate::Result<Stmt<'a>>,
+    ) -> crate::Result<()> {
         let Token::Identifier(id) = token else {
-            return Err(miette!("Invalid {kind}"));
+            return Err(ProgramError::Error(miette!("Invalid {kind}")));
         };
         if self.environment.borrow().get(id).is_ok() {
-            return Err(miette!("{kind} or variable with '{id}' redefinition"));
+            return Err(ProgramError::Error(miette!(
+                "{kind} or variable with '{id}' redefinition"
+            )));
         }
 
         if let FunctionKind::Function = kind {
@@ -661,13 +647,13 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             if let ExprKind::Variable(Token::Identifier(name)) = &param.kind {
                 if names.contains(name) {
                     let location = param.location.clone();
-                    return Err(miette!(
+                    return Err(ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             location,
                             format!("Parameter '{name}' redefinition")
                         )],
                         "Parameter names must be unique"
-                    ));
+                    )));
                 }
                 names.insert(*name);
                 parameters.push(*name);
@@ -691,21 +677,21 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     fn visit_if_stmt(
         &mut self,
         cond: &Expr<'a>,
-        then: &'a miette::Result<Stmt<'a>>,
-        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
-    ) -> miette::Result<()> {
+        then: &'a crate::Result<Stmt<'a>>,
+        otherwise: &'a Option<Box<crate::Result<Stmt<'a>>>>,
+    ) -> crate::Result<()> {
         match self.evaluate(cond)? {
             LoxValue::Bool(v) => {
                 if v {
                     let then = match then {
                         Ok(s) => s,
-                        Err(e) => return Err(miette!(e.to_string())),
+                        Err(e) => return Err(ProgramError::Error(miette!(e.to_string()))),
                     };
                     then.accept(self)
                 } else if let Some(otherwise) = otherwise {
                     let otherwise = match &**otherwise {
                         Ok(s) => s,
-                        Err(e) => return Err(miette!(e.to_string())),
+                        Err(e) => return Err(ProgramError::Error(miette!(e.to_string()))),
                     };
                     otherwise.accept(self)
                 } else {
@@ -719,15 +705,15 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
             | LoxValue::Class(_) => {
                 let then = match then {
                     Ok(s) => s,
-                    Err(e) => return Err(miette!(e.to_string())),
+                    Err(e) => return Err(ProgramError::Error(miette!(e.to_string()))),
                 };
                 then.accept(self)
             }
             LoxValue::Nil => {
                 if let Some(otherwise) = otherwise {
-                    let otherwise = match &**otherwise {
+                    let otherwise = match &(**otherwise) {
                         Ok(s) => s,
-                        Err(e) => return Err(miette!(e.to_string())),
+                        Err(e) => return Err(ProgramError::Error(miette!(e.to_string()))),
                     };
                     otherwise.accept(self)
                 } else {
@@ -737,42 +723,32 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
         }
     }
 
-    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> miette::Result<()> {
+    fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> crate::Result<()> {
         match self.evaluate(expr) {
-            Ok(val) => {
-                writeln!(self.writer, "{val}").map_err(|e| miette!(e))?;
-            }
-            Err(e) => {
-                return Err(e);
-            }
+            Ok(val) => writeln!(self.writer, "{val}").map_err(|e| ProgramError::Error(miette!(e))),
+            Err(e) => Err(e),
         }
-        Ok(())
     }
 
-    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> miette::Result<()> {
+    fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> crate::Result<()> {
         let _ = keyword;
         let val = self.evaluate(value)?;
-        Err(ProgramError::Return(val).into())
+        Err(ProgramError::Return(val))
     }
 
     fn visit_variable_stmt(
         &mut self,
         name: &Token<'a>,
         initializer: &Option<Box<Expr<'a>>>,
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         let Token::Identifier(id) = name else {
-            return Err(miette!("Invalid identifier"));
+            return Err(ProgramError::Error(miette!("Invalid identifier")));
         };
         if let Some(v) = initializer {
             match v.accept(self) {
                 Ok(val) => {
                     // TODO: Initializer may be class call (constructor) so we need to return instance
-                    // Convert class to instance if needed
-                    // let val = if let LoxValue::Class(class) = val {
-                    //     LoxValue::Instance(class.to_string(), (*id).to_string())
-                    // } else {
-                    //     val
-                    // };
+
                     // var id = Class(); or var id = 1; or var id;
                     // so val may be Class() call or other value
                     self.environment.borrow_mut().define((*id).to_string(), val);
@@ -790,8 +766,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, miette::Result<()>> for Interpreter<
     fn visit_while_stmt(
         &mut self,
         cond: &Expr<'a>,
-        body: &'a miette::Result<Stmt<'a>>,
-    ) -> miette::Result<()> {
+        body: &'a crate::Result<Stmt<'a>>,
+    ) -> crate::Result<()> {
         while self.evaluate(cond)?.is_truthy() {
             self.interpret_one(body)?;
         }
@@ -862,7 +838,7 @@ mod tests {
         let mut stdout = Vec::new();
         let interpreter = Interpreter::new(&mut stdout);
         let resolver = Resolver::new(interpreter);
-        let stmts: Vec<miette::Result<crate::ast::Stmt>> = parser.collect();
+        let stmts: Vec<crate::Result<crate::ast::Stmt>> = parser.collect();
 
         // Act
         let iterpretation_result = resolver.interpret(&stmts);

@@ -1,10 +1,15 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{fmt::Display, hash::DefaultHasher, hash::Hash, hash::Hasher, ops::RangeInclusive};
+use std::{
+    cell::RefCell,
+    fmt::Display,
+    hash::{DefaultHasher, Hash, Hasher},
+    ops::RangeInclusive,
+    rc::Rc,
+};
 
-use miette::miette;
-
-use crate::lexer::Token;
+use crate::int::ProgramError;
+use crate::{env::Environment, lexer::Token};
 
 // Traits
 
@@ -29,12 +34,12 @@ pub trait ExprVisitor<'a, R> {
 }
 
 pub trait StmtVisitor<'a, R> {
-    fn visit_block_stmt(&mut self, body: &'a [miette::Result<Stmt<'a>>]) -> R;
+    fn visit_block_stmt(&mut self, body: &'a [crate::Result<Stmt<'a>>]) -> R;
     fn visit_class_stmt(
         &mut self,
         name: &Token<'a>,
         superclass: &Option<Box<Stmt<'a>>>,
-        methods: &'a [miette::Result<Stmt<'a>>],
+        methods: &'a [crate::Result<Stmt<'a>>],
     ) -> R;
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
     fn visit_function_decl_stmt(
@@ -42,18 +47,18 @@ pub trait StmtVisitor<'a, R> {
         kind: FunctionKind,
         token: &Token<'a>,
         params: &[Box<Expr<'a>>],
-        body: &'a miette::Result<Stmt<'a>>,
+        body: &'a crate::Result<Stmt<'a>>,
     ) -> R;
     fn visit_if_stmt(
         &mut self,
         cond: &Expr<'a>,
-        then: &'a miette::Result<Stmt<'a>>,
-        otherwise: &'a Option<Box<miette::Result<Stmt<'a>>>>,
+        then: &'a crate::Result<Stmt<'a>>,
+        otherwise: &'a Option<Box<crate::Result<Stmt<'a>>>>,
     ) -> R;
     fn visit_print_stmt(&mut self, expr: &Expr<'a>) -> R;
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> R;
     fn visit_variable_stmt(&mut self, name: &Token<'a>, initializer: &Option<Box<Expr<'a>>>) -> R;
-    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a miette::Result<Stmt<'a>>) -> R;
+    fn visit_while_stmt(&mut self, cond: &Expr<'a>, body: &'a crate::Result<Stmt<'a>>) -> R;
 }
 
 // Expressions
@@ -155,12 +160,12 @@ impl Display for FunctionKind {
 
 #[derive(Debug)]
 pub enum StmtKind<'a> {
-    Block(Vec<miette::Result<Stmt<'a>>>),
+    Block(Vec<crate::Result<Stmt<'a>>>),
     /// name, superclass, methods
     Class(
         Token<'a>,
         Option<Box<Stmt<'a>>>,
-        Vec<miette::Result<Stmt<'a>>>,
+        Vec<crate::Result<Stmt<'a>>>,
     ),
     Expression(Box<Expr<'a>>),
     /// kind, token, params, body
@@ -168,18 +173,18 @@ pub enum StmtKind<'a> {
         FunctionKind,
         Token<'a>,
         Vec<Box<Expr<'a>>>,
-        Box<miette::Result<Stmt<'a>>>,
+        Box<crate::Result<Stmt<'a>>>,
     ),
     /// condition, then, else
     If(
         Box<Expr<'a>>,
-        Box<miette::Result<Stmt<'a>>>,
-        Option<Box<miette::Result<Stmt<'a>>>>,
+        Box<crate::Result<Stmt<'a>>>,
+        Option<Box<crate::Result<Stmt<'a>>>>,
     ),
     Print(Box<Expr<'a>>),
     Return(Token<'a>, Box<Expr<'a>>),
     Variable(Token<'a>, Option<Box<Expr<'a>>>),
-    While(Box<Expr<'a>>, Box<miette::Result<Stmt<'a>>>),
+    While(Box<Expr<'a>>, Box<crate::Result<Stmt<'a>>>),
 }
 
 // Values
@@ -194,7 +199,7 @@ pub enum LoxValue {
     Nil,
     Callable(&'static str, String),
     Class(String),
-    Instance(String, String),
+    Instance(String, Rc<RefCell<Environment>>),
 }
 
 impl Display for LoxValue {
@@ -206,33 +211,32 @@ impl Display for LoxValue {
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
             LoxValue::Class(class) => write!(f, "{class}"),
-            LoxValue::Instance(class, instance) => write!(f, "{instance}: {class}"),
+            LoxValue::Instance(class, _) => write!(f, "insstance of {class}"),
         }
     }
 }
 
 impl LoxValue {
-    pub fn try_num(&self) -> miette::Result<f64> {
+    pub fn try_num(&self) -> crate::Result<f64> {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(miette!("Number expected"))
+            Err(ProgramError::Error(miette::miette!("Expected number")))
         }
     }
 
-    pub fn try_str(&self) -> miette::Result<&String> {
+    pub fn try_str(&self) -> crate::Result<&String> {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(miette!("String expected"))
+            Err(ProgramError::Error(miette::miette!("Expected string")))
         }
     }
 
-    pub fn try_bool(&self) -> miette::Result<bool> {
+    pub fn try_bool(&self) -> crate::Result<bool> {
         match self {
             LoxValue::Bool(b) => Ok(*b),
-            LoxValue::Nil => Ok(false),
-            _ => Err(miette!("Boolean expected or Nil")),
+            _ => Err(ProgramError::Error(miette::miette!("Expected boolean"))),
         }
     }
 
@@ -267,18 +271,14 @@ impl LoxValue {
         }
     }
 
-    pub fn less(&self, other: &LoxValue) -> miette::Result<bool> {
+    pub fn less(&self, other: &LoxValue) -> crate::Result<bool> {
         if let Ok(l) = self.try_num() {
             let r = other.try_num()?;
             Ok(l < r)
-        } else if let Ok(l) = self.try_bool() {
-            let r = other.try_bool()?;
-            Ok(!l & r)
-        } else if let Ok(l) = self.try_str() {
-            let r = other.try_str()?;
-            Ok(l < r)
         } else {
-            Err(miette!("Invalid operands types for less"))
+            Err(ProgramError::Error(miette::miette!(
+                "Operands must be numbers"
+            )))
         }
     }
 }

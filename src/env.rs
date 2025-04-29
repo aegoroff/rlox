@@ -1,8 +1,8 @@
-use crate::ast::LoxValue;
+use crate::{ast::LoxValue, int::ProgramError};
 use miette::miette;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Environment {
     values: HashMap<String, LoxValue>,
     fields: HashMap<String, HashMap<String, LoxValue>>,
@@ -26,17 +26,17 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, id: &str) -> miette::Result<LoxValue> {
+    pub fn get(&self, id: &str) -> crate::Result<LoxValue> {
         if let Some(var) = self.values.get(id) {
             Ok(var.clone())
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow().get(id)
         } else {
-            Err(miette!("Undefined identifier: '{id}'"))
+            Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
         }
     }
 
-    pub fn get_at(&self, distance: usize, id: &str) -> miette::Result<LoxValue> {
+    pub fn get_at(&self, distance: usize, id: &str) -> crate::Result<LoxValue> {
         if distance == 0 {
             self.get(id)
         } else {
@@ -49,7 +49,7 @@ impl Environment {
             if let Some(e) = parent {
                 e.borrow().get(id)
             } else {
-                Err(miette!("Undefined identifier: '{id}'"))
+                Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
             }
         }
     }
@@ -96,21 +96,21 @@ impl Environment {
         }
     }
 
-    pub fn get_field(&self, id: &str, field: &str) -> miette::Result<LoxValue> {
+    pub fn get_field(&self, id: &str, field: &str) -> crate::Result<LoxValue> {
         if let Some(fields) = self.fields.get(id) {
             if let Some(field) = fields.get(field) {
                 Ok(field.clone())
             } else {
-                Err(miette!("Undefined field: '{field}'"))
+                Err(ProgramError::Error(miette!("Undefined field: '{field}'")))
             }
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow().get_field(id, field)
         } else {
-            Err(miette!("No any field set for: '{id}'"))
+            Err(ProgramError::Error(miette!("No any field set for: '{id}'")))
         }
     }
 
-    pub fn get_field_at(&self, distance: usize, id: &str, field: &str) -> miette::Result<LoxValue> {
+    pub fn get_field_at(&self, distance: usize, id: &str, field: &str) -> crate::Result<LoxValue> {
         if distance == 0 {
             self.get_field(id, field)
         } else {
@@ -123,19 +123,21 @@ impl Environment {
             if let Some(e) = parent {
                 e.borrow().get_field(id, field)
             } else {
-                Err(miette!("Undefined identifier: '{id}'"))
+                Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
             }
         }
     }
 
-    pub fn assign(&mut self, id: String, initializer: LoxValue) -> miette::Result<()> {
+    pub fn assign(&mut self, id: String, initializer: LoxValue) -> crate::Result<()> {
         if self.values.contains_key(&id) {
             self.values.entry(id).and_modify(|e| *e = initializer);
             Ok(())
         } else if let Some(enclosing) = &mut self.enclosing {
             enclosing.borrow_mut().assign(id, initializer)
         } else {
-            Err(miette!("assignment to undefined variable '{id}'"))
+            Err(ProgramError::Error(miette!(
+                "assignment to undefined variable '{id}'"
+            )))
         }
     }
 
@@ -144,7 +146,7 @@ impl Environment {
         distance: usize,
         id: String,
         initializer: LoxValue,
-    ) -> miette::Result<()> {
+    ) -> crate::Result<()> {
         if distance == 0 {
             self.assign(id, initializer)
         } else {
@@ -157,7 +159,7 @@ impl Environment {
             if let Some(e) = parent {
                 e.borrow_mut().assign(id, initializer)
             } else {
-                Err(miette!("Undefined identifier: '{id}'"))
+                Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
             }
         }
     }

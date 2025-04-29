@@ -4,6 +4,7 @@ use miette::{LabeledSpan, miette};
 
 use crate::{
     ast::{Expr, ExprKind, FunctionKind, Stmt, StmtKind},
+    int::ProgramError,
     lexer::{Lexer, Token},
 };
 
@@ -12,7 +13,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Iterator for &mut Parser<'a> {
-    type Item = miette::Result<Stmt<'a>>;
+    type Item = crate::Result<Stmt<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.declaration()
@@ -27,7 +28,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn declaration(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let current = self.tokens.peek()?;
         match current {
             Ok((_, Token::Var, _)) => self.var_declaration(),
@@ -41,7 +42,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn function(&mut self, kind: FunctionKind) -> Option<miette::Result<Stmt<'a>>> {
+    fn function(&mut self, kind: FunctionKind) -> Option<crate::Result<Stmt<'a>>> {
         let mut start = 0;
         let mut finish = 0;
         // CRUTCH: awkard way to get start and finish positions for function name
@@ -68,13 +69,13 @@ impl<'a> Parser<'a> {
                 };
 
                 if args.len() >= 255 {
-                    return Some(Err(miette!(
+                    return Some(Err(ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
                             "Cant have more then 255 arguments"
                         )],
                         "Arguments number exceeded"
-                    )));
+                    ))));
                 }
                 if let Token::Identifier(_) = arg {
                     let arg = Expr {
@@ -83,13 +84,13 @@ impl<'a> Parser<'a> {
                     };
                     args.push(Box::new(arg));
                 } else {
-                    return Some(Err(miette!(
+                    return Some(Err(ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             arg_start..=arg_end,
                             "Invalid argument definition"
                         )],
                         "Invalid argument definition"
-                    )));
+                    ))));
                 }
 
                 if !self.matches(&[Token::Comma]) {
@@ -102,30 +103,30 @@ impl<'a> Parser<'a> {
         }
 
         let Some(left_brace) = self.tokens.peek() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     format!("{kind} block expected after this")
                 )],
                 "Missing {kind} block"
-            )));
+            ))));
         };
 
         if let Err(e) = left_brace {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(start..=finish, e.to_string())],
                 "Missing {kind} block"
-            )));
+            ))));
         }
 
         let Some(block) = self.block() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     format!("Missing {kind} block")
                 )],
                 "Missing {kind} block"
-            )));
+            ))));
         };
 
         let kind = StmtKind::Function(kind, name?, args, Box::new(block));
@@ -136,7 +137,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn class_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn class_declaration(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let t = self.tokens.next(); // consume CLASS token TODO: include CLASS start position into stmt location
         let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
         let name = match self.consume_name("class", start, finish) {
@@ -145,13 +146,13 @@ impl<'a> Parser<'a> {
         };
 
         let Some(name) = name else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     "class name expected after this"
                 )],
                 "Missing class name"
-            )));
+            ))));
         };
 
         if let Err(e) = self.consume(Token::LeftBrace) {
@@ -178,7 +179,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn var_declaration(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn var_declaration(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let t = self.tokens.next(); // consume VAR token TODO: include VAR start position into stmt location
         let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
         // IMPORTANT: dont call expression here so as not to conflict with assignment
@@ -188,18 +189,18 @@ impl<'a> Parser<'a> {
                     finish = *expr.location.end();
                     match expr.kind {
                         ExprKind::Variable(token) => Ok(token),
-                        _ => Err(miette!("Invalid variable name")),
+                        _ => Err(ProgramError::Error(miette!("Invalid variable name"))),
                     }
                 }
                 Err(e) => Err(e),
             },
-            None => Err(miette!(
+            None => Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     "Variable name expected after this"
                 )],
                 "Missing variable name"
-            )),
+            ))),
         };
         let name = match name {
             Ok(name) => name,
@@ -228,13 +229,13 @@ impl<'a> Parser<'a> {
                     Err(e) => Err(e),
                 }
             } else {
-                Err(miette!(
+                Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         start..=finish,
                         "Variable name expected here"
                     )],
                     "Missing variable name"
-                ))
+                )))
             }
         } else {
             // Variable declaration without initializer
@@ -251,7 +252,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let current = self.tokens.peek()?;
         match current {
             Ok((_, Token::If, _)) => self.if_statement(),
@@ -264,20 +265,20 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn if_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn if_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let start_loc = match self.consume_current_and_open_paren("if") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
 
         let Some(cond) = self.expression() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     (*start_loc.start() + 2)..=(start_loc.start() + 2),
                     "Condition must start here"
                 )],
                 "Invalid condition syntax"
-            )));
+            ))));
         };
         let cond = match cond {
             Ok(cond) => cond,
@@ -292,10 +293,10 @@ impl<'a> Parser<'a> {
         };
 
         let Some(then_branch) = self.statement() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing then branch")],
                 "Missing then branch"
-            )));
+            ))));
         };
 
         let Some(current) = self.tokens.peek() else {
@@ -325,10 +326,10 @@ impl<'a> Parser<'a> {
         let else_loc = self.consume(Token::Else).unwrap();
 
         let Some(else_branch) = self.statement() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(else_loc, "Else branch expected")],
                 "Missing else branch"
-            )));
+            ))));
         };
 
         let kind = StmtKind::If(
@@ -342,20 +343,20 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn while_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn while_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let start_loc = match self.consume_current_and_open_paren("while") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
         };
 
         let Some(cond) = self.expression() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     *start_loc.start()..=(*start_loc.start() + 5),
                     "No while condition specified"
                 )],
                 "Invalid condition syntax"
-            )));
+            ))));
         };
         let cond = match cond {
             Ok(cond) => cond,
@@ -370,10 +371,10 @@ impl<'a> Parser<'a> {
         };
 
         let Some(body) = self.statement() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing while body")],
                 "Missing while body"
-            )));
+            ))));
         };
 
         let kind = StmtKind::While(Box::new(cond), Box::new(body));
@@ -383,7 +384,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn for_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn for_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let start_loc = match self.consume_current_and_open_paren("for") {
             Ok(x) => x,
             Err(e) => return Some(Err(e)),
@@ -404,13 +405,13 @@ impl<'a> Parser<'a> {
             }
         } else {
             let Some(cond) = self.expression() else {
-                return Some(Err(miette!(
+                return Some(Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         *start_loc.start()..=(*start_loc.start() + 5),
                         "No condition specified"
                     )],
                     "Invalid condition syntax"
-                )));
+                ))));
             };
             if let Err(e) = self.consume_semicolon(*start_loc.end()) {
                 return Some(Err(e));
@@ -433,10 +434,10 @@ impl<'a> Parser<'a> {
         };
 
         let Some(body) = self.statement() else {
-            return Some(Err(miette!(
+            return Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing for body")],
                 "Missing body"
-            )));
+            ))));
         };
 
         let mut statements = vec![body];
@@ -467,7 +468,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn print_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn print_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         self.tokens.next(); // consume print token TODO: include print start position into stmt location
         match self.semicolon_terminated_expression()? {
             Ok(expr) => {
@@ -479,7 +480,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn return_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn return_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         if let Some(Ok((start, keyword, end))) = self.tokens.next() {
             let expr = if self.matches(&[Token::Semicolon]) {
                 Expr {
@@ -500,7 +501,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expr_statement(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn expr_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         match self.semicolon_terminated_expression()? {
             Ok(expr) => {
                 let location = expr.location.clone();
@@ -511,7 +512,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn block(&mut self) -> Option<miette::Result<Stmt<'a>>> {
+    fn block(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let (start, _, mut finish) = self.tokens.next().unwrap().unwrap(); // consume '{' token TODO: handle error
         let mut statements = vec![];
         loop {
@@ -536,7 +537,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn semicolon_terminated_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn semicolon_terminated_expression(&mut self) -> Option<crate::Result<Expr<'a>>> {
         match self.expression()? {
             Ok(expr) => {
                 let pos = expr.location.end();
@@ -550,11 +551,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn expression(&mut self) -> Option<crate::Result<Expr<'a>>> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn assignment(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let lhs = self.or_expression();
 
         if !self.matches(&[Token::Equal]) {
@@ -590,26 +591,28 @@ impl<'a> Parser<'a> {
                                 }
                                 _ => todo!(),
                             },
-                            _ => Some(Err(miette!(
+                            _ => Some(Err(ProgramError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=lhs_finish,
                                     "Invalid assignment target"
                                 )],
                                 "Invalid assignment target"
-                            ))),
+                            )))),
                         }
                     }
                     Err(e) => Some(Err(e)),
                 }
             } else {
-                Some(Err(miette!("Invalid assignment target")))
+                Some(Err(ProgramError::Error(miette!(
+                    "Invalid assignment target"
+                ))))
             }
         } else {
-            Some(Err(miette!("invalid assignment")))
+            Some(Err(ProgramError::Error(miette!("invalid assignment"))))
         }
     }
 
-    fn or_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn or_expression(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let mut expr = match self.and_expression()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -638,13 +641,13 @@ impl<'a> Parser<'a> {
             };
 
             let Some(and) = self.and_expression() else {
-                return Some(Err(miette!(
+                return Some(Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing expression in the right part of logic expression"
                     )],
                     "Invalid syntax"
-                )));
+                ))));
             };
 
             let right = match and {
@@ -665,7 +668,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn and_expression(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn and_expression(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let mut expr = match self.equality()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -694,13 +697,13 @@ impl<'a> Parser<'a> {
             };
 
             let Some(equality) = self.equality() else {
-                return Some(Err(miette!(
+                return Some(Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing expression in the right part of logic expression"
                     )],
                     "Invalid syntax"
-                )));
+                ))));
             };
 
             let right = match equality {
@@ -721,7 +724,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn equality(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn equality(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let mut expr = match self.comparison()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -750,13 +753,13 @@ impl<'a> Parser<'a> {
             };
 
             let Some(comparison) = self.comparison() else {
-                return Some(Err(miette!(
+                return Some(Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing comparison expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
-                )));
+                ))));
             };
 
             let right = match comparison {
@@ -777,7 +780,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn comparison(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn comparison(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let mut expr = match self.term()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -813,13 +816,13 @@ impl<'a> Parser<'a> {
             };
 
             let Some(term) = self.term() else {
-                return Some(Err(miette!(
+                return Some(Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing term expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
-                )));
+                ))));
             };
 
             let right = match term {
@@ -840,7 +843,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn term(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn term(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let mut expr = match self.factor()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -869,13 +872,13 @@ impl<'a> Parser<'a> {
             };
 
             let Some(factor) = self.factor() else {
-                return Some(Err(miette!(
+                return Some(Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing factor expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
-                )));
+                ))));
             };
 
             let right = match factor {
@@ -896,7 +899,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn factor(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn factor(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let mut expr = match self.unary()? {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -924,13 +927,13 @@ impl<'a> Parser<'a> {
             };
 
             let Some(unary) = self.unary() else {
-                return Some(Err(miette!(
+                return Some(Err(ProgramError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing unary expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
-                )));
+                ))));
             };
 
             let right = match unary {
@@ -951,7 +954,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn unary(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn unary(&mut self) -> Option<crate::Result<Expr<'a>>> {
         match self.tokens.peek()? {
             Ok(tok) => {
                 if let (_, Token::Bang | Token::Minus, _) = tok {
@@ -961,13 +964,13 @@ impl<'a> Parser<'a> {
                         Err(e) => return Some(Err(e)),
                     };
                     let Some(unary) = self.unary() else {
-                        return Some(Err(miette!(
+                        return Some(Err(ProgramError::Error(miette!(
                             labels = vec![LabeledSpan::at(
                                 s..=f,
                                 format!("Dangling {operator} operator in unary expression")
                             )],
                             "Invalid syntax"
-                        )));
+                        ))));
                     };
 
                     match unary {
@@ -995,7 +998,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn call(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn call(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let mut expr = match self.primary() {
             Some(Ok(expr)) => expr,
             Some(Err(e)) => return Some(Err(e)),
@@ -1011,19 +1014,21 @@ impl<'a> Parser<'a> {
             } else if self.matches(&[Token::Dot]) {
                 let (start, _, finish) = match self.tokens.peek() {
                     Some(Ok(t)) => t,
-                    Some(Err(_)) => return Some(Err(miette!("Invalid dot operator"))),
+                    Some(Err(_)) => {
+                        return Some(Err(ProgramError::Error(miette!("Invalid dot operator"))));
+                    }
                     None => return None,
                 };
                 let start = *start;
                 let finish = *finish;
                 let Ok(field) = self.consume_identifier(start, finish) else {
-                    return Some(Err(miette!(
+                    return Some(Err(ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
                             "Missing identifier after dot operator"
                         )],
                         "Invalid syntax"
-                    )));
+                    ))));
                 };
                 let start = *expr.location.start();
                 expr = Expr {
@@ -1037,7 +1042,7 @@ impl<'a> Parser<'a> {
         Some(Ok(expr))
     }
 
-    fn finish_call(&mut self, call: Expr<'a>) -> Option<miette::Result<Expr<'a>>> {
+    fn finish_call(&mut self, call: Expr<'a>) -> Option<crate::Result<Expr<'a>>> {
         let mut args = vec![];
         let location = call.location.clone();
         if !self.matches(&[Token::RightParen]) {
@@ -1048,13 +1053,13 @@ impl<'a> Parser<'a> {
                     None => return None,
                 };
                 if args.len() >= 255 {
-                    return Some(Err(miette!(
+                    return Some(Err(ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             location,
                             "Cant have more then 255 arguments"
                         )],
                         "Arguments number exceeded"
-                    )));
+                    ))));
                 }
                 args.push(Box::new(arg));
                 if !self.matches(&[Token::Comma]) {
@@ -1071,7 +1076,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn primary(&mut self) -> Option<miette::Result<Expr<'a>>> {
+    fn primary(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let (start, tok, finish) = match self.tokens.next()? {
             Ok(t) => t,
             Err(e) => return Some(Err(e)),
@@ -1086,24 +1091,24 @@ impl<'a> Parser<'a> {
             }
             Token::LeftParen => {
                 let Some(expr) = self.expression() else {
-                    return Some(Err(miette!(
+                    return Some(Err(ProgramError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
                             "Expect expression after '('"
                         )],
                         "Expect expression after '('"
-                    )));
+                    ))));
                 };
                 match expr {
                     Ok(expr) => {
                         let Some(next) = self.tokens.next() else {
-                            return Some(Err(miette!(
+                            return Some(Err(ProgramError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=finish,
                                     "Expect ')' after grouping expression that starts here"
                                 )],
                                 "Expect ')' after expression"
-                            )));
+                            ))));
                         };
 
                         if let Ok((_, Token::RightParen, finish)) = next {
@@ -1113,13 +1118,13 @@ impl<'a> Parser<'a> {
                                 location: start..=end,
                             }))
                         } else {
-                            Some(Err(miette!(
+                            Some(Err(ProgramError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=finish,
                                     "Expect ')' after grouping expression that starts here"
                                 )],
                                 "Expect ')' after expression"
-                            )))
+                            ))))
                         }
                     }
                     Err(e) => Some(Err(e)),
@@ -1133,13 +1138,13 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::This(tok),
                 location: start..=finish,
             })),
-            _ => Some(Err(miette!(
+            _ => Some(Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..finish,
                     format!("Unexpected primary token '{tok}'")
                 )],
                 "Invalid syntax"
-            ))),
+            )))),
         }
     }
 
@@ -1148,73 +1153,73 @@ impl<'a> Parser<'a> {
         kind: &str,
         start: usize,
         finish: usize,
-    ) -> miette::Result<Option<Token<'a>>> {
+    ) -> crate::Result<Option<Token<'a>>> {
         // IMPORTANT: dont call expression here so as not to conflict with assignment
         let name = match self.primary() {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
                     ExprKind::Literal(token) => Ok(token),
                     ExprKind::Variable(token) => Ok(Some(token)),
-                    _ => Err(miette!("Invalid {kind} name")),
+                    _ => Err(ProgramError::Error(miette!("Invalid {kind} name"))),
                 },
                 Err(e) => Err(e),
             },
-            None => Err(miette!(
+            None => Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     format!("{kind} name expected after this")
                 )],
                 "Missing {kind} name"
-            )),
+            ))),
         };
         let name = name?;
         Ok(name)
     }
 
-    fn consume_identifier(&mut self, start: usize, finish: usize) -> miette::Result<Token<'a>> {
+    fn consume_identifier(&mut self, start: usize, finish: usize) -> crate::Result<Token<'a>> {
         // IMPORTANT: dont call expression here so as not to conflict with assignment
         let name = match self.primary() {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
                     ExprKind::Variable(token) => Ok(Some(token)),
-                    _ => Err(miette!("Invalid identifier name")),
+                    _ => Err(ProgramError::Error(miette!("Invalid identifier name"))),
                 },
                 Err(e) => Err(e),
             },
-            None => Err(miette!(
+            None => Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     "Identifier expected after this"
                 )],
                 "Missing identifier"
-            )),
+            ))),
         };
         let name = name?;
         match name {
             Some(name) => Ok(name),
-            None => Err(miette!("Missing identifier")),
+            None => Err(ProgramError::Error(miette!("Missing identifier"))),
         }
     }
 
-    fn consume_semicolon(&mut self, position: usize) -> miette::Result<()> {
+    fn consume_semicolon(&mut self, position: usize) -> crate::Result<()> {
         if !self.matches(&[Token::Semicolon]) {
-            return Err(miette!(
+            return Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     position..=position,
                     "Semicolon expected here"
                 )],
                 "Missing semicolon"
-            ));
+            )));
         }
         Ok(())
     }
 
-    fn consume_right_parent(&mut self, position: usize) -> miette::Result<RangeInclusive<usize>> {
+    fn consume_right_parent(&mut self, position: usize) -> crate::Result<RangeInclusive<usize>> {
         if self.tokens.peek().is_none() {
-            return Err(miette!(
+            return Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(position..=position, "Missing closing )")],
                 "Missing closing paren"
-            ));
+            )));
         }
         let loc = self.consume(Token::RightParen)?;
         Ok(loc)
@@ -1223,16 +1228,16 @@ impl<'a> Parser<'a> {
     fn consume_current_and_open_paren(
         &mut self,
         token: &str,
-    ) -> miette::Result<RangeInclusive<usize>> {
+    ) -> crate::Result<RangeInclusive<usize>> {
         let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
         if self.tokens.peek().is_none() {
-            return Err(miette!(
+            return Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     end_token..=end_token,
                     format!("Dangling {token}")
                 )],
                 "Dangling {token}"
-            ));
+            )));
         }
         let loc = self.consume(Token::LeftParen)?;
         let result = start_token..=*loc.end();
@@ -1254,9 +1259,9 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn consume(&mut self, token: Token<'a>) -> miette::Result<RangeInclusive<usize>> {
+    fn consume(&mut self, token: Token<'a>) -> crate::Result<RangeInclusive<usize>> {
         let Some(current) = self.tokens.peek() else {
-            return Err(miette!("Expected {token} here"));
+            return Err(ProgramError::Error(miette!("Expected {token} here")));
         };
         let Ok((start, next_tok, end)) = current else {
             // Consume and validate token
@@ -1269,13 +1274,13 @@ impl<'a> Parser<'a> {
         let end = *end;
 
         if *next_tok != token {
-            return Err(miette!(
+            return Err(ProgramError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=end,
                     format!("Expected {token} here")
                 )],
                 "Invalid syntax"
-            ));
+            )));
         }
         self.tokens.next(); // consume 
         Ok(start..=end)
