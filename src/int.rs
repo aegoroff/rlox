@@ -35,7 +35,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         let mut callables = Box::new(Catalogue::new());
         globals.borrow_mut().define(
             call::CLOCK.to_string(),
-            LoxValue::Callable("native", call::CLOCK.to_owned()),
+            LoxValue::Callable("native", call::CLOCK.to_owned(), None),
         );
         callables.define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
         Self {
@@ -390,16 +390,40 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        // TODO: Think over new callable type or extend existing to support methods
-        let LoxValue::Callable(_, ref function) = callee else {
-            return Err(LoxError::Error(miette!(
+        if let LoxValue::Callable(_, ref function, parent) = callee {
+            if let Some(parent) = parent {
+                let Some(methods) = self.all_class_methods.get(&parent) else {
+                    return Err(LoxError::Error(miette!(
+                        labels = vec![LabeledSpan::at(
+                            location,
+                            format!("Class '{parent}' has no methods")
+                        )],
+                        "Class has no methods"
+                    )));
+                };
+                let Some(method) = methods.get(function) else {
+                    return Err(LoxError::Error(miette!(
+                        labels = vec![LabeledSpan::at(
+                            location,
+                            format!("Class '{parent}' has no method {function}")
+                        )],
+                        "Class has no method"
+                    )));
+                };
+                let callee = method.clone();
+                let callee = callee.borrow();
+                self.call_code(arguments, callee)
+            } else {
+                let callee = self.callables.get(function)?;
+                let callee = callee.borrow();
+                self.call_code(arguments, callee)
+            }
+        } else {
+            Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(location, "Invalid callable type")],
                 "Invalid callable type"
-            )));
-        };
-        let callee = self.callables.get(function)?;
-        let callee = callee.borrow();
-        self.call_code(arguments, callee)
+            )))
+        }
     }
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
@@ -410,8 +434,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         if let LoxValue::Instance(class_name, closure) = &result {
             if let Some(methods) = self.all_class_methods.get(class_name) {
                 if methods.contains_key(*field_or_method) {
-                    // TODO: Think over new callable type or extend existing to support methods
-                    return Ok(LoxValue::Callable("fn", (*field_or_method).to_string()));
+                    return Ok(LoxValue::Callable(
+                        "fn",
+                        (*field_or_method).to_string(),
+                        Some(class_name.to_string()),
+                    ));
                 }
             }
             let field = closure.borrow().get_field(field_or_method)?;
@@ -533,7 +560,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             };
             method.accept(self)?;
         }
-        let definition = LoxValue::Callable("class", (*id).to_string());
+        let definition = LoxValue::Callable("class", (*id).to_string(), None);
         self.environment
             .borrow_mut()
             .define((*id).to_string(), definition);
@@ -577,7 +604,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         if let FunctionKind::Function = kind {
             self.environment.borrow_mut().define(
                 (*id).to_string(),
-                LoxValue::Callable("fn", (*id).to_string()),
+                LoxValue::Callable("fn", (*id).to_string(), None),
             );
         }
 
@@ -640,7 +667,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             }
             LoxValue::String(_)
             | LoxValue::Number(_)
-            | LoxValue::Callable(_, _)
+            | LoxValue::Callable(_, _, _)
             | LoxValue::Instance(_, _)
             | LoxValue::Class(_) => {
                 let then = match then {

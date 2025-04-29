@@ -196,7 +196,7 @@ pub enum LoxValue {
     Number(f64),
     Bool(bool),
     Nil,
-    Callable(&'static str, String),
+    Callable(&'static str, String, Option<String>),
     Class(String),
     Instance(String, Rc<RefCell<Environment>>),
 }
@@ -205,7 +205,13 @@ impl Display for LoxValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxValue::String(s) => write!(f, "{s}"),
-            LoxValue::Callable(kind, val) => write!(f, "<{kind} {val}>"),
+            LoxValue::Callable(kind, val, parent) => {
+                if let Some(parent) = parent {
+                    write!(f, "<{kind} {parent}.{val}>")
+                } else {
+                    write!(f, "<{kind} {val}>")
+                }
+            }
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
