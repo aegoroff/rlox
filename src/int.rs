@@ -411,7 +411,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             if let Some(methods) = self.all_class_methods.get(class_name) {
                 if methods.contains_key(*field_or_method) {
                     // TODO: Think over new callable type or extend existing to support methods
-                    return Ok(LoxValue::Callable("fn", field_or_method.to_string()));
+                    return Ok(LoxValue::Callable("fn", (*field_or_method).to_string()));
                 }
             }
             let field = closure.borrow().get_field(field_or_method)?;
