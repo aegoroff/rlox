@@ -1,4 +1,4 @@
-use int::ProgramError;
+use int::LoxError;
 
 pub mod ast;
 mod call;
@@ -8,4 +8,4 @@ pub mod lexer;
 pub mod parser;
 pub mod resolver;
 
-pub type Result<T, E = ProgramError> = core::result::Result<T, E>;
+pub type Result<T, E = LoxError> = core::result::Result<T, E>;

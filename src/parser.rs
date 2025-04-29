@@ -4,7 +4,7 @@ use miette::{LabeledSpan, miette};
 
 use crate::{
     ast::{Expr, ExprKind, FunctionKind, Stmt, StmtKind},
-    int::ProgramError,
+    int::LoxError,
     lexer::{Lexer, Token},
 };
 
@@ -69,7 +69,7 @@ impl<'a> Parser<'a> {
                 };
 
                 if args.len() >= 255 {
-                    return Some(Err(ProgramError::Error(miette!(
+                    return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
                             "Cant have more then 255 arguments"
@@ -84,7 +84,7 @@ impl<'a> Parser<'a> {
                     };
                     args.push(Box::new(arg));
                 } else {
-                    return Some(Err(ProgramError::Error(miette!(
+                    return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             arg_start..=arg_end,
                             "Invalid argument definition"
@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
         }
 
         let Some(left_brace) = self.tokens.peek() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     format!("{kind} block expected after this")
@@ -113,14 +113,14 @@ impl<'a> Parser<'a> {
         };
 
         if let Err(e) = left_brace {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(start..=finish, e.to_string())],
                 "Missing {kind} block"
             ))));
         }
 
         let Some(block) = self.block() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     format!("Missing {kind} block")
@@ -146,7 +146,7 @@ impl<'a> Parser<'a> {
         };
 
         let Some(name) = name else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     "class name expected after this"
@@ -189,12 +189,12 @@ impl<'a> Parser<'a> {
                     finish = *expr.location.end();
                     match expr.kind {
                         ExprKind::Variable(token) => Ok(token),
-                        _ => Err(ProgramError::Error(miette!("Invalid variable name"))),
+                        _ => Err(LoxError::Error(miette!("Invalid variable name"))),
                     }
                 }
                 Err(e) => Err(e),
             },
-            None => Err(ProgramError::Error(miette!(
+            None => Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     "Variable name expected after this"
@@ -229,7 +229,7 @@ impl<'a> Parser<'a> {
                     Err(e) => Err(e),
                 }
             } else {
-                Err(ProgramError::Error(miette!(
+                Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         start..=finish,
                         "Variable name expected here"
@@ -272,7 +272,7 @@ impl<'a> Parser<'a> {
         };
 
         let Some(cond) = self.expression() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     (*start_loc.start() + 2)..=(start_loc.start() + 2),
                     "Condition must start here"
@@ -293,7 +293,7 @@ impl<'a> Parser<'a> {
         };
 
         let Some(then_branch) = self.statement() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing then branch")],
                 "Missing then branch"
             ))));
@@ -326,7 +326,7 @@ impl<'a> Parser<'a> {
         let else_loc = self.consume(Token::Else).unwrap();
 
         let Some(else_branch) = self.statement() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(else_loc, "Else branch expected")],
                 "Missing else branch"
             ))));
@@ -350,7 +350,7 @@ impl<'a> Parser<'a> {
         };
 
         let Some(cond) = self.expression() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     *start_loc.start()..=(*start_loc.start() + 5),
                     "No while condition specified"
@@ -371,7 +371,7 @@ impl<'a> Parser<'a> {
         };
 
         let Some(body) = self.statement() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing while body")],
                 "Missing while body"
             ))));
@@ -405,7 +405,7 @@ impl<'a> Parser<'a> {
             }
         } else {
             let Some(cond) = self.expression() else {
-                return Some(Err(ProgramError::Error(miette!(
+                return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         *start_loc.start()..=(*start_loc.start() + 5),
                         "No condition specified"
@@ -434,7 +434,7 @@ impl<'a> Parser<'a> {
         };
 
         let Some(body) = self.statement() else {
-            return Some(Err(ProgramError::Error(miette!(
+            return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing for body")],
                 "Missing body"
             ))));
@@ -591,7 +591,7 @@ impl<'a> Parser<'a> {
                                 }
                                 _ => todo!(),
                             },
-                            _ => Some(Err(ProgramError::Error(miette!(
+                            _ => Some(Err(LoxError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=lhs_finish,
                                     "Invalid assignment target"
@@ -603,12 +603,10 @@ impl<'a> Parser<'a> {
                     Err(e) => Some(Err(e)),
                 }
             } else {
-                Some(Err(ProgramError::Error(miette!(
-                    "Invalid assignment target"
-                ))))
+                Some(Err(LoxError::Error(miette!("Invalid assignment target"))))
             }
         } else {
-            Some(Err(ProgramError::Error(miette!("invalid assignment"))))
+            Some(Err(LoxError::Error(miette!("invalid assignment"))))
         }
     }
 
@@ -641,7 +639,7 @@ impl<'a> Parser<'a> {
             };
 
             let Some(and) = self.and_expression() else {
-                return Some(Err(ProgramError::Error(miette!(
+                return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing expression in the right part of logic expression"
@@ -697,7 +695,7 @@ impl<'a> Parser<'a> {
             };
 
             let Some(equality) = self.equality() else {
-                return Some(Err(ProgramError::Error(miette!(
+                return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing expression in the right part of logic expression"
@@ -753,7 +751,7 @@ impl<'a> Parser<'a> {
             };
 
             let Some(comparison) = self.comparison() else {
-                return Some(Err(ProgramError::Error(miette!(
+                return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing comparison expression in the right part of binary expression"
@@ -816,7 +814,7 @@ impl<'a> Parser<'a> {
             };
 
             let Some(term) = self.term() else {
-                return Some(Err(ProgramError::Error(miette!(
+                return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing term expression in the right part of binary expression"
@@ -872,7 +870,7 @@ impl<'a> Parser<'a> {
             };
 
             let Some(factor) = self.factor() else {
-                return Some(Err(ProgramError::Error(miette!(
+                return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing factor expression in the right part of binary expression"
@@ -927,7 +925,7 @@ impl<'a> Parser<'a> {
             };
 
             let Some(unary) = self.unary() else {
-                return Some(Err(ProgramError::Error(miette!(
+                return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         s..=f,
                         "Missing unary expression in the right part of binary expression"
@@ -964,7 +962,7 @@ impl<'a> Parser<'a> {
                         Err(e) => return Some(Err(e)),
                     };
                     let Some(unary) = self.unary() else {
-                        return Some(Err(ProgramError::Error(miette!(
+                        return Some(Err(LoxError::Error(miette!(
                             labels = vec![LabeledSpan::at(
                                 s..=f,
                                 format!("Dangling {operator} operator in unary expression")
@@ -1015,14 +1013,14 @@ impl<'a> Parser<'a> {
                 let (start, _, finish) = match self.tokens.peek() {
                     Some(Ok(t)) => t,
                     Some(Err(_)) => {
-                        return Some(Err(ProgramError::Error(miette!("Invalid dot operator"))));
+                        return Some(Err(LoxError::Error(miette!("Invalid dot operator"))));
                     }
                     None => return None,
                 };
                 let start = *start;
                 let finish = *finish;
                 let Ok(field) = self.consume_identifier(start, finish) else {
-                    return Some(Err(ProgramError::Error(miette!(
+                    return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
                             "Missing identifier after dot operator"
@@ -1053,7 +1051,7 @@ impl<'a> Parser<'a> {
                     None => return None,
                 };
                 if args.len() >= 255 {
-                    return Some(Err(ProgramError::Error(miette!(
+                    return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             location,
                             "Cant have more then 255 arguments"
@@ -1091,7 +1089,7 @@ impl<'a> Parser<'a> {
             }
             Token::LeftParen => {
                 let Some(expr) = self.expression() else {
-                    return Some(Err(ProgramError::Error(miette!(
+                    return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
                             "Expect expression after '('"
@@ -1102,7 +1100,7 @@ impl<'a> Parser<'a> {
                 match expr {
                     Ok(expr) => {
                         let Some(next) = self.tokens.next() else {
-                            return Some(Err(ProgramError::Error(miette!(
+                            return Some(Err(LoxError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=finish,
                                     "Expect ')' after grouping expression that starts here"
@@ -1118,7 +1116,7 @@ impl<'a> Parser<'a> {
                                 location: start..=end,
                             }))
                         } else {
-                            Some(Err(ProgramError::Error(miette!(
+                            Some(Err(LoxError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
                                     start..=finish,
                                     "Expect ')' after grouping expression that starts here"
@@ -1138,7 +1136,7 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::This(tok),
                 location: start..=finish,
             })),
-            _ => Some(Err(ProgramError::Error(miette!(
+            _ => Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..finish,
                     format!("Unexpected primary token '{tok}'")
@@ -1160,11 +1158,11 @@ impl<'a> Parser<'a> {
                 Ok(expr) => match expr.kind {
                     ExprKind::Literal(token) => Ok(token),
                     ExprKind::Variable(token) => Ok(Some(token)),
-                    _ => Err(ProgramError::Error(miette!("Invalid {kind} name"))),
+                    _ => Err(LoxError::Error(miette!("Invalid {kind} name"))),
                 },
                 Err(e) => Err(e),
             },
-            None => Err(ProgramError::Error(miette!(
+            None => Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     format!("{kind} name expected after this")
@@ -1182,11 +1180,11 @@ impl<'a> Parser<'a> {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
                     ExprKind::Variable(token) => Ok(Some(token)),
-                    _ => Err(ProgramError::Error(miette!("Invalid identifier name"))),
+                    _ => Err(LoxError::Error(miette!("Invalid identifier name"))),
                 },
                 Err(e) => Err(e),
             },
-            None => Err(ProgramError::Error(miette!(
+            None => Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=finish,
                     "Identifier expected after this"
@@ -1197,13 +1195,13 @@ impl<'a> Parser<'a> {
         let name = name?;
         match name {
             Some(name) => Ok(name),
-            None => Err(ProgramError::Error(miette!("Missing identifier"))),
+            None => Err(LoxError::Error(miette!("Missing identifier"))),
         }
     }
 
     fn consume_semicolon(&mut self, position: usize) -> crate::Result<()> {
         if !self.matches(&[Token::Semicolon]) {
-            return Err(ProgramError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     position..=position,
                     "Semicolon expected here"
@@ -1216,7 +1214,7 @@ impl<'a> Parser<'a> {
 
     fn consume_right_parent(&mut self, position: usize) -> crate::Result<RangeInclusive<usize>> {
         if self.tokens.peek().is_none() {
-            return Err(ProgramError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(position..=position, "Missing closing )")],
                 "Missing closing paren"
             )));
@@ -1231,7 +1229,7 @@ impl<'a> Parser<'a> {
     ) -> crate::Result<RangeInclusive<usize>> {
         let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
         if self.tokens.peek().is_none() {
-            return Err(ProgramError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     end_token..=end_token,
                     format!("Dangling {token}")
@@ -1261,7 +1259,7 @@ impl<'a> Parser<'a> {
 
     fn consume(&mut self, token: Token<'a>) -> crate::Result<RangeInclusive<usize>> {
         let Some(current) = self.tokens.peek() else {
-            return Err(ProgramError::Error(miette!("Expected {token} here")));
+            return Err(LoxError::Error(miette!("Expected {token} here")));
         };
         let Ok((start, next_tok, end)) = current else {
             // Consume and validate token
@@ -1274,7 +1272,7 @@ impl<'a> Parser<'a> {
         let end = *end;
 
         if *next_tok != token {
-            return Err(ProgramError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=end,
                     format!("Expected {token} here")

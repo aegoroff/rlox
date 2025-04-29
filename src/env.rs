@@ -1,4 +1,4 @@
-use crate::{ast::LoxValue, int::ProgramError};
+use crate::{ast::LoxValue, int::LoxError};
 use miette::miette;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -32,7 +32,7 @@ impl Environment {
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow().get(id)
         } else {
-            Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
+            Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
         }
     }
 
@@ -49,7 +49,7 @@ impl Environment {
             if let Some(e) = parent {
                 e.borrow().get(id)
             } else {
-                Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
+                Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
             }
         }
     }
@@ -101,12 +101,12 @@ impl Environment {
             if let Some(field) = fields.get(field) {
                 Ok(field.clone())
             } else {
-                Err(ProgramError::Error(miette!("Undefined field: '{field}'")))
+                Err(LoxError::Error(miette!("Undefined field: '{field}'")))
             }
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow().get_field(id, field)
         } else {
-            Err(ProgramError::Error(miette!("No any field set for: '{id}'")))
+            Err(LoxError::Error(miette!("No any field set for: '{id}'")))
         }
     }
 
@@ -123,7 +123,7 @@ impl Environment {
             if let Some(e) = parent {
                 e.borrow().get_field(id, field)
             } else {
-                Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
+                Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
             }
         }
     }
@@ -135,7 +135,7 @@ impl Environment {
         } else if let Some(enclosing) = &mut self.enclosing {
             enclosing.borrow_mut().assign(id, initializer)
         } else {
-            Err(ProgramError::Error(miette!(
+            Err(LoxError::Error(miette!(
                 "assignment to undefined variable '{id}'"
             )))
         }
@@ -159,7 +159,7 @@ impl Environment {
             if let Some(e) = parent {
                 e.borrow_mut().assign(id, initializer)
             } else {
-                Err(ProgramError::Error(miette!("Undefined identifier: '{id}'")))
+                Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
             }
         }
     }

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtVisitor},
     int::Interpreter,
-    int::ProgramError,
+    int::LoxError,
     lexer::Token,
 };
 use miette::{LabeledSpan, miette};
@@ -32,7 +32,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         if let Ok(stmt) = stmt {
             stmt.accept(self)
         } else {
-            Err(ProgramError::Error(miette!("Failed to resolve statement")))
+            Err(LoxError::Error(miette!("Failed to resolve statement")))
         }
     }
 
@@ -43,8 +43,8 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         let mut errors = vec![];
 
         let mut spans = HashSet::new();
-        let mut add_error = |e: ProgramError| {
-            if let ProgramError::Error(report) = e {
+        let mut add_error = |e: LoxError| {
+            if let LoxError::Error(report) = e {
                 if let Some(label) = report.labels() {
                     for l in label {
                         if !spans.contains(&(l.len(), l.offset())) {
@@ -64,7 +64,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(ProgramError::Error(miette!(
+            Err(LoxError::Error(miette!(
                 labels = errors,
                 "Program completed with errors"
             )))
@@ -200,7 +200,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> crate::Result<()> {
         let _ = keyword;
         if let FunctionKind::None = self.current_function {
-            Err(ProgramError::Error(miette!(
+            Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     value.location.clone(),
                     "Cannot return from top level code"
@@ -330,7 +330,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, 
             if let Token::Identifier(id) = name {
                 if let Some(defined) = scope.get(id) {
                     if !(*defined) {
-                        return Err(ProgramError::Error(miette!(
+                        return Err(LoxError::Error(miette!(
                             labels = vec![LabeledSpan::at(
                                 obj.location.clone(),
                                 format!("Cant read local variable '{id}' in its own initializer")

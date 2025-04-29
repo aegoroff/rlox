@@ -8,7 +8,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::int::ProgramError;
+use crate::int::LoxError;
 use crate::{env::Environment, lexer::Token};
 
 // Traits
@@ -221,7 +221,7 @@ impl LoxValue {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(ProgramError::Error(miette::miette!("Expected number")))
+            Err(LoxError::Error(miette::miette!("Expected number")))
         }
     }
 
@@ -229,14 +229,14 @@ impl LoxValue {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(ProgramError::Error(miette::miette!("Expected string")))
+            Err(LoxError::Error(miette::miette!("Expected string")))
         }
     }
 
     pub fn try_bool(&self) -> crate::Result<bool> {
         match self {
             LoxValue::Bool(b) => Ok(*b),
-            _ => Err(ProgramError::Error(miette::miette!("Expected boolean"))),
+            _ => Err(LoxError::Error(miette::miette!("Expected boolean"))),
         }
     }
 
@@ -276,9 +276,7 @@ impl LoxValue {
             let r = other.try_num()?;
             Ok(l < r)
         } else {
-            Err(ProgramError::Error(miette::miette!(
-                "Operands must be numbers"
-            )))
+            Err(LoxError::Error(miette::miette!("Operands must be numbers")))
         }
     }
 }

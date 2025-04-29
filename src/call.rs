@@ -11,7 +11,7 @@ use std::{
 use crate::{
     ast::{LoxValue, Stmt},
     env::Environment,
-    int::ProgramError,
+    int::LoxError,
 };
 
 pub enum CallResult<'a> {
@@ -45,7 +45,7 @@ impl<'a> Catalogue<'a> {
             Ok(var.clone())
         } else {
             let report = miette!("Undefined identifier: '{id}'");
-            Err(ProgramError::Error(report))
+            Err(LoxError::Error(report))
         }
     }
 
@@ -96,7 +96,7 @@ impl<'a> LoxCallable<'a> for Function<'a> {
                 expected,
                 actual
             );
-            return Err(ProgramError::Error(report));
+            return Err(LoxError::Error(report));
         }
 
         // We need new closure here to support recursive calls for example fibonacci calculation

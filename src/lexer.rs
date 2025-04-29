@@ -2,7 +2,7 @@ use std::{fmt::Display, str::CharIndices};
 
 use miette::LabeledSpan;
 
-use crate::int::ProgramError;
+use crate::int::LoxError;
 
 pub type Spanned<Tok, Loc> = crate::Result<(Loc, Tok, Loc)>;
 
@@ -125,7 +125,7 @@ impl<'a> Lexer<'a> {
                     )],
                     "Comment syntax error"
                 );
-                Some(Err(ProgramError::Error(report)))
+                Some(Err(LoxError::Error(report)))
             } else {
                 Some(Ok((start, token, start)))
             }
@@ -147,7 +147,7 @@ impl<'a> Lexer<'a> {
             labels = vec![LabeledSpan::at(start..=problem_ix, "Unterminated string")],
             "String parsing error"
         );
-        Err(ProgramError::Error(report))
+        Err(LoxError::Error(report))
     }
 
     fn number(&mut self, start: usize) -> Spanned<Token<'a>, usize> {
@@ -173,7 +173,7 @@ impl<'a> Lexer<'a> {
         });
         match result {
             Ok(value) => Ok((start, Token::Number(value), finish + 1)),
-            Err(e) => Err(ProgramError::Error(e)),
+            Err(e) => Err(LoxError::Error(e)),
         }
     }
 
@@ -281,7 +281,7 @@ impl<'a> Iterator for Lexer<'a> {
                 'a'..='z' | 'A'..='Z' | '_' => Some(Ok(self.identifier_or_keyword(i))),
                 '0'..='9' => Some(self.number(i)),
                 ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
-                _ => Some(Err(ProgramError::Error(miette::miette!(
+                _ => Some(Err(LoxError::Error(miette::miette!(
                     labels = vec![LabeledSpan::at(
                         i..=i,
                         format!("Unexpected char {current} at {i}")
