@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 #[derive(Default, Debug)]
 pub struct Environment {
     values: HashMap<String, LoxValue>,
-    fields: HashMap<String, HashMap<String, LoxValue>>,
+    fields: HashMap<String, LoxValue>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -62,69 +62,21 @@ impl Environment {
         }
     }
 
-    pub fn set_field(&mut self, id: String, field: String, initializer: LoxValue) {
-        if self.fields.contains_key(&id) {
-            self.fields.entry(id).and_modify(|e| {
-                e.insert(field, initializer);
-            });
+    pub fn set_field(&mut self, field: String, initializer: LoxValue) {
+        if self.fields.contains_key(&field) {
+            self.fields.entry(field).and_modify(|e| *e = initializer);
         } else {
-            let mut fields = HashMap::new();
-            fields.insert(field, initializer);
-            self.fields.entry(id).or_insert(fields);
+            self.fields.entry(field).or_insert(initializer);
         }
     }
 
-    pub fn set_field_at(
-        &mut self,
-        distance: usize,
-        id: String,
-        field: String,
-        initializer: LoxValue,
-    ) {
-        if distance == 0 {
-            self.set_field(id, field, initializer);
-        } else {
-            let mut parent = self.enclosing.clone();
-            for _ in 1..distance {
-                if let Some(e) = parent {
-                    parent = e.borrow().enclosing.clone();
-                }
-            }
-            if let Some(e) = parent {
-                e.borrow_mut().set_field(id, field, initializer);
-            }
-        }
-    }
-
-    pub fn get_field(&self, id: &str, field: &str) -> crate::Result<LoxValue> {
-        if let Some(fields) = self.fields.get(id) {
-            if let Some(field) = fields.get(field) {
-                Ok(field.clone())
-            } else {
-                Err(LoxError::Error(miette!("Undefined field: '{field}'")))
-            }
+    pub fn get_field(&self, field: &str) -> crate::Result<LoxValue> {
+        if let Some(val) = self.fields.get(field) {
+            Ok(val.clone())
         } else if let Some(enclosing) = &self.enclosing {
-            enclosing.borrow().get_field(id, field)
+            enclosing.borrow().get_field(field)
         } else {
-            Err(LoxError::Error(miette!("No any field set for: '{id}'")))
-        }
-    }
-
-    pub fn get_field_at(&self, distance: usize, id: &str, field: &str) -> crate::Result<LoxValue> {
-        if distance == 0 {
-            self.get_field(id, field)
-        } else {
-            let mut parent = self.enclosing.clone();
-            for _ in 1..distance {
-                if let Some(e) = parent {
-                    parent = e.borrow().enclosing.clone();
-                }
-            }
-            if let Some(e) = parent {
-                e.borrow().get_field(id, field)
-            } else {
-                Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
-            }
+            Err(LoxError::Error(miette!("field '{field}' not found")))
         }
     }
 

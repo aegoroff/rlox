@@ -430,24 +430,23 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         let Token::Identifier(field_or_method) = name else {
             return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
-        match &result {
-            LoxValue::Instance(class_name, closure) => {
-                if let Some(methods) = self.all_class_methods.get(class_name) {
-                    if methods.contains_key(*field_or_method) {
-                        if let Ok(class) = self.callables.get(class_name) {
-                            let class = class.borrow();
-                            if let Ok(CallResult::Value(lox_value)) =
-                                class.call(vec![LoxValue::String((*field_or_method).to_string())])
-                            {
-                                return Ok(lox_value);
-                            }
+        if let LoxValue::Instance(class_name, closure) = &result {
+            if let Some(methods) = self.all_class_methods.get(class_name) {
+                if methods.contains_key(*field_or_method) {
+                    if let Ok(class) = self.callables.get(class_name) {
+                        let class = class.borrow();
+                        if let Ok(CallResult::Value(lox_value)) =
+                            class.call(vec![LoxValue::String((*field_or_method).to_string())])
+                        {
+                            return Ok(lox_value);
                         }
                     }
                 }
-                let field = closure.borrow().get_field("this", field_or_method)?;
-                Ok(field)
             }
-            _ => Err(LoxError::Error(miette!("Only instances have properties"))),
+            let field = closure.borrow().get_field(field_or_method)?;
+            Ok(field)
+        } else {
+            Err(LoxError::Error(miette!("Only instances have properties")))
         }
     }
 
@@ -458,11 +457,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         val: &Expr<'a>,
     ) -> crate::Result<LoxValue> {
         // Early return for invalid field name
-        let field = match field {
-            Token::Identifier(id) => (*id).to_string(),
-            _ => {
-                return Err(LoxError::Error(miette!("Field name must be an identifier")));
-            }
+        let field = if let Token::Identifier(id) = field {
+            (*id).to_string()
+        } else {
+            return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
 
         // Early return for invalid object type
@@ -470,36 +468,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             return Err(LoxError::Error(miette!("Only instances have fields")));
         };
 
-        // Early return for invalid instance
-        let ExprKind::Variable(id) = &instance.kind else {
-            return Err(LoxError::Error(miette!("Invalid instance")));
-        };
+        let instance = self.evaluate(instance)?;
 
-        // Early return for invalid instance name
-        let instance_name = if let Token::Identifier(id) = id {
-            (*id).to_string()
+        if let LoxValue::Instance(_class_name, closure) = &instance {
+            let value = self.evaluate(val)?;
+            closure.borrow_mut().set_field(field, value.clone());
+            Ok(value)
         } else {
-            return Err(LoxError::Error(miette!(
-                "Instance name must be an identifier"
-            )));
-        };
-
-        let value = self.evaluate(val)?;
-
-        if let Some(distance) = self.locals.get(&instance.get_hash_code()) {
-            self.environment.borrow_mut().set_field_at(
-                *distance,
-                instance_name,
-                field,
-                value.clone(),
-            );
-        } else {
-            self.globals
-                .borrow_mut()
-                .set_field(instance_name, field, value.clone());
+            Err(LoxError::Error(miette!("Only instances have properties")))
         }
-
-        Ok(value)
     }
 
     fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> crate::Result<LoxValue> {
