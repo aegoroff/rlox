@@ -1,4 +1,4 @@
-use crate::{ast::LoxValue, int::LoxError};
+use crate::{LoxError, ast::LoxValue};
 use miette::miette;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 

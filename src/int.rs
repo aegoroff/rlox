@@ -7,22 +7,14 @@ use std::{
 };
 
 use miette::{Diagnostic, LabeledSpan, SourceSpan, miette};
-use thiserror::Error;
 
 use crate::{
+    LoxError,
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor},
     call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable},
     env::Environment,
     lexer::Token,
 };
-
-#[derive(Debug, Error, Diagnostic)]
-#[error("Program error")]
-#[diagnostic()]
-pub enum LoxError {
-    Error(miette::Report),
-    Return(LoxValue),
-}
 
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Current environment that keeps current scope vars. Global by default
@@ -435,9 +427,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
         let result = self.evaluate(object)?;
         let Token::Identifier(field_or_method) = name else {
-            return Err(LoxError::Error(miette!(
-                "Field name must be an identifier"
-            )));
+            return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
         match &result {
             LoxValue::Instance(class_name, closure) => {
@@ -456,9 +446,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 let field = closure.borrow().get_field("this", field_or_method)?;
                 Ok(field)
             }
-            _ => Err(LoxError::Error(miette!(
-                "Only instances have properties"
-            ))),
+            _ => Err(LoxError::Error(miette!("Only instances have properties"))),
         }
     }
 
@@ -472,9 +460,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         let field = match field {
             Token::Identifier(id) => (*id).to_string(),
             _ => {
-                return Err(LoxError::Error(miette!(
-                    "Field name must be an identifier"
-                )));
+                return Err(LoxError::Error(miette!("Field name must be an identifier")));
             }
         };
 

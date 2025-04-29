@@ -2,7 +2,7 @@ use std::{fmt::Display, str::CharIndices};
 
 use miette::LabeledSpan;
 
-use crate::int::LoxError;
+use crate::LoxError;
 
 pub type Spanned<Tok, Loc> = crate::Result<(Loc, Tok, Loc)>;
 

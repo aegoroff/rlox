@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    LoxError,
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtVisitor},
     int::Interpreter,
-    int::LoxError,
     lexer::Token,
 };
 use miette::{LabeledSpan, miette};

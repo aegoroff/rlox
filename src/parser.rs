@@ -3,8 +3,8 @@ use std::{iter::Peekable, ops::RangeInclusive};
 use miette::{LabeledSpan, miette};
 
 use crate::{
+    LoxError,
     ast::{Expr, ExprKind, FunctionKind, Stmt, StmtKind},
-    int::LoxError,
     lexer::{Lexer, Token},
 };
 

@@ -8,8 +8,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::int::LoxError;
-use crate::{env::Environment, lexer::Token};
+use crate::{LoxError, env::Environment, lexer::Token};
 
 // Traits
 

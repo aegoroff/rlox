@@ -73,7 +73,7 @@ fn scan(content: String) -> miette::Result<()> {
     let resolver = Resolver::new(interpreter);
     let stmts: Vec<rlox::Result<Stmt>> = parser.collect();
     resolver.interpret(&stmts).map_err(|err| match err {
-        rlox::int::LoxError::Error(e) => e.with_source_code(content),
+        rlox::LoxError::Error(e) => e.with_source_code(content),
         _ => miette!("Failed to interpret"),
     })
 }

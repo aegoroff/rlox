@@ -9,9 +9,9 @@ use std::{
 };
 
 use crate::{
+    LoxError,
     ast::{LoxValue, Stmt},
     env::Environment,
-    int::LoxError,
 };
 
 pub enum CallResult<'a> {
