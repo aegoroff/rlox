@@ -390,41 +390,40 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        if let LoxValue::Callable(_, ref function, parent) = callee {
-            if let Some(parent) = parent {
-                let Some(methods) = self.all_class_methods.get(&parent) else {
-                    return Err(LoxError::Error(miette!(
-                        labels = vec![LabeledSpan::at(
-                            location,
-                            format!("Class '{parent}' has no methods")
-                        )],
-                        "Class has no methods"
-                    )));
-                };
-                let Some(method) = methods.get(function) else {
-                    return Err(LoxError::Error(miette!(
-                        labels = vec![LabeledSpan::at(
-                            location,
-                            format!("Class '{parent}' has no method {function}")
-                        )],
-                        "Class has no method"
-                    )));
-                };
-                // Callee expressin here is Expr { kind: Get(Identifier("method"), Expr { kind: Variable`(Identifier("c")), location: ... }), location: ... }
-                // TODO: bind this to instance
-                let callee = method.clone();
-                let callee = callee.borrow();
-                self.call_code(arguments, callee)
-            } else {
-                let callee = self.callables.get(function)?;
-                let callee = callee.borrow();
-                self.call_code(arguments, callee)
-            }
-        } else {
-            Err(LoxError::Error(miette!(
+        let LoxValue::Callable(_, ref function, parent) = callee else {
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(location, "Invalid callable type")],
                 "Invalid callable type"
-            )))
+            )));
+        };
+        if let Some(parent) = parent {
+            let Some(methods) = self.all_class_methods.get(&parent) else {
+                return Err(LoxError::Error(miette!(
+                    labels = vec![LabeledSpan::at(
+                        location,
+                        format!("Class '{parent}' has no methods")
+                    )],
+                    "Class has no methods"
+                )));
+            };
+            let Some(method) = methods.get(function) else {
+                return Err(LoxError::Error(miette!(
+                    labels = vec![LabeledSpan::at(
+                        location,
+                        format!("Class '{parent}' has no method {function}")
+                    )],
+                    "Class has no method"
+                )));
+            };
+            // Callee expressin here is Expr { kind: Get(Identifier("method"), Expr { kind: Variable`(Identifier("c")), location: ... }), location: ... }
+            // TODO: bind this to instance
+            let callee = method.clone();
+            let callee = callee.borrow();
+            self.call_code(arguments, callee)
+        } else {
+            let callee = self.callables.get(function)?;
+            let callee = callee.borrow();
+            self.call_code(arguments, callee)
         }
     }
 
