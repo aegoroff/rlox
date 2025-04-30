@@ -384,13 +384,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
     ) -> crate::Result<LoxValue> {
         let _ = paren;
         let location = callee.location.clone();
-        let callee = self.evaluate(callee)?;
+        let receiver = self.evaluate(callee)?;
         let mut arguments = vec![];
         for a in args {
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        let LoxValue::Callable(_, ref function, parent) = callee else {
+        let LoxValue::Callable(_, ref function, parent) = receiver else {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(location, "Invalid callable type")],
                 "Invalid callable type"
@@ -415,6 +415,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     "Class has no method"
                 )));
             };
+            // match &callee.kind {
+            //     ExprKind::Get(_, expr) => match &expr.kind {
+            //         ExprKind::Variable(token) => todo!(),
+            //         _ => todo!(),
+            //     },
+            //     _ => todo!(),
+            // }
             // Callee expressin here is Expr { kind: Get(Identifier("method"), Expr { kind: Variable`(Identifier("c")), location: ... }), location: ... }
             // TODO: bind this to instance
             let callee = method.clone();
