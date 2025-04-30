@@ -132,7 +132,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                 }
                 Err(LoxError::Error(miette!(
                     labels = errors,
-                    "Program completed with errors"
+                    "Invalid statement"
                 )))
             }
         }
