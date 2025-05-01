@@ -181,8 +181,12 @@ impl<'a> Class<'a> {
     pub fn new(
         name: String,
         closure: Rc<RefCell<Environment>>,
-        methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
+        functions: Vec<Function<'a>>,
     ) -> Self {
+        let mut methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>> = HashMap::new();
+        for func in functions.into_iter() {
+            methods.insert(func.name().to_string(), Rc::new(RefCell::new(func)));
+        }
         Self {
             name,
             closure,

@@ -23,7 +23,7 @@ pub struct Interpreter<'a, W: std::io::Write> {
     callables: Box<Catalogue<'a>>,
     writer: W,
     locals: HashMap<u64, usize>,
-    class_methods: Vec<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
+    class_methods: Vec<Function<'a>>,
 }
 
 impl<'a, W: std::io::Write> Interpreter<'a, W> {
@@ -571,11 +571,6 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         let mut methods = vec![];
         methods.append(&mut self.class_methods);
 
-        let methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>> = methods
-            .into_iter()
-            .map(|f| (f.borrow().name().to_string(), f.clone()))
-            .collect();
-
         let class = Class::new((*id).to_string(), self.environment.clone(), methods);
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
@@ -629,14 +624,14 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
                 parameters.push(*name);
             }
         }
-        let callable = Function::new(id, parameters, body, self.environment.clone());
-        let callable = Rc::new(RefCell::new(callable));
+        let function = Function::new(id, parameters, body, self.environment.clone());
         match kind {
             FunctionKind::Function => {
+                let callable = Rc::new(RefCell::new(function));
                 self.callables.define(id, callable);
             }
             FunctionKind::Method => {
-                self.class_methods.push(callable);
+                self.class_methods.push(function);
             }
             FunctionKind::None => (),
         }
