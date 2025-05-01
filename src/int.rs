@@ -571,7 +571,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         let mut methods = vec![];
         methods.append(&mut self.class_methods);
 
-        let class = Class::new((*id).to_string(), self.environment.clone(), methods);
+        let class = Class::new(id, self.environment.clone(), methods);
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
         self.end_scope(enclosing);

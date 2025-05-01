@@ -70,7 +70,7 @@ impl<'a> LoxCallable<'a> for Clock {
     }
 
     fn name(&self) -> &'a str {
-        ""
+        "clock"
     }
 
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
@@ -141,7 +141,7 @@ impl<'a> Function<'a> {
 }
 
 pub struct Class<'a> {
-    name: String,
+    name: &'a str,
     closure: Rc<RefCell<Environment>>,
     methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
 }
@@ -154,7 +154,7 @@ impl<'a> LoxCallable<'a> for Class<'a> {
     fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>> {
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
-        let instance = LoxValue::Instance(self.name.clone(), closure.clone());
+        let instance = LoxValue::Instance(self.name.to_string(), closure.clone());
         closure
             .borrow_mut()
             .define("this".to_string(), instance.clone());
@@ -169,7 +169,7 @@ impl<'a> LoxCallable<'a> for Class<'a> {
     }
 
     fn name(&self) -> &'a str {
-        ""
+        self.name
     }
 
     fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
@@ -179,7 +179,7 @@ impl<'a> LoxCallable<'a> for Class<'a> {
 
 impl<'a> Class<'a> {
     pub fn new(
-        name: String,
+        name: &'a str,
         closure: Rc<RefCell<Environment>>,
         functions: Vec<Function<'a>>,
     ) -> Self {
