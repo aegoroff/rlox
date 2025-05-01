@@ -557,6 +557,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             return Err(LoxError::Error(miette!("Class '{id}' redefinition")));
         }
 
+        let enclosing = self.begin_scope(self.environment.clone());
         for method in methods {
             let method = match method {
                 Ok(m) => m,
@@ -566,9 +567,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         }
 
         let definition = LoxValue::Callable("class", (*id).to_string(), None);
-        self.environment
-            .borrow_mut()
-            .define((*id).to_string(), definition);
+        enclosing.borrow_mut().define((*id).to_string(), definition);
 
         let mut methods = vec![];
         methods.append(&mut self.class_methods);
@@ -582,6 +581,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         let class = Class::new((*id).to_string(), self.environment.clone());
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
+        self.end_scope(enclosing);
         Ok(())
     }
 
