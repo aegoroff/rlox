@@ -415,13 +415,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     "Class has no method"
                 )));
             };
-            // match &callee.kind {
-            //     ExprKind::Get(_, expr) => match &expr.kind {
-            //         ExprKind::Variable(token) => todo!(),
-            //         _ => todo!(),
-            //     },
-            //     _ => todo!(),
-            // }
             // Callee expressin here is Expr { kind: Get(Identifier("method"), Expr { kind: Variable`(Identifier("c")), location: ... }), location: ... }
             // TODO: bind this to instance
             let callee = method.clone();
@@ -435,13 +428,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
     }
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
-        let result = self.evaluate(object)?;
+        let obj = self.evaluate(object)?;
         let Token::Identifier(field_or_method) = name else {
             return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
-        let (class_name, closure) = match &result {
+        let (class_name, closure) = match &obj {
             LoxValue::Instance(class_name, closure) => (class_name, closure),
-            LoxValue::Class(class_name) => (class_name, &self.environment),
             _ => {
                 return Err(LoxError::Error(miette!(
                     "Only instances have properties or methods"
@@ -530,11 +522,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         todo!()
     }
 
-    fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> crate::Result<LoxValue> {
-        let _ = keyword;
+    fn visit_this_expr(&mut self, obj: &Expr<'a>, _: &Token<'a>) -> crate::Result<LoxValue> {
         let _ = obj;
-        let val = self.environment.borrow().get("this")?;
-        Ok(val)
+        self.lookup_variable(obj, "this")
     }
 
     fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<LoxValue> {

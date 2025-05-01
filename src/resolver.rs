@@ -100,8 +100,12 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     }
 
     fn resolve_local(&mut self, value: &Expr<'a>, name: &Token<'a>) {
-        let Token::Identifier(id) = name else {
-            return;
+        let id = match name {
+            Token::Identifier(id) => id,
+            Token::This => "this",
+            _ => {
+                return;
+            }
         };
         let mut i = self.scopes.len();
         for scope in self.scopes.iter().rev() {
