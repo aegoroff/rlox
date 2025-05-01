@@ -439,10 +439,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         let Token::Identifier(field_or_method) = name else {
             return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
-        let LoxValue::Instance(class_name, closure) = &result else {
-            return Err(LoxError::Error(miette!(
-                "Only instances have properties or methods"
-            )));
+        let (class_name, closure) = match &result {
+            LoxValue::Instance(class_name, closure) => (class_name, closure),
+            LoxValue::Class(class_name) => (class_name, &self.environment),
+            _ => {
+                return Err(LoxError::Error(miette!(
+                    "Only instances have properties or methods"
+                )));
+            }
         };
         if let Some(methods) = self.all_class_methods.get(class_name) {
             if methods.contains_key(*field_or_method) {
@@ -531,9 +535,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         let _ = obj;
         let val = self.environment.borrow().get("this")?;
         if let LoxValue::Nil = val {
-            Err(LoxError::Error(miette!(
-                "Using uninitialized this"
-            )))
+            Err(LoxError::Error(miette!("Using uninitialized this")))
         } else {
             Ok(val)
         }
@@ -833,7 +835,7 @@ mod tests {
 
         // Assert
         if let Err(e) = iterpretation_result {
-            panic!("iterpretation_result should be Ok. But it was: {e:#?}");
+            panic!("iterpretation_result should be Ok. But it was: {e:#?}. \nText: {input}");
         }
 
         let actual = String::from_utf8(stdout).unwrap();
