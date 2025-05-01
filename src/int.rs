@@ -440,7 +440,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
         let LoxValue::Instance(class_name, closure) = &result else {
-            return Err(LoxError::Error(miette!("Only instances have properties or methods")));
+            return Err(LoxError::Error(miette!(
+                "Only instances have properties or methods"
+            )));
         };
         if let Some(methods) = self.all_class_methods.get(class_name) {
             if methods.contains_key(*field_or_method) {
@@ -526,7 +528,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
 
     fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> crate::Result<LoxValue> {
         let _ = keyword;
-        self.lookup_variable(obj, "this")
+        let _ = obj;
+        let val = self.environment.borrow().get("this")?;
+        if let LoxValue::Nil = val {
+            Err(LoxError::Error(miette!(
+                "Using uninitialized this"
+            )))
+        } else {
+            Ok(val)
+        }
     }
 
     fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<LoxValue> {
@@ -560,6 +570,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             return Err(LoxError::Error(miette!("Class '{id}' redefinition")));
         }
 
+        let prev = self.begin_scope(self.environment.clone());
+        self.environment
+            .borrow_mut()
+            .define("this".to_string(), LoxValue::Class((*id).to_string()));
         for method in methods {
             let method = match method {
                 Ok(m) => m,
@@ -567,10 +581,9 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             };
             method.accept(self)?;
         }
+
         let definition = LoxValue::Callable("class", (*id).to_string(), None);
-        self.environment
-            .borrow_mut()
-            .define((*id).to_string(), definition);
+        prev.borrow_mut().define((*id).to_string(), definition);
 
         let mut methods = vec![];
         methods.append(&mut self.class_methods);
@@ -584,6 +597,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         let class = Class::new((*id).to_string(), self.environment.clone());
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
+        self.end_scope(prev);
         Ok(())
     }
 
