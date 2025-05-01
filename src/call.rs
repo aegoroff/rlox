@@ -145,6 +145,10 @@ impl<'a> LoxCallable<'a> for Class {
     fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>> {
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
+        closure
+            .borrow_mut()
+            .define("this".to_string(), LoxValue::Class(self.name.clone()));
+
         for (i, name) in arguments.iter().enumerate() {
             closure
                 .borrow_mut()
