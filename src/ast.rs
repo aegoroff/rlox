@@ -197,7 +197,6 @@ pub enum LoxValue {
     Bool(bool),
     Nil,
     Callable(&'static str, String, Option<String>),
-    Class(String),
     Instance(String, Rc<RefCell<Environment>>),
 }
 
@@ -215,7 +214,6 @@ impl Display for LoxValue {
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
-            LoxValue::Class(class) => write!(f, "{class}"),
             LoxValue::Instance(class, _) => write!(f, "insstance of {class}"),
         }
     }

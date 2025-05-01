@@ -191,7 +191,6 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     Err(e) => Err(e),
                 }
             }
-            CallResult::Instance(class, env) => Ok(LoxValue::Instance(class, env)),
         }
     }
 }
@@ -674,8 +673,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             LoxValue::String(_)
             | LoxValue::Number(_)
             | LoxValue::Callable(_, _, _)
-            | LoxValue::Instance(_, _)
-            | LoxValue::Class(_) => {
+            | LoxValue::Instance(_, _) => {
                 let then = match then {
                     Ok(s) => s,
                     Err(e) => return Err(LoxError::Error(miette!(e.to_string()))),

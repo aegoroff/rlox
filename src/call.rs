@@ -17,7 +17,6 @@ use crate::{
 pub enum CallResult<'a> {
     Value(LoxValue),
     Code(&'a crate::Result<Stmt<'a>>, Rc<RefCell<Environment>>),
-    Instance(String, Rc<RefCell<Environment>>),
 }
 
 pub trait LoxCallable<'a> {
@@ -145,9 +144,10 @@ impl<'a> LoxCallable<'a> for Class {
     fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>> {
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
+        let instance = LoxValue::Instance(self.name.clone(), closure.clone());
         closure
             .borrow_mut()
-            .define("this".to_string(), LoxValue::Class(self.name.clone()));
+            .define("this".to_string(), instance.clone());
 
         for (i, name) in arguments.iter().enumerate() {
             closure
@@ -155,7 +155,7 @@ impl<'a> LoxCallable<'a> for Class {
                 .define((*name).to_string(), arguments[i].clone());
         }
 
-        Ok(CallResult::Instance(self.name.clone(), closure))
+        Ok(CallResult::Value(instance))
     }
 
     fn name(&self) -> &'a str {
