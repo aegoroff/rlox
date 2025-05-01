@@ -23,7 +23,6 @@ pub struct Interpreter<'a, W: std::io::Write> {
     callables: Box<Catalogue<'a>>,
     writer: W,
     locals: HashMap<u64, usize>,
-    all_class_methods: HashMap<String, HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>>,
     class_methods: Vec<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
 }
 
@@ -44,7 +43,6 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             writer,
             callables,
             locals: HashMap::new(),
-            all_class_methods: HashMap::new(),
             class_methods: Vec::new(),
         }
     }
@@ -396,7 +394,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             )));
         };
         if let Some(parent) = parent {
-            let Some(methods) = self.all_class_methods.get(&parent) else {
+            let Ok(class) = self.callables.get(&parent) else {
                 return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         location,
@@ -405,7 +403,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     "Class has no methods"
                 )));
             };
-            let Some(method) = methods.get(function) else {
+
+            let Some(method) = class.borrow().get(function) else {
                 return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         location,
@@ -439,11 +438,11 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 )));
             }
         };
-        if let Some(methods) = self.all_class_methods.get(class_name) {
-            if methods.contains_key(*field_or_method) {
+        if let Ok(class) = self.callables.get(class_name) {
+            if let Some(method) = class.borrow().get(field_or_method) {
                 return Ok(LoxValue::Callable(
                     "fn",
-                    (*field_or_method).to_string(),
+                    method.borrow().name().to_string(),
                     Some(class_name.to_string()),
                 ));
             }
@@ -576,9 +575,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             .into_iter()
             .map(|f| (f.borrow().name().to_string(), f.clone()))
             .collect();
-        self.all_class_methods.insert((*id).to_string(), methods);
 
-        let class = Class::new((*id).to_string(), self.environment.clone());
+        let class = Class::new((*id).to_string(), self.environment.clone(), methods);
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
         self.end_scope(enclosing);

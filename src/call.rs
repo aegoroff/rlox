@@ -23,6 +23,7 @@ pub trait LoxCallable<'a> {
     fn arity(&self) -> usize;
     fn name(&self) -> &'a str;
     fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>>;
+    fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>;
 }
 
 pub const CLOCK: &str = "clock";
@@ -71,6 +72,10 @@ impl<'a> LoxCallable<'a> for Clock {
     fn name(&self) -> &'a str {
         ""
     }
+
+    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        None
+    }
 }
 
 pub struct Function<'a> {
@@ -113,6 +118,10 @@ impl<'a> LoxCallable<'a> for Function<'a> {
     fn name(&self) -> &'a str {
         self.name
     }
+
+    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        None
+    }
 }
 
 impl<'a> Function<'a> {
@@ -131,12 +140,13 @@ impl<'a> Function<'a> {
     }
 }
 
-pub struct Class {
+pub struct Class<'a> {
     name: String,
     closure: Rc<RefCell<Environment>>,
+    methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
 }
 
-impl<'a> LoxCallable<'a> for Class {
+impl<'a> LoxCallable<'a> for Class<'a> {
     fn arity(&self) -> usize {
         0
     }
@@ -161,10 +171,22 @@ impl<'a> LoxCallable<'a> for Class {
     fn name(&self) -> &'a str {
         ""
     }
+
+    fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        self.methods.get(child).cloned()
+    }
 }
 
-impl Class {
-    pub fn new(name: String, closure: Rc<RefCell<Environment>>) -> Self {
-        Self { name, closure }
+impl<'a> Class<'a> {
+    pub fn new(
+        name: String,
+        closure: Rc<RefCell<Environment>>,
+        methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
+    ) -> Self {
+        Self {
+            name,
+            closure,
+            methods,
+        }
     }
 }
