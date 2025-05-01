@@ -457,7 +457,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 ));
             }
         }
-        let field = closure.borrow().get_field(field_or_method)?;
+        let field = closure.borrow().get(field_or_method)?;
         Ok(field)
     }
 
@@ -483,7 +483,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
 
         if let LoxValue::Instance(_class_name, closure) = &instance {
             let value = self.evaluate(val)?;
-            closure.borrow_mut().set_field(field, value.clone());
+            closure.borrow_mut().define(field, value.clone());
             Ok(value)
         } else {
             Err(LoxError::Error(miette!("Only instances have properties")))

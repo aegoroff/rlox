@@ -5,7 +5,6 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 #[derive(Default, Debug)]
 pub struct Environment {
     values: HashMap<String, LoxValue>,
-    fields: HashMap<String, LoxValue>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -14,14 +13,12 @@ impl Environment {
         Self {
             values: HashMap::new(),
             enclosing: None,
-            fields: HashMap::new(),
         }
     }
 
     pub fn child(enclosing: Rc<RefCell<Environment>>) -> Self {
         Self {
             values: HashMap::new(),
-            fields: HashMap::new(),
             enclosing: Some(enclosing),
         }
     }
@@ -59,24 +56,6 @@ impl Environment {
             self.values.entry(id).and_modify(|e| *e = initializer);
         } else {
             self.values.entry(id).or_insert(initializer);
-        }
-    }
-
-    pub fn set_field(&mut self, field: String, initializer: LoxValue) {
-        if self.fields.contains_key(&field) {
-            self.fields.entry(field).and_modify(|e| *e = initializer);
-        } else {
-            self.fields.entry(field).or_insert(initializer);
-        }
-    }
-
-    pub fn get_field(&self, field: &str) -> crate::Result<LoxValue> {
-        if let Some(val) = self.fields.get(field) {
-            Ok(val.clone())
-        } else if let Some(enclosing) = &self.enclosing {
-            enclosing.borrow().get_field(field)
-        } else {
-            Err(LoxError::Error(miette!("field '{field}' not found")))
         }
     }
 
