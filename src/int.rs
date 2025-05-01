@@ -439,21 +439,20 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         let Token::Identifier(field_or_method) = name else {
             return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
-        if let LoxValue::Instance(class_name, closure) = &result {
-            if let Some(methods) = self.all_class_methods.get(class_name) {
-                if methods.contains_key(*field_or_method) {
-                    return Ok(LoxValue::Callable(
-                        "fn",
-                        (*field_or_method).to_string(),
-                        Some(class_name.to_string()),
-                    ));
-                }
+        let LoxValue::Instance(class_name, closure) = &result else {
+            return Err(LoxError::Error(miette!("Only instances have properties or methods")));
+        };
+        if let Some(methods) = self.all_class_methods.get(class_name) {
+            if methods.contains_key(*field_or_method) {
+                return Ok(LoxValue::Callable(
+                    "fn",
+                    (*field_or_method).to_string(),
+                    Some(class_name.to_string()),
+                ));
             }
-            let field = closure.borrow().get_field(field_or_method)?;
-            Ok(field)
-        } else {
-            Err(LoxError::Error(miette!("Only instances have properties")))
         }
+        let field = closure.borrow().get_field(field_or_method)?;
+        Ok(field)
     }
 
     fn visit_set_expr(
