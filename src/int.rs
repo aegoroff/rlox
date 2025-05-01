@@ -398,9 +398,9 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         location,
-                        format!("Class '{parent}' has no methods")
+                        format!("No class '{parent}' registered")
                     )],
-                    "Class has no methods"
+                    "Undefined class"
                 )));
             };
 
@@ -439,10 +439,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             }
         };
         if let Ok(class) = self.callables.get(class_name) {
-            if let Some(method) = class.borrow().get(field_or_method) {
+            if class.borrow().get(field_or_method).is_some() {
                 return Ok(LoxValue::Callable(
                     "fn",
-                    method.borrow().name().to_string(),
+                    (*field_or_method).to_string(),
                     Some(class_name.to_string()),
                 ));
             }
