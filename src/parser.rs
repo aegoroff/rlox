@@ -56,7 +56,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        if let Err(e) = self.consume(Token::LeftParen) {
+        if let Err(e) = self.consume(&Token::LeftParen) {
             return Some(Err(e));
         }
         let mut args = vec![];
@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-            if let Err(e) = self.consume(Token::RightParen) {
+            if let Err(e) = self.consume(&Token::RightParen) {
                 return Some(Err(e));
             }
         }
@@ -153,7 +153,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        if let Err(e) = self.consume(Token::LeftBrace) {
+        if let Err(e) = self.consume(&Token::LeftBrace) {
             return Some(Err(e));
         }
 
@@ -321,7 +321,7 @@ impl<'a> Parser<'a> {
             }));
         }
 
-        let else_loc = self.consume(Token::Else).unwrap();
+        let else_loc = self.consume(&Token::Else).unwrap();
 
         let Some(else_branch) = self.statement() else {
             return Some(Err(LoxError::Error(miette!(
@@ -427,7 +427,7 @@ impl<'a> Parser<'a> {
 
         let while_body = Ok(Stmt {
             kind: StmtKind::Block(statements),
-            location: start_loc.start..start_loc.start + 1,
+            location: start_loc.start..start_loc.start,
         });
 
         let while_stmt = Ok(Stmt {
@@ -1041,7 +1041,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-            if let Err(e) = self.consume(Token::RightParen) {
+            if let Err(e) = self.consume(&Token::RightParen) {
                 return Some(Err(e));
             }
         }
@@ -1219,7 +1219,7 @@ impl<'a> Parser<'a> {
                 "Missing closing paren"
             )));
         }
-        let loc = self.consume(Token::RightParen)?;
+        let loc = self.consume(&Token::RightParen)?;
         Ok(loc)
     }
 
@@ -1234,7 +1234,7 @@ impl<'a> Parser<'a> {
                 "Dangling {token}"
             )));
         }
-        let loc = self.consume(Token::LeftParen)?;
+        let loc = self.consume(&Token::LeftParen)?;
         let result = start_token..loc.end;
         Ok(result)
     }
@@ -1254,7 +1254,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn consume(&mut self, token: Token<'a>) -> crate::Result<Range<usize>> {
+    fn consume(&mut self, token: &Token<'a>) -> crate::Result<Range<usize>> {
         let Some(current) = self.tokens.peek() else {
             return Err(LoxError::Error(miette!("Expected {token} here")));
         };
@@ -1268,7 +1268,7 @@ impl<'a> Parser<'a> {
         let start = *start;
         let end = *end;
 
-        if *next_tok != token {
+        if next_tok != token {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..=end,
