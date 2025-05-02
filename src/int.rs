@@ -524,8 +524,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
 
     fn visit_this_expr(&mut self, obj: &Expr<'a>, _: &Token<'a>) -> crate::Result<LoxValue> {
         let _ = obj;
-        // self.lookup_variable(obj, "this")
-        self.environment.borrow().get("this")
+        self.lookup_variable(obj, "this")
     }
 
     fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<LoxValue> {
