@@ -74,7 +74,7 @@ fn scan(content: String) -> miette::Result<()> {
     let stmts: Vec<rlox::Result<Stmt>> = parser.collect();
     resolver.interpret(&stmts).map_err(|err| match err {
         rlox::LoxError::Error(e) => e.with_source_code(content),
-        _ => miette!("Failed to interpret"),
+        rlox::LoxError::Return(val) => miette!("Unexpected return value: {val}"),
     })
 }
 

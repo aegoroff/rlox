@@ -40,7 +40,9 @@ impl Environment {
             let mut parent = self.enclosing.clone();
             for _ in 1..distance {
                 if let Some(e) = parent {
-                    parent = e.borrow().enclosing.clone();
+                    let mut temp: Option<Rc<RefCell<Environment>>> = None;
+                    temp.clone_from(&e.borrow().enclosing);
+                    parent = temp;
                 }
             }
             if let Some(e) = parent {
@@ -81,10 +83,12 @@ impl Environment {
         if distance == 0 {
             self.assign(id, initializer)
         } else {
-            let mut parent = self.enclosing.clone();
+            let mut parent: Option<Rc<RefCell<Environment>>> = self.enclosing.clone();
             for _ in 1..distance {
                 if let Some(e) = parent {
-                    parent = e.borrow().enclosing.clone();
+                    let mut temp: Option<Rc<RefCell<Environment>>> = None;
+                    temp.clone_from(&e.borrow().enclosing);
+                    parent = temp;
                 }
             }
             if let Some(e) = parent {
