@@ -74,8 +74,8 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         let mut errors = vec![];
 
         let mut spans = HashSet::new();
-        let mut add_error = |e: &crate::LoxError| {
-            if let crate::LoxError::Error(e) = e {
+        let mut add_error = |e: &LoxError| {
+            if let LoxError::Error(e) = e {
                 if let Some(label) = e.labels() {
                     for l in label {
                         if !spans.contains(&(l.len(), l.offset())) {
@@ -118,7 +118,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             Err(e) => {
                 let mut errors = vec![];
                 let mut spans = HashSet::new();
-                if let crate::LoxError::Error(e) = e {
+                if let LoxError::Error(e) = e {
                     if let Some(label) = e.labels() {
                         for l in label {
                             if !spans.contains(&(l.len(), l.offset())) {
@@ -253,7 +253,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 let lr = lhs.try_str();
                 let rr = rhs.try_str();
                 if lr.is_ok() || rr.is_ok() {
-                    // concat strings here if any of operands is a string
+                    // concat strings here if any of the operands is a string
                     if let Ok(l) = lr {
                         let result = l.to_owned() + &rhs.to_string();
                         return Ok(LoxValue::String(result));
@@ -488,7 +488,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             return Err(LoxError::Error(miette!("Field name must be an identifier")));
         };
 
-        // Early return for invalid object type
+        // Early return for the invalid object type
         let ExprKind::Get(_, instance) = &obj.kind else {
             return Err(LoxError::Error(miette!("Only instances have fields")));
         };
@@ -804,7 +804,7 @@ mod tests {
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(1);", "1" ; "conditional return success")]
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
     #[test_case("class Foo { method(x) { print x;} }", "" ; "class")]
-    #[test_case("class Bagel{} var b = Bagel(); print b;", "insstance of Bagel" ; "class instance empty")]
+    #[test_case("class Bagel{} var b = Bagel(); print b;", "instance of Bagel" ; "class instance empty")]
     #[test_case("class Bagel{} var b = Bagel(); { var b = Bagel(); b.field = 1; print b.field; } b.field = 2; print b.field;", "1\n2" ; "get/set class field complex")]
     #[test_case("class Bagel{} var b = Bagel(); { b.field = 1; } print b.field; b.field = 2; print b.field;", "1\n2" ; "get/set class field complex no shadowing")]
     #[test_case("class Bagel{} var b; b = Bagel(); { b.field = 1; } print b.field; b.field = 2; print b.field;", "1\n2" ; "get/set class field complex no shadowing assignment")]
@@ -828,14 +828,14 @@ mod tests {
         let mut stdout = Vec::new();
         let interpreter = Interpreter::new(&mut stdout);
         let resolver = Resolver::new(interpreter);
-        let stmts: Vec<crate::Result<crate::ast::Stmt>> = parser.collect();
+        let stmts: Vec<crate::Result<Stmt>> = parser.collect();
 
         // Act
-        let iterpretation_result = resolver.interpret(&stmts);
+        let interpretation_result = resolver.interpret(&stmts);
 
         // Assert
-        if let Err(e) = iterpretation_result {
-            panic!("iterpretation_result should be Ok. But it was: {e:#?}. \nText: {input}");
+        if let Err(e) = interpretation_result {
+            panic!("interpretation_result should be Ok. But it was: {e:#?}. \nText: {input}");
         }
 
         let actual = String::from_utf8(stdout).unwrap();

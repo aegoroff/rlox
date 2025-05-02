@@ -61,16 +61,16 @@ impl<'a> LoxCallable<'a> for Clock {
         0
     }
 
+    fn name(&self) -> &'a str {
+        "clock"
+    }
+
     fn call(&self, _: &[LoxValue]) -> crate::Result<CallResult<'a>> {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
         let seconds = since_the_epoch.as_secs();
         let val = LoxValue::Number(seconds as f64);
         Ok(CallResult::Value(val))
-    }
-
-    fn name(&self) -> &'a str {
-        "clock"
     }
 
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
@@ -90,6 +90,10 @@ impl<'a> LoxCallable<'a> for Function<'a> {
         self.parameters.len()
     }
 
+    fn name(&self) -> &'a str {
+        self.name
+    }
+
     fn call(&self, arguments: &[LoxValue]) -> crate::Result<CallResult<'a>> {
         // We need new closure here to support recursive calls for example fibonacci calculation
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
@@ -101,10 +105,6 @@ impl<'a> LoxCallable<'a> for Function<'a> {
         }
 
         Ok(CallResult::Code(self.body, closure))
-    }
-
-    fn name(&self) -> &'a str {
-        self.name
     }
 
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
@@ -143,6 +143,10 @@ impl<'a> LoxCallable<'a> for Class<'a> {
         }
     }
 
+    fn name(&self) -> &'a str {
+        self.name
+    }
+
     fn call(&self, _: &[LoxValue]) -> crate::Result<CallResult<'a>> {
         let child = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
@@ -152,10 +156,6 @@ impl<'a> LoxCallable<'a> for Class<'a> {
             .define("this".to_string(), instance.clone());
 
         Ok(CallResult::Value(instance))
-    }
-
-    fn name(&self) -> &'a str {
-        self.name
     }
 
     fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {

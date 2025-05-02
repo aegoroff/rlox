@@ -217,7 +217,7 @@ impl Display for LoxValue {
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
-            LoxValue::Instance(class, _) => write!(f, "insstance of {class}"),
+            LoxValue::Instance(class, _) => write!(f, "instance of {class}"),
         }
     }
 }

@@ -45,7 +45,7 @@ impl<'a> Parser<'a> {
     fn function(&mut self, kind: FunctionKind) -> Option<crate::Result<Stmt<'a>>> {
         let mut start = 0;
         let mut finish = 0;
-        // CRUTCH: awkard way to get start and finish positions for function name
+        // CRUTCH: awkward way to get start and finish positions for function name
         if let Some(Ok((s, _, f))) = self.tokens.peek() {
             start = *s;
             finish = *f;
@@ -204,7 +204,7 @@ impl<'a> Parser<'a> {
             Ok(name) => name,
             Err(e) => return Some(Err(e)),
         };
-        // if var without initializer check semicolon
+        // if var without an initializer check semicolon
         if self.tokens.peek().is_none() {
             if let Err(e) = self.consume_semicolon(finish) {
                 return Some(Err(e));
@@ -1149,7 +1149,7 @@ impl<'a> Parser<'a> {
         start: usize,
         finish: usize,
     ) -> crate::Result<Expr<'a>> {
-        // IMPORTANT: dont call expression here so as not to conflict with assignment
+        // IMPORTANT: don't call expression here so as not to conflict with assignment
         match self.primary() {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
@@ -1175,7 +1175,7 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_identifier(&mut self, start: usize, finish: usize) -> crate::Result<Token<'a>> {
-        // IMPORTANT: dont call expression here so as not to conflict with assignment
+        // IMPORTANT: don't call expression here so as not to conflict with assignment
         let name = match self.primary() {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
@@ -1224,7 +1224,7 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_current_and_open_paren(&mut self, token: &str) -> crate::Result<Range<usize>> {
-        let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
+        let (start_token, _, end_token) = self.tokens.next().unwrap()?; // consume token TODO: include print start position into stmt location
         if self.tokens.peek().is_none() {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(

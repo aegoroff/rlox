@@ -273,7 +273,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
 }
 
 impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, W> {
-    fn visit_literal(&self, token: &Option<crate::lexer::Token<'a>>) -> crate::Result<()> {
+    fn visit_literal(&self, token: &Option<Token<'a>>) -> crate::Result<()> {
         let _ = token;
         Ok(())
     }
