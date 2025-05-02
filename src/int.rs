@@ -475,35 +475,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         Ok(field)
     }
 
-    fn visit_set_expr(
-        &mut self,
-        field: &Token<'a>,
-        obj: &Expr<'a>,
-        val: &Expr<'a>,
-    ) -> crate::Result<LoxValue> {
-        // Early return for invalid field name
-        let field = if let Token::Identifier(id) = field {
-            (*id).to_string()
-        } else {
-            return Err(LoxError::Error(miette!("Field name must be an identifier")));
-        };
-
-        // Early return for the invalid object type
-        let ExprKind::Get(_, instance) = &obj.kind else {
-            return Err(LoxError::Error(miette!("Only instances have fields")));
-        };
-
-        let instance = self.evaluate(instance)?;
-
-        if let LoxValue::Instance(_class_name, closure) = &instance {
-            let value = self.evaluate(val)?;
-            closure.borrow_mut().define(field, value.clone());
-            Ok(value)
-        } else {
-            Err(LoxError::Error(miette!("Only instances have properties")))
-        }
-    }
-
     fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> crate::Result<LoxValue> {
         self.evaluate(grouping)
     }
@@ -531,6 +502,35 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 }
             }
             _ => Err(LoxError::Error(miette!("Invalid logical operator"))),
+        }
+    }
+
+    fn visit_set_expr(
+        &mut self,
+        field: &Token<'a>,
+        obj: &Expr<'a>,
+        val: &Expr<'a>,
+    ) -> crate::Result<LoxValue> {
+        // Early return for invalid field name
+        let field = if let Token::Identifier(id) = field {
+            (*id).to_string()
+        } else {
+            return Err(LoxError::Error(miette!("Field name must be an identifier")));
+        };
+
+        // Early return for the invalid object type
+        let ExprKind::Get(_, instance) = &obj.kind else {
+            return Err(LoxError::Error(miette!("Only instances have fields")));
+        };
+
+        let instance = self.evaluate(instance)?;
+
+        if let LoxValue::Instance(_class_name, closure) = &instance {
+            let value = self.evaluate(val)?;
+            closure.borrow_mut().define(field, value.clone());
+            Ok(value)
+        } else {
+            Err(LoxError::Error(miette!("Only instances have properties")))
         }
     }
 
