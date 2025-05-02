@@ -4,7 +4,7 @@ use std::{
     cell::RefCell,
     fmt::Display,
     hash::{DefaultHasher, Hash, Hasher},
-    ops::RangeInclusive,
+    ops::Range,
     rc::Rc,
 };
 
@@ -84,7 +84,7 @@ pub enum ExprKind<'a> {
 #[derive(Debug, Hash)]
 pub struct Expr<'a> {
     pub kind: ExprKind<'a>,
-    pub location: RangeInclusive<usize>,
+    pub location: Range<usize>,
 }
 
 impl<'a> Expr<'a> {
@@ -120,7 +120,7 @@ impl<'a> Expr<'a> {
 #[derive(Debug)]
 pub struct Stmt<'a> {
     pub kind: StmtKind<'a>,
-    pub location: RangeInclusive<usize>,
+    pub location: Range<usize>,
 }
 
 impl<'a> Stmt<'a> {

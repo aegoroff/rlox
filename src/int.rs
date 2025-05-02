@@ -255,8 +255,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     let result = l + r;
                     return Ok(LoxValue::Number(result));
                 }
-                let start = *left_loc.start();
-                let end = *right_loc.end();
+                let start = left_loc.start;
+                let end = right_loc.end;
                 Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(start..=end, "Problem expression")],
                     "Invalid operands types for plus"

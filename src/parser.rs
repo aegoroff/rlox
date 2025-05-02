@@ -1,4 +1,4 @@
-use std::{iter::Peekable, ops::RangeInclusive};
+use std::{iter::Peekable, ops::Range};
 
 use miette::{LabeledSpan, miette};
 
@@ -80,7 +80,7 @@ impl<'a> Parser<'a> {
                 if let Token::Identifier(_) = arg {
                     let arg = Expr {
                         kind: ExprKind::Variable(arg),
-                        location: arg_start..=arg_end,
+                        location: arg_start..arg_end,
                     };
                     args.push(Box::new(arg));
                 } else {
@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
 
         Some(Ok(Stmt {
             kind,
-            location: start..=finish,
+            location: start..finish,
         }))
     }
 
@@ -177,7 +177,7 @@ impl<'a> Parser<'a> {
 
         Some(Ok(Stmt {
             kind,
-            location: start..=finish, // TODO: include CLASS finish position into stmt location
+            location: start..finish, // TODO: include CLASS finish position into stmt location
         }))
     }
 
@@ -188,7 +188,7 @@ impl<'a> Parser<'a> {
         let name = match self.or_expression() {
             Some(result) => match result {
                 Ok(expr) => {
-                    finish = *expr.location.end();
+                    finish = expr.location.end;
                     match expr.kind {
                         ExprKind::Variable(token) => Ok(token),
                         _ => Err(LoxError::Error(miette!("Invalid variable name"))),
@@ -220,12 +220,12 @@ impl<'a> Parser<'a> {
             if let Some(initializer) = self.expression() {
                 match initializer {
                     Ok(initializer) => {
-                        let end = *initializer.location.end();
+                        let end = initializer.location.end;
                         finish = end;
                         let kind = StmtKind::Variable(name, Some(Box::new(initializer)));
                         Ok(Stmt {
                             kind,
-                            location: start..=end,
+                            location: start..end,
                         })
                     }
                     Err(e) => Err(e),
@@ -244,7 +244,7 @@ impl<'a> Parser<'a> {
             let kind = StmtKind::Variable(name, None);
             Ok(Stmt {
                 kind,
-                location: start..=finish,
+                location: start..finish,
             })
         };
         if let Err(e) = self.consume_semicolon(finish) {
@@ -276,7 +276,7 @@ impl<'a> Parser<'a> {
         let Some(cond) = self.expression() else {
             return Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
-                    (*start_loc.start() + 2)..=(start_loc.start() + 2),
+                    (start_loc.start + 2)..(start_loc.start + 3),
                     "Condition must start here"
                 )],
                 "Invalid condition syntax"
@@ -287,7 +287,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        let cond_end = *cond.location.end();
+        let cond_end = cond.location.end;
 
         let right_paren_location = match self.consume_right_parent(cond_end) {
             Ok(loc) => loc,
@@ -305,7 +305,7 @@ impl<'a> Parser<'a> {
             let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
             return Some(Ok(Stmt {
                 kind,
-                location: *start_loc.start()..=*right_paren_location.end(),
+                location: start_loc.start..right_paren_location.end,
             }));
         };
 
@@ -321,7 +321,7 @@ impl<'a> Parser<'a> {
             let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
             return Some(Ok(Stmt {
                 kind,
-                location: *start_loc.start()..=*right_paren_location.end(),
+                location: start_loc.start..right_paren_location.end,
             }));
         }
 
@@ -341,7 +341,7 @@ impl<'a> Parser<'a> {
         );
         Some(Ok(Stmt {
             kind,
-            location: *start_loc.start()..=*else_loc.end(),
+            location: start_loc.start..else_loc.end,
         }))
     }
 
@@ -351,7 +351,7 @@ impl<'a> Parser<'a> {
         let Some(cond) = self.expression() else {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
-                    *start_loc.start()..=(*start_loc.start() + 5),
+                    start_loc.start..(start_loc.start + 6),
                     "No while condition specified"
                 )],
                 "Invalid condition syntax"
@@ -359,7 +359,7 @@ impl<'a> Parser<'a> {
         };
         let cond = cond?;
 
-        let cond_end = *cond.location.end();
+        let cond_end = cond.location.end;
 
         let right_paren_location = self.consume_right_parent(cond_end)?;
 
@@ -373,14 +373,14 @@ impl<'a> Parser<'a> {
         let kind = StmtKind::While(Box::new(cond), Box::new(body));
         Ok(Stmt {
             kind,
-            location: *start_loc.start()..=*right_paren_location.end(),
+            location: start_loc.start..right_paren_location.end,
         })
     }
 
     fn for_statement(&mut self) -> crate::Result<Stmt<'a>> {
         let start_loc = self.consume_current_and_open_paren("for")?;
 
-        let initializer = if self.consume_semicolon(*start_loc.end()).is_ok() {
+        let initializer = if self.consume_semicolon(start_loc.end).is_ok() {
             None
         } else if let Some(Ok((_, Token::Var, _))) = self.tokens.peek() {
             self.var_declaration()
@@ -388,7 +388,7 @@ impl<'a> Parser<'a> {
             self.expr_statement()
         };
 
-        let condition = if self.consume_semicolon(*start_loc.end()).is_ok() {
+        let condition = if self.consume_semicolon(start_loc.end).is_ok() {
             Expr {
                 kind: ExprKind::Literal(Some(Token::True)),
                 location: start_loc.clone(),
@@ -397,13 +397,13 @@ impl<'a> Parser<'a> {
             let Some(cond) = self.expression() else {
                 return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        *start_loc.start()..=(*start_loc.start() + 5),
+                        start_loc.start..(start_loc.start + 6),
                         "No condition specified"
                     )],
                     "Invalid condition syntax"
                 )));
             };
-            self.consume_semicolon(*start_loc.end())?;
+            self.consume_semicolon(start_loc.end)?;
             cond?
         };
 
@@ -413,7 +413,7 @@ impl<'a> Parser<'a> {
             self.expression()
         };
 
-        let right_paren_location = self.consume_right_parent(*start_loc.end())?;
+        let right_paren_location = self.consume_right_parent(start_loc.end)?;
 
         let Some(body) = self.statement() else {
             return Err(LoxError::Error(miette!(
@@ -431,19 +431,19 @@ impl<'a> Parser<'a> {
 
         let while_body = Ok(Stmt {
             kind: StmtKind::Block(statements),
-            location: *start_loc.start()..=*start_loc.start(),
+            location: start_loc.start..start_loc.start + 1,
         });
 
         let while_stmt = Ok(Stmt {
             kind: StmtKind::While(Box::new(condition), Box::new(while_body)),
-            location: *start_loc.start()..=*right_paren_location.end(),
+            location: start_loc.start..right_paren_location.end,
         });
 
         if let Some(initializer) = initializer {
             let statements = vec![initializer, while_stmt];
             Ok(Stmt {
                 kind: StmtKind::Block(statements),
-                location: *start_loc.start()..=*start_loc.start(),
+                location: start_loc.start..start_loc.start,
             })
         } else {
             while_stmt
@@ -467,7 +467,7 @@ impl<'a> Parser<'a> {
             let expr = if self.matches(&[Token::Semicolon]) {
                 Expr {
                     kind: ExprKind::Literal(None),
-                    location: start..=end,
+                    location: start..end,
                 }
             } else {
                 let Some(Ok(expr)) = self.semicolon_terminated_expression() else {
@@ -475,7 +475,7 @@ impl<'a> Parser<'a> {
                 };
                 expr
             };
-            let location = start..=*expr.location.end();
+            let location = start..expr.location.end;
             let kind = StmtKind::Return(keyword, Box::new(expr));
             Some(Ok(Stmt { kind, location }))
         } else {
@@ -505,7 +505,7 @@ impl<'a> Parser<'a> {
             if let Some(opt) = self.declaration() {
                 match opt {
                     Ok(stmt) => {
-                        finish = *stmt.location.end();
+                        finish = stmt.location.end;
                         statements.push(Ok(stmt));
                     }
                     Err(e) => statements.push(Err(e)),
@@ -515,15 +515,14 @@ impl<'a> Parser<'a> {
         let kind = StmtKind::Block(statements);
         Stmt {
             kind,
-            location: start..=finish,
+            location: start..finish,
         }
     }
 
     fn semicolon_terminated_expression(&mut self) -> Option<crate::Result<Expr<'a>>> {
         match self.expression()? {
             Ok(expr) => {
-                let pos = expr.location.end();
-                if let Err(e) = self.consume_semicolon(*pos) {
+                if let Err(e) = self.consume_semicolon(expr.location.end) {
                     return Some(Err(e));
                 }
 
@@ -546,17 +545,17 @@ impl<'a> Parser<'a> {
 
         if let Some(rhs) = self.assignment() {
             if let Some(Ok(lhs)) = lhs {
-                let start = *lhs.location.start();
-                let lhs_finish = *lhs.location.end();
+                let start = lhs.location.start;
+                let lhs_finish = lhs.location.end;
                 match rhs {
                     Ok(rhs) => {
-                        let rhs_finish = *rhs.location.end();
+                        let rhs_finish = rhs.location.end;
                         match &lhs.kind {
                             ExprKind::Variable(_) => {
                                 let kind = ExprKind::Assign(Box::new(lhs), Box::new(rhs));
                                 Some(Ok(Expr {
                                     kind,
-                                    location: start..=rhs_finish,
+                                    location: start..rhs_finish,
                                 }))
                             }
                             ExprKind::Get(field, _value) => match field {
@@ -568,14 +567,14 @@ impl<'a> Parser<'a> {
                                     );
                                     Some(Ok(Expr {
                                         kind,
-                                        location: start..=rhs_finish,
+                                        location: start..rhs_finish,
                                     }))
                                 }
                                 _ => todo!(),
                             },
                             _ => Some(Err(LoxError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
-                                    start..=lhs_finish,
+                                    start..lhs_finish,
                                     "Invalid assignment target"
                                 )],
                                 "Invalid assignment target"
@@ -635,13 +634,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = *expr.location.start();
-            let end = *right.location.end() - 1;
+            let start = expr.location.start;
+            let end = right.location.end;
             let kind = ExprKind::Logical(operator, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
-                location: start..=end,
+                location: start..end,
             };
         }
 
@@ -691,13 +690,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = *expr.location.start();
-            let end = *right.location.end() - 1;
+            let start = expr.location.start;
+            let end = right.location.end;
             let kind = ExprKind::Logical(operator, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
-                location: start..=end,
+                location: start..end,
             };
         }
 
@@ -727,7 +726,7 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let (s, operator, f) = match self.tokens.next()? {
+            let (_, operator, f) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -735,7 +734,7 @@ impl<'a> Parser<'a> {
             let Some(comparison) = self.comparison() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        s..=f,
+                        f..f,
                         "Missing comparison expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
@@ -747,13 +746,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = *expr.location.start();
-            let end = *right.location.end() - 1;
+            let start = expr.location.start;
+            let end = right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
-                location: start..=end,
+                location: start..end,
             };
         }
 
@@ -810,13 +809,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = *expr.location.start();
-            let end = *right.location.end();
+            let start = expr.location.start;
+            let end = right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
-                location: start..=end,
+                location: start..end,
             };
         }
 
@@ -846,7 +845,7 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let (s, operator, f) = match self.tokens.next()? {
+            let (_, operator, f) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -854,7 +853,7 @@ impl<'a> Parser<'a> {
             let Some(factor) = self.factor() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        s..=f,
+                        f..f,
                         "Missing factor expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
@@ -866,13 +865,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = *expr.location.start();
-            let end = *right.location.end();
+            let start = expr.location.start;
+            let end = right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
-                location: start..=end,
+                location: start..end,
             };
         }
 
@@ -901,7 +900,7 @@ impl<'a> Parser<'a> {
             }
 
             // Consume operator
-            let (s, operator, f) = match self.tokens.next()? {
+            let (_, operator, f) = match self.tokens.next()? {
                 Ok(tok) => tok,
                 Err(e) => return Some(Err(e)),
             };
@@ -909,7 +908,7 @@ impl<'a> Parser<'a> {
             let Some(unary) = self.unary() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        s..=f,
+                        f..f,
                         "Missing unary expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
@@ -921,13 +920,13 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = *expr.location.start();
-            let end = *right.location.end();
+            let start = expr.location.start;
+            let end = right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
-                location: start..=end,
+                location: start..end,
             };
         }
 
@@ -955,11 +954,11 @@ impl<'a> Parser<'a> {
 
                     match unary {
                         Ok(r) => {
-                            let end = *r.location.end() - 1;
+                            let end = r.location.end;
                             let kind = ExprKind::Unary(operator, Box::new(r));
                             Some(Ok(Expr {
                                 kind,
-                                location: s..=end,
+                                location: s..end,
                             }))
                         }
                         Err(e) => Some(Err(e)),
@@ -1010,10 +1009,10 @@ impl<'a> Parser<'a> {
                         "Invalid syntax"
                     ))));
                 };
-                let start = *expr.location.start();
+                let start = expr.location.start;
                 expr = Expr {
                     kind: ExprKind::Get(field, Box::new(expr)),
-                    location: start..=finish,
+                    location: start..finish,
                 };
             } else {
                 break;
@@ -1066,7 +1065,7 @@ impl<'a> Parser<'a> {
                 let end = finish - 1;
                 Some(Ok(Expr {
                     kind: ExprKind::Literal(Some(tok)),
-                    location: start..=end,
+                    location: start..end,
                 }))
             }
             Token::LeftParen => {
@@ -1095,7 +1094,7 @@ impl<'a> Parser<'a> {
                             let end = finish - 1;
                             Some(Ok(Expr {
                                 kind: ExprKind::Grouping(Box::new(expr)),
-                                location: start..=end,
+                                location: start..end,
                             }))
                         } else {
                             Some(Err(LoxError::Error(miette!(
@@ -1112,11 +1111,11 @@ impl<'a> Parser<'a> {
             }
             Token::Identifier(_) => Some(Ok(Expr {
                 kind: ExprKind::Variable(tok),
-                location: start..=finish,
+                location: start..finish,
             })),
             Token::This => Some(Ok(Expr {
                 kind: ExprKind::This(tok),
-                location: start..=finish,
+                location: start..finish,
             })),
             _ => Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
@@ -1217,7 +1216,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn consume_right_parent(&mut self, position: usize) -> crate::Result<RangeInclusive<usize>> {
+    fn consume_right_parent(&mut self, position: usize) -> crate::Result<Range<usize>> {
         if self.tokens.peek().is_none() {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(position..=position, "Missing closing )")],
@@ -1228,10 +1227,7 @@ impl<'a> Parser<'a> {
         Ok(loc)
     }
 
-    fn consume_current_and_open_paren(
-        &mut self,
-        token: &str,
-    ) -> crate::Result<RangeInclusive<usize>> {
+    fn consume_current_and_open_paren(&mut self, token: &str) -> crate::Result<Range<usize>> {
         let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
         if self.tokens.peek().is_none() {
             return Err(LoxError::Error(miette!(
@@ -1243,7 +1239,7 @@ impl<'a> Parser<'a> {
             )));
         }
         let loc = self.consume(Token::LeftParen)?;
-        let result = start_token..=*loc.end();
+        let result = start_token..loc.end;
         Ok(result)
     }
 
@@ -1262,7 +1258,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn consume(&mut self, token: Token<'a>) -> crate::Result<RangeInclusive<usize>> {
+    fn consume(&mut self, token: Token<'a>) -> crate::Result<Range<usize>> {
         let Some(current) = self.tokens.peek() else {
             return Err(LoxError::Error(miette!("Expected {token} here")));
         };
@@ -1286,7 +1282,7 @@ impl<'a> Parser<'a> {
             )));
         }
         self.tokens.next(); // consume 
-        Ok(start..=end)
+        Ok(start..end)
     }
 }
 
