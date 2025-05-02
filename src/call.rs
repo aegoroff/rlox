@@ -163,10 +163,8 @@ impl<'a> LoxCallable<'a> for Class<'a> {
             .borrow_mut()
             .define("this".to_string(), instance.clone());
 
-        for (i, name) in arguments.iter().enumerate() {
-            child
-                .borrow_mut()
-                .define((*name).to_string(), arguments[i].clone());
+        if let Some(method) = self.methods.get("init") {
+            method.borrow_mut().call(arguments)?;
         }
 
         Ok(CallResult::Value(instance))
