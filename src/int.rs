@@ -171,9 +171,20 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
 
     fn call_code(
         &mut self,
-        arguments: Vec<LoxValue>,
+        arguments: &[LoxValue],
         callee: &std::cell::Ref<'_, dyn LoxCallable<'a>>,
     ) -> crate::Result<LoxValue> {
+        let expected = callee.arity();
+        let actual = arguments.len();
+        if expected != actual {
+            let report = miette!(
+                "Invalid arguments number passed to '{}'. Expected: {} passed: {}",
+                callee.name(),
+                expected,
+                actual
+            );
+            return Err(LoxError::Error(report));
+        }
         match callee.call(arguments)? {
             CallResult::Value(lox_value) => Ok(lox_value),
             CallResult::Code(stmt, closure) => {
@@ -418,23 +429,23 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             if function == "init" {
                 // handle var c = Class(0).init(10);
                 let class = class.borrow();
-                let instance = self.call_code(vec![], &class);
-                self.call_code(arguments, &callee)?;
+                let instance = self.call_code(&arguments, &class);
+                self.call_code(&arguments, &callee)?;
                 instance
             } else {
-                self.call_code(arguments, &callee)
+                self.call_code(&arguments, &callee)
             }
         } else {
             let callee = self.callables.get(function)?;
             let callee = callee.borrow();
             if let Some(method) = callee.get("init") {
                 // Call constructor if available
-                let instance = self.call_code(vec![], &callee);
+                let instance = self.call_code(&arguments, &callee);
                 let ctor = method.borrow();
-                self.call_code(arguments, &ctor)?;
+                self.call_code(&arguments, &ctor)?;
                 instance
             } else {
-                self.call_code(arguments, &callee)
+                self.call_code(&arguments, &callee)
             }
         }
     }
