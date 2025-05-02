@@ -128,8 +128,13 @@ impl<'a> Parser<'a> {
                 "Missing {kind} block"
             ))));
         };
+        let function_kind = if let Token::Identifier("init") = name {
+            FunctionKind::Initializer
+        } else {
+            kind
+        };
 
-        let kind = StmtKind::Function(kind, name, args, Box::new(block));
+        let kind = StmtKind::Function(function_kind, name, args, Box::new(block));
 
         Some(Ok(Stmt {
             kind,

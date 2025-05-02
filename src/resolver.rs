@@ -191,14 +191,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
     ) -> crate::Result<()> {
         self.declare(token);
         self.define(token);
-        if let Token::Identifier(id) = token {
-            match *id {
-                "init" => self.resolve_function(params, body, FunctionKind::Initializer),
-                _ => self.resolve_function(params, body, kind),
-            }
-        } else {
-            self.resolve_function(params, body, kind)
-        }
+        self.resolve_function(params, body, kind)
     }
 
     fn visit_if_stmt(
