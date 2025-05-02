@@ -148,7 +148,11 @@ pub struct Class<'a> {
 
 impl<'a> LoxCallable<'a> for Class<'a> {
     fn arity(&self) -> usize {
-        0
+        if let Some(method) = self.methods.get("init") {
+            method.borrow().arity()
+        } else {
+            0
+        }
     }
 
     fn call(&self, arguments: Vec<LoxValue>) -> crate::Result<CallResult<'a>> {
