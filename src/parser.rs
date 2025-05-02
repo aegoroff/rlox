@@ -1156,9 +1156,14 @@ impl<'a> Parser<'a> {
         let name = match self.primary() {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
-                    ExprKind::Literal(token) => Ok(token),
                     ExprKind::Variable(token) => Ok(Some(token)),
-                    _ => Err(LoxError::Error(miette!("Invalid {kind} name"))),
+                    _ => Err(LoxError::Error(miette!(
+                        labels = vec![LabeledSpan::at(
+                            start..=finish,
+                            format!("Invalid {kind} name")
+                        )],
+                        "Invalid {kind} name"
+                    ))),
                 },
                 Err(e) => Err(e),
             },
