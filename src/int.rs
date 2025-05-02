@@ -638,7 +638,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
                 let callable = Rc::new(RefCell::new(function));
                 self.callables.define(id, callable);
             }
-            FunctionKind::Method => {
+            FunctionKind::Method | FunctionKind::Initializer => {
                 self.class_methods.push(function);
             }
             FunctionKind::None => (),

@@ -145,6 +145,7 @@ pub enum FunctionKind {
     None = 0,
     Function = 1,
     Method = 2,
+    Initializer = 3,
 }
 
 impl Display for FunctionKind {
@@ -153,6 +154,7 @@ impl Display for FunctionKind {
             FunctionKind::None => write!(f, "none"),
             FunctionKind::Function => write!(f, "function"),
             FunctionKind::Method => write!(f, "method"),
+            FunctionKind::Initializer => write!(f, "initializer"),
         }
     }
 }
