@@ -161,7 +161,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
     fn visit_class_stmt(
         &mut self,
         name: &Token<'a>,
-        superclass: &Option<Box<Stmt<'a>>>,
+        superclass: &Option<Box<Expr<'a>>>,
         methods: &'a [crate::Result<Stmt<'a>>],
     ) -> crate::Result<()> {
         let _ = superclass;

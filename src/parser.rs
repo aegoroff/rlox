@@ -142,6 +142,21 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
+        let super_class = if self.matches(&[Token::Less]) {
+            let Ok(super_class) = self.consume_name_expr("superclass", start, finish) else {
+                return Some(Err(LoxError::Error(miette!(
+                    labels = vec![LabeledSpan::at(
+                        start..=finish,
+                        "Superclass name expected after this"
+                    )],
+                    "Missing superclass name"
+                ))));
+            };
+            Some(Box::new(super_class))
+        } else {
+            None
+        };
+
         if let Err(e) = self.consume(Token::LeftBrace) {
             return Some(Err(e));
         }
@@ -158,7 +173,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let kind = StmtKind::Class(name, None, methods);
+        let kind = StmtKind::Class(name, super_class, methods);
 
         Some(Ok(Stmt {
             kind,
@@ -1119,11 +1134,31 @@ impl<'a> Parser<'a> {
         start: usize,
         finish: usize,
     ) -> crate::Result<Token<'a>> {
+        let expr = self.consume_name_expr(kind, start, finish)?;
+        if let ExprKind::Variable(token) = expr.kind {
+            Ok(token)
+        } else {
+            Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(
+                    start..=finish,
+                    format!("Invalid {kind} name")
+                )],
+                "Invalid {kind} name"
+            )))
+        }
+    }
+
+    fn consume_name_expr(
+        &mut self,
+        kind: &str,
+        start: usize,
+        finish: usize,
+    ) -> crate::Result<Expr<'a>> {
         // IMPORTANT: dont call expression here so as not to conflict with assignment
-        let name = match self.primary() {
+        match self.primary() {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
-                    ExprKind::Variable(token) => Ok(token),
+                    ExprKind::Variable(_) => Ok(expr),
                     _ => Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
@@ -1141,9 +1176,7 @@ impl<'a> Parser<'a> {
                 )],
                 "Missing {kind} name"
             ))),
-        };
-        let name = name?;
-        Ok(name)
+        }
     }
 
     fn consume_identifier(&mut self, start: usize, finish: usize) -> crate::Result<Token<'a>> {

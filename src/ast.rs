@@ -37,7 +37,7 @@ pub trait StmtVisitor<'a, R> {
     fn visit_class_stmt(
         &mut self,
         name: &Token<'a>,
-        superclass: &Option<Box<Stmt<'a>>>,
+        superclass: &Option<Box<Expr<'a>>>,
         methods: &'a [crate::Result<Stmt<'a>>],
     ) -> R;
     fn visit_expression_stmt(&mut self, expr: &Expr<'a>) -> R;
@@ -166,7 +166,7 @@ pub enum StmtKind<'a> {
     /// name, superclass, methods
     Class(
         Token<'a>,
-        Option<Box<Stmt<'a>>>,
+        Option<Box<Expr<'a>>>,
         Vec<crate::Result<Stmt<'a>>>,
     ),
     Expression(Box<Expr<'a>>),
