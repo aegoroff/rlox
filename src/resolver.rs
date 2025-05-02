@@ -8,10 +8,17 @@ use crate::{
 };
 use miette::{LabeledSpan, miette};
 
+#[derive(Debug, Clone, Copy)]
+enum ClassKind {
+    None = 0,
+    Class = 1,
+}
+
 pub struct Resolver<'a, W: std::io::Write> {
     interpreter: Interpreter<'a, W>,
     scopes: Vec<HashMap<&'a str, bool>>,
     current_function: FunctionKind,
+    current_class: ClassKind,
 }
 
 impl<'a, W: std::io::Write> Resolver<'a, W> {
@@ -20,6 +27,7 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
             interpreter,
             scopes: vec![],
             current_function: FunctionKind::None,
+            current_class: ClassKind::None,
         }
     }
 
@@ -155,6 +163,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
         methods: &'a [crate::Result<Stmt<'a>>],
     ) -> crate::Result<()> {
         let _ = superclass;
+        let enclosing_class = self.current_class;
+        self.current_class = ClassKind::Class;
         self.declare(name);
         self.define(name);
         self.begin_scope();
@@ -164,6 +174,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
             self.resolve_statement(method)?;
         }
         self.end_scope();
+        self.current_class = enclosing_class;
         Ok(())
     }
 
@@ -325,8 +336,18 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, 
     }
 
     fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> crate::Result<()> {
-        self.resolve_local(obj, keyword);
-        Ok(())
+        if let ClassKind::None = self.current_class {
+            Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(
+                    obj.location.clone(),
+                    "Cannot use 'this' outside of a class"
+                )],
+                "Syntax error"
+            )))
+        } else {
+            self.resolve_local(obj, keyword);
+            Ok(())
+        }
     }
 
     fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<()> {
