@@ -413,15 +413,21 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     "Class has no method"
                 )));
             };
-            // Callee expressin here is Expr { kind: Get(Identifier("method"), Expr { kind: Variable`(Identifier("c")), location: ... }), location: ... }
-            // TODO: bind this to instance
             let callee = method.clone();
             let callee = callee.borrow();
             self.call_code(arguments, callee)
         } else {
             let callee = self.callables.get(function)?;
             let callee = callee.borrow();
-            self.call_code(arguments, callee)
+            if let Some(method) = callee.get("init") {
+                // Call constructor if available
+                let instance = self.call_code(vec![], callee);
+                let ctor = method.borrow();
+                self.call_code(arguments, ctor)?;
+                instance
+            } else {
+                self.call_code(arguments, callee)
+            }
         }
     }
 
