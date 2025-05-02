@@ -119,15 +119,7 @@ impl<'a> Parser<'a> {
             ))));
         }
 
-        let Some(block) = self.block() else {
-            return Some(Err(LoxError::Error(miette!(
-                labels = vec![LabeledSpan::at(
-                    start..=finish,
-                    format!("Missing {kind} block")
-                )],
-                "Missing {kind} block"
-            ))));
-        };
+        let block = Ok(self.block());
         let function_kind = if let Token::Identifier("init") = name {
             FunctionKind::Initializer
         } else {
@@ -251,11 +243,11 @@ impl<'a> Parser<'a> {
         let current = self.tokens.peek()?;
         match current {
             Ok((_, Token::If, _)) => self.if_statement(),
-            Ok((_, Token::While, _)) => self.while_statement(),
-            Ok((_, Token::For, _)) => self.for_statement(),
+            Ok((_, Token::While, _)) => Some(self.while_statement()),
+            Ok((_, Token::For, _)) => Some(self.for_statement()),
             Ok((_, Token::Print, _)) => self.print_statement(),
             Ok((_, Token::Return, _)) => self.return_statement(),
-            Ok((_, Token::LeftBrace, _)) => self.block(),
+            Ok((_, Token::LeftBrace, _)) => Some(Ok(self.block())),
             _ => self.expr_statement(),
         }
     }
@@ -338,52 +330,40 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn while_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
-        let start_loc = match self.consume_current_and_open_paren("while") {
-            Ok(x) => x,
-            Err(e) => return Some(Err(e)),
-        };
+    fn while_statement(&mut self) -> crate::Result<Stmt<'a>> {
+        let start_loc = self.consume_current_and_open_paren("while")?;
 
         let Some(cond) = self.expression() else {
-            return Some(Err(LoxError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     *start_loc.start()..=(*start_loc.start() + 5),
                     "No while condition specified"
                 )],
                 "Invalid condition syntax"
-            ))));
+            )));
         };
-        let cond = match cond {
-            Ok(cond) => cond,
-            Err(e) => return Some(Err(e)),
-        };
+        let cond = cond?;
 
         let cond_end = *cond.location.end();
 
-        let right_paren_location = match self.consume_right_parent(cond_end) {
-            Ok(loc) => loc,
-            Err(e) => return Some(Err(e)),
-        };
+        let right_paren_location = self.consume_right_parent(cond_end)?;
 
         let Some(body) = self.statement() else {
-            return Some(Err(LoxError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing while body")],
                 "Missing while body"
-            ))));
+            )));
         };
 
         let kind = StmtKind::While(Box::new(cond), Box::new(body));
-        Some(Ok(Stmt {
+        Ok(Stmt {
             kind,
             location: *start_loc.start()..=*right_paren_location.end(),
-        }))
+        })
     }
 
-    fn for_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
-        let start_loc = match self.consume_current_and_open_paren("for") {
-            Ok(x) => x,
-            Err(e) => return Some(Err(e)),
-        };
+    fn for_statement(&mut self) -> crate::Result<Stmt<'a>> {
+        let start_loc = self.consume_current_and_open_paren("for")?;
 
         let initializer = if self.consume_semicolon(*start_loc.end()).is_ok() {
             None
@@ -400,21 +380,16 @@ impl<'a> Parser<'a> {
             }
         } else {
             let Some(cond) = self.expression() else {
-                return Some(Err(LoxError::Error(miette!(
+                return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         *start_loc.start()..=(*start_loc.start() + 5),
                         "No condition specified"
                     )],
                     "Invalid condition syntax"
-                ))));
+                )));
             };
-            if let Err(e) = self.consume_semicolon(*start_loc.end()) {
-                return Some(Err(e));
-            }
-            match cond {
-                Ok(cond) => cond,
-                Err(e) => return Some(Err(e)),
-            }
+            self.consume_semicolon(*start_loc.end())?;
+            cond?
         };
 
         let increment = if let Some(Ok((_, Token::RightParen, _))) = self.tokens.peek() {
@@ -423,16 +398,13 @@ impl<'a> Parser<'a> {
             self.expression()
         };
 
-        let right_paren_location = match self.consume_right_parent(*start_loc.end()) {
-            Ok(loc) => loc,
-            Err(e) => return Some(Err(e)),
-        };
+        let right_paren_location = self.consume_right_parent(*start_loc.end())?;
 
         let Some(body) = self.statement() else {
-            return Some(Err(LoxError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing for body")],
                 "Missing body"
-            ))));
+            )));
         };
 
         let mut statements = vec![body];
@@ -454,12 +426,12 @@ impl<'a> Parser<'a> {
 
         if let Some(initializer) = initializer {
             let statements = vec![initializer, while_stmt];
-            Some(Ok(Stmt {
+            Ok(Stmt {
                 kind: StmtKind::Block(statements),
                 location: *start_loc.start()..=*start_loc.start(),
-            }))
+            })
         } else {
-            Some(while_stmt)
+            while_stmt
         }
     }
 
@@ -507,7 +479,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn block(&mut self) -> Option<crate::Result<Stmt<'a>>> {
+    fn block(&mut self) -> Stmt<'a> {
         let (start, _, mut finish) = self.tokens.next().unwrap().unwrap(); // consume '{' token TODO: handle error
         let mut statements = vec![];
         loop {
@@ -526,10 +498,10 @@ impl<'a> Parser<'a> {
             }
         }
         let kind = StmtKind::Block(statements);
-        Some(Ok(Stmt {
+        Stmt {
             kind,
             location: start..=finish,
-        }))
+        }
     }
 
     fn semicolon_terminated_expression(&mut self) -> Option<crate::Result<Expr<'a>>> {

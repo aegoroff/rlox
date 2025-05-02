@@ -172,7 +172,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     fn call_code(
         &mut self,
         arguments: Vec<LoxValue>,
-        callee: std::cell::Ref<'_, dyn LoxCallable<'a>>,
+        callee: &std::cell::Ref<'_, dyn LoxCallable<'a>>,
     ) -> crate::Result<LoxValue> {
         match callee.call(arguments)? {
             CallResult::Value(lox_value) => Ok(lox_value),
@@ -418,23 +418,23 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             if function == "init" {
                 // handle var c = Class(0).init(10);
                 let class = class.borrow();
-                let instance = self.call_code(vec![], class);
-                self.call_code(arguments, callee)?;
+                let instance = self.call_code(vec![], &class);
+                self.call_code(arguments, &callee)?;
                 instance
             } else {
-                self.call_code(arguments, callee)
+                self.call_code(arguments, &callee)
             }
         } else {
             let callee = self.callables.get(function)?;
             let callee = callee.borrow();
             if let Some(method) = callee.get("init") {
                 // Call constructor if available
-                let instance = self.call_code(vec![], callee);
+                let instance = self.call_code(vec![], &callee);
                 let ctor = method.borrow();
-                self.call_code(arguments, ctor)?;
+                self.call_code(arguments, &ctor)?;
                 instance
             } else {
-                self.call_code(arguments, callee)
+                self.call_code(arguments, &callee)
             }
         }
     }
@@ -446,13 +446,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 "Field or method name must be an identifier"
             )));
         };
-        let (class_name, closure) = match &obj {
-            LoxValue::Instance(class_name, closure) => (class_name, closure),
-            _ => {
-                return Err(LoxError::Error(miette!(
-                    "Only instances have properties or methods"
-                )));
-            }
+        let LoxValue::Instance(class_name, closure) = &obj else {
+            return Err(LoxError::Error(miette!(
+                "Only instances have properties or methods"
+            )));
         };
         if let Ok(class) = self.callables.get(class_name) {
             if class.borrow().get(identifier).is_some() {

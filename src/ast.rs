@@ -107,6 +107,7 @@ impl<'a> Expr<'a> {
         }
     }
 
+    #[must_use]
     pub fn get_hash_code(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
