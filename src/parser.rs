@@ -35,7 +35,6 @@ impl<'a> Parser<'a> {
             Ok((_, Token::Class, _)) => self.class_declaration(),
             Ok((_, Token::Fun, _)) => {
                 self.tokens.next(); // consume FUN token TODO: include FUN start position into stmt location
-                //let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
                 self.function(FunctionKind::Function)
             }
             _ => self.statement(),
