@@ -129,7 +129,7 @@ impl<'a> Parser<'a> {
             ))));
         };
 
-        let kind = StmtKind::Function(kind, name?, args, Box::new(block));
+        let kind = StmtKind::Function(kind, name, args, Box::new(block));
 
         Some(Ok(Stmt {
             kind,
@@ -143,16 +143,6 @@ impl<'a> Parser<'a> {
         let name = match self.consume_name("class", start, finish) {
             Ok(name) => name,
             Err(e) => return Some(Err(e)),
-        };
-
-        let Some(name) = name else {
-            return Some(Err(LoxError::Error(miette!(
-                labels = vec![LabeledSpan::at(
-                    start..=finish,
-                    "class name expected after this"
-                )],
-                "Missing class name"
-            ))));
         };
 
         if let Err(e) = self.consume(Token::LeftBrace) {
@@ -1151,12 +1141,12 @@ impl<'a> Parser<'a> {
         kind: &str,
         start: usize,
         finish: usize,
-    ) -> crate::Result<Option<Token<'a>>> {
+    ) -> crate::Result<Token<'a>> {
         // IMPORTANT: dont call expression here so as not to conflict with assignment
         let name = match self.primary() {
             Some(result) => match result {
                 Ok(expr) => match expr.kind {
-                    ExprKind::Variable(token) => Ok(Some(token)),
+                    ExprKind::Variable(token) => Ok(token),
                     _ => Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
                             start..=finish,
