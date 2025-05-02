@@ -415,7 +415,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             };
             let callee = method.clone();
             let callee = callee.borrow();
-            self.call_code(arguments, callee)
+            if function == "init" {
+                // handle var c = Class(0).init(10);
+                let class = class.borrow();
+                let instance = self.call_code(vec![], class);
+                self.call_code(arguments, callee)?;
+                instance
+            } else {
+                self.call_code(arguments, callee)
+            }
         } else {
             let callee = self.callables.get(function)?;
             let callee = callee.borrow();
