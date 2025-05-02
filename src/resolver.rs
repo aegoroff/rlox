@@ -214,16 +214,22 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
 
     fn visit_return_stmt(&mut self, keyword: &Token<'a>, value: &Expr<'a>) -> crate::Result<()> {
         let _ = keyword;
-        if let FunctionKind::None = self.current_function {
-            Err(LoxError::Error(miette!(
+        match self.current_function {
+            FunctionKind::None => Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     value.location.clone(),
                     "Cannot return from top level code"
                 )],
                 "Syntax error"
-            )))
-        } else {
-            self.resolve_expression(value)
+            ))),
+            FunctionKind::Initializer => Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(
+                    value.location.clone(),
+                    "Can't return a value from an initializer."
+                )],
+                "Semantic error"
+            ))),
+            _ => self.resolve_expression(value),
         }
     }
 
