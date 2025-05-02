@@ -427,8 +427,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
         let obj = self.evaluate(object)?;
-        let Token::Identifier(field_or_method) = name else {
-            return Err(LoxError::Error(miette!("Field name must be an identifier")));
+        let Token::Identifier(identifier) = name else {
+            return Err(LoxError::Error(miette!(
+                "Field or method name must be an identifier"
+            )));
         };
         let (class_name, closure) = match &obj {
             LoxValue::Instance(class_name, closure) => (class_name, closure),
@@ -439,15 +441,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             }
         };
         if let Ok(class) = self.callables.get(class_name) {
-            if class.borrow().get(field_or_method).is_some() {
+            if class.borrow().get(identifier).is_some() {
                 return Ok(LoxValue::Callable(
                     "fn",
-                    (*field_or_method).to_string(),
+                    (*identifier).to_string(),
                     Some(class_name.to_string()),
                 ));
             }
         }
-        let field = closure.borrow().get(field_or_method)?;
+        let field = closure.borrow().get(identifier)?;
         Ok(field)
     }
 
