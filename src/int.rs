@@ -800,6 +800,7 @@ mod tests {
     #[test_case("class Class { method() { print this.some; } } var c = Class(); c.some = 10; c.method();", "10" ; "this usage")]
     #[test_case("class Class { init() { this.some = 10; } method() { print this.some; } } var c = Class(); c.method();", "10" ; "class constructor")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(10); c.method();", "10" ; "class constructor with arg")]
+    #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(10); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
