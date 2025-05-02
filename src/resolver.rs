@@ -169,6 +169,22 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
         self.current_class = ClassKind::Class;
         self.declare(name);
         self.define(name);
+        if let Some(superclass) = superclass {
+            self.resolve_expression(superclass)?;
+            if let ExprKind::Variable(Token::Identifier(super_name)) = &superclass.kind {
+                if let Token::Identifier(name) = name {
+                    if *super_name == *name {
+                        return Err(LoxError::Error(miette!(
+                            labels = vec![LabeledSpan::at(
+                                superclass.location.clone(),
+                                "A class cannot inherit from itself"
+                            )],
+                            "Invalid superclass"
+                        )));
+                    }
+                }
+            }
+        }
         self.begin_scope();
         self.define(&Token::Identifier("this"));
 
