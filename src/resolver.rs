@@ -222,13 +222,10 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
                 )],
                 "Syntax error"
             ))),
-            FunctionKind::Initializer => Err(LoxError::Error(miette!(
-                labels = vec![LabeledSpan::at(
-                    value.location.clone(),
-                    "Can't return a value from an initializer."
-                )],
-                "Semantic error"
-            ))),
+            FunctionKind::Initializer => {
+                // TODO: print error
+                self.resolve_expression(value)
+            },
             _ => self.resolve_expression(value),
         }
     }
