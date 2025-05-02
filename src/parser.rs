@@ -143,16 +143,12 @@ impl<'a> Parser<'a> {
         };
 
         let super_class = if self.matches(&[Token::Less]) {
-            let Ok(super_class) = self.consume_name_expr("superclass", start, finish) else {
-                return Some(Err(LoxError::Error(miette!(
-                    labels = vec![LabeledSpan::at(
-                        start..=finish,
-                        "Superclass name expected after this"
-                    )],
-                    "Missing superclass name"
-                ))));
-            };
-            Some(Box::new(super_class))
+            match self.consume_name_expr("superclass", start, finish) {
+                Ok(super_class) => Some(Box::new(super_class)),
+                Err(e) => {
+                    return Some(Err(e));
+                }
+            }
         } else {
             None
         };
@@ -1139,7 +1135,7 @@ impl<'a> Parser<'a> {
         } else {
             Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
-                    start..=finish,
+                    expr.location.start..=expr.location.end,
                     format!("Invalid {kind} name")
                 )],
                 "Invalid {kind} name"
@@ -1160,7 +1156,7 @@ impl<'a> Parser<'a> {
                     ExprKind::Variable(_) => Ok(expr),
                     _ => Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
-                            start..=finish,
+                            expr.location.start..=expr.location.end,
                             format!("Invalid {kind} name")
                         )],
                         "Invalid {kind} name"
@@ -1170,7 +1166,7 @@ impl<'a> Parser<'a> {
             },
             None => Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
-                    start..=finish,
+                    start..finish,
                     format!("{kind} name expected after this")
                 )],
                 "Missing {kind} name"
