@@ -930,7 +930,7 @@ mod tests {
     #[test_case("class A { init(param) { this.field = param; } test() { print this.field; } } class B < A {} var b = B(10); b.test();", "10" ; "Call superclass with parameter init subclass without parameter init")]
     #[test_case("class A { init(x) { this.f1 = x; } test() { return this.f1; } } class B < A { init(x, y) { this.f1 = x; this.f2 = y; } sum() { return this.test() + this.f1 + this.f2; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with less init parameters then subclass")]
     #[test_case("class A { init(x, y) { this.f1 = x; this.f2 = y; } test() { return this.f1 + this.f2; } } class B < A { init(x) { this.f1 = x; } sum() { return this.test() + this.f1; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with greater init parameters then subclass")]
-    fn eval_single_result_tests(input: &str, expected: &str) {
+    fn interpretation_positive(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
         let mut stdout = Vec::new();
@@ -948,5 +948,24 @@ mod tests {
 
         let actual = String::from_utf8(stdout).unwrap();
         assert_eq!(actual.trim_end(), expected);
+    }
+
+    #[test_case("fun f() 123;" ; "Invalid function body")]
+    fn interpretation_negative(input: &str) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let mut stdout = Vec::new();
+        let interpreter = Interpreter::new(&mut stdout);
+        let resolver = Resolver::new(interpreter);
+        let stmts: Vec<crate::Result<Stmt>> = parser.collect();
+
+        // Act
+        let interpretation_result = resolver.interpret(&stmts);
+
+        // Assert
+        assert!(
+            interpretation_result.is_err(),
+            "interpretation_result should be Error. But it was OK. \nText: {input}"
+        )
     }
 }

@@ -101,24 +101,16 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let Some(left_brace) = self.tokens.peek() else {
-            return Some(Err(LoxError::Error(miette!(
-                labels = vec![LabeledSpan::at(
-                    start..=finish,
-                    format!("{kind} block expected after this")
-                )],
-                "Missing {kind} block"
-            ))));
+        if let Err(e) = self.consume(&Token::LeftBrace) {
+            return Some(Err(e));
         };
 
-        if let Err(e) = left_brace {
-            return Some(Err(LoxError::Error(miette!(
-                labels = vec![LabeledSpan::at(start..=finish, e.to_string())],
-                "Missing {kind} block"
-            ))));
-        }
-
-        let block = Ok(self.block());
+        let start = if let Some(Ok((s, _, _))) = self.tokens.peek() {
+            *s
+        } else {
+            0
+        };
+        let block = Ok(self.block(start));
         let function_kind = if let Token::Identifier(INIT) = name {
             FunctionKind::Initializer
         } else {
@@ -257,7 +249,11 @@ impl<'a> Parser<'a> {
             Ok((_, Token::For, _)) => Some(self.for_statement()),
             Ok((_, Token::Print, _)) => self.print_statement(),
             Ok((_, Token::Return, _)) => self.return_statement(),
-            Ok((_, Token::LeftBrace, _)) => Some(Ok(self.block())),
+            Ok((s, Token::LeftBrace, _)) => {
+                let start = *s;
+                self.tokens.next();
+                Some(Ok(self.block(start)))
+            }
             _ => self.expr_statement(),
         }
     }
@@ -489,8 +485,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn block(&mut self) -> Stmt<'a> {
-        let (start, _, mut finish) = self.tokens.next().unwrap().unwrap(); // consume '{' token TODO: handle error
+    fn block(&mut self, start: usize) -> Stmt<'a> {
+        let mut finish = 0;
         let mut statements = vec![];
         loop {
             if self.matches(&[Token::RightBrace]) {
