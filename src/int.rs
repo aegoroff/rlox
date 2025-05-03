@@ -439,12 +439,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let callee = self.callables.get(function)?;
             let callee = callee.borrow();
             if let Some(method) = callee.get(INIT) {
+                // Create instance of the class: Class()
                 // Call constructor if available
                 let instance = self.call_code(&arguments, &callee);
                 let ctor = method.borrow();
                 self.call_code(&arguments, &ctor)?;
                 instance
             } else {
+                // plain function call
                 self.call_code(&arguments, &callee)
             }
         }
