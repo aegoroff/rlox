@@ -1358,7 +1358,7 @@ mod tests {
     #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
     #[test_case("(\"a\" + 4) + \"c\"", "a4c")]
     #[test_case("(4 + \"a\") + \"c\"", "4ac")]
-    #[test_case("(true + \"a\") + \"c\"", "true_a_c")]
+    #[test_case("(true + \"a\") + \"c\"", "trueac")]
     #[test_case("(nil + \"a\") + \"c\"", "ac")]
     fn eval_string_positive_tests(input: &str, expected: &str) {
         // Arrange
