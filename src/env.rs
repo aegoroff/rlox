@@ -61,6 +61,25 @@ impl Environment {
         }
     }
 
+    // to make super work, we need to define the variable at the distance of the superclass
+    pub fn define_at(&mut self, distance: usize, id: String, initializer: LoxValue) {
+        if distance == 0 {
+            self.define(id, initializer)
+        } else {
+            let mut parent: Option<Rc<RefCell<Environment>>> = self.enclosing.clone();
+            for _ in 1..distance {
+                if let Some(e) = parent {
+                    let mut temp: Option<Rc<RefCell<Environment>>> = None;
+                    temp.clone_from(&e.borrow().enclosing);
+                    parent = temp;
+                }
+            }
+            if let Some(e) = parent {
+                e.borrow_mut().define(id, initializer);
+            }
+        }
+    }
+
     pub fn assign(&mut self, id: String, initializer: LoxValue) -> crate::Result<()> {
         if self.values.contains_key(&id) {
             self.values.entry(id).and_modify(|e| *e = initializer);

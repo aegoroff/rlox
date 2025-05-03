@@ -155,6 +155,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     "Using uninitialized variable '{name}'"
                 )))
             } else {
+                // TODO: println!("found in locals: {val}");
                 Ok(val)
             }
         } else {
@@ -400,7 +401,10 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         }
         let LoxValue::Callable(_, ref function, parent) = receiver else {
             return Err(LoxError::Error(miette!(
-                labels = vec![LabeledSpan::at(location, "Invalid callable type")],
+                labels = vec![LabeledSpan::at(
+                    location,
+                    format!("Invalid callable type: {callee:?}")
+                )],
                 "Invalid callable type"
             )));
         };
@@ -454,6 +458,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
         let obj = self.evaluate(object)?;
+        // TODO: println!("get on: {object:?}");
         let Token::Identifier(identifier) = name else {
             return Err(LoxError::Error(miette!(
                 "Field or method name must be an identifier"
@@ -548,7 +553,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
     }
 
     fn visit_this_expr(&mut self, obj: &Expr<'a>, _: &Token<'a>) -> crate::Result<LoxValue> {
-        let _ = obj;
         self.lookup_variable(obj, THIS)
     }
 

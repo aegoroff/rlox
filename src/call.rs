@@ -157,7 +157,7 @@ impl<'a> LoxCallable<'a> for Class<'a> {
                 LoxValue::Instance(superclass.borrow().name().to_string(), child.clone());
             self.closure
                 .borrow_mut()
-                .define(SUPER.to_string(), super_instance.clone());
+                .define_at(1, SUPER.to_string(), super_instance.clone());
         }
         let instance = LoxValue::Instance(self.name.to_string(), child.clone());
         self.closure
