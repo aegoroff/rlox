@@ -399,10 +399,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        // TODO: get correct callable in case of super
-        // if let LoxValue::Instance(x, y) = &receiver {
-
-        // }
         let LoxValue::Callable(_, ref function, parent) = receiver else {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
@@ -551,9 +547,22 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         keyword: &Token<'a>,
         method: &Token<'a>,
     ) -> crate::Result<LoxValue> {
-        let _ = method;
         let _ = keyword;
-        self.lookup_variable(obj, SUPER)
+        let Token::Identifier(method) = method else {
+            return Err(LoxError::Error(miette!("Invalid identifier")));
+        };
+        let instance = self.lookup_variable(obj, SUPER)?;
+        if let LoxValue::Instance(class, _) = &instance {
+            let callable = self.callables.get(class)?;
+            let method = callable.borrow().get(method).unwrap();
+            Ok(LoxValue::Callable(
+                "fn",
+                method.borrow().name().to_string(),
+                Some(class.to_owned()),
+            ))
+        } else {
+            Ok(instance)
+        }
     }
 
     fn visit_this_expr(&mut self, obj: &Expr<'a>, _: &Token<'a>) -> crate::Result<LoxValue> {
