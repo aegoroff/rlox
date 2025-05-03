@@ -419,6 +419,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             };
 
             if let "class" = kind {
+                // Call superclass ctor to init it's this instance
                 let super_callee = class.borrow();
                 self.call_code(&arguments, &super_callee)?;
 
