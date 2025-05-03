@@ -64,7 +64,7 @@ impl Environment {
     // to make super work, we need to define the variable at the distance of the superclass
     pub fn define_at(&mut self, distance: usize, id: String, initializer: LoxValue) {
         if distance == 0 {
-            self.define(id, initializer)
+            self.define(id, initializer);
         } else {
             let mut parent: Option<Rc<RefCell<Environment>>> = self.enclosing.clone();
             for _ in 1..distance {

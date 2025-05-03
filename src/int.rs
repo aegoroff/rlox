@@ -201,6 +201,13 @@ fn map_operand_err<T>(
     err.map_err(|e| LoxError::Error(miette!(labels = vec![LabeledSpan::at(span, label)], "{e}")))
 }
 
+fn align_arity(args_len: usize, arity: usize) -> crate::Result<usize> {
+    match args_len.cmp(&arity) {
+        std::cmp::Ordering::Less => Err(LoxError::Error(miette!("Invalid parameters"))),
+        std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => Ok(arity),
+    }
+}
+
 const RIGHT_OPERAND_ERR: &str = "right operand type not match left one";
 const RIGHT_NUMBER_ERR: &str = "right operand must be number";
 const LEFT_NUMBER_ERR: &str = "left operand must be number";
@@ -415,8 +422,21 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 if let Some(method) = super_callee.get(INIT) {
                     // Create instance of the class: Class()
                     // Call constructor if available
-                    let ctor = method.borrow();
-                    self.call_code(&arguments, &ctor)?;
+                    let initializer = method.borrow();
+
+                    // superclass may have initializer with less parameters then subclass
+                    let Ok(args_len) = align_arity(arguments.len(), super_callee.arity()) else {
+                        return Err(LoxError::Error(miette!(
+                            labels = vec![LabeledSpan::at(
+                                location,
+                                format!(
+                                    "Superclass '{parent}' initializer have more parameter then subclass initializer"
+                                )
+                            )],
+                            "Invalid parameters"
+                        )));
+                    };
+                    self.call_code(&arguments[..args_len], &initializer)?;
                 }
 
                 let callee = self.callables.get(function)?;
@@ -425,8 +445,22 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     // Create instance of the class: Class()
                     // Call constructor if available
                     let instance = self.call_code(&arguments, &callee);
-                    let ctor = method.borrow();
-                    self.call_code(&arguments, &ctor)?;
+                    let initializer = method.borrow();
+
+                    // subclass may have initializer with less parameters then superclass
+                    let Ok(args_len) = align_arity(arguments.len(), initializer.arity()) else {
+                        return Err(LoxError::Error(miette!(
+                            labels = vec![LabeledSpan::at(
+                                location,
+                                format!(
+                                    "Subclass '{function}' initializer have more parameter then passed"
+                                )
+                            )],
+                            "Invalid parameters"
+                        )));
+                    };
+
+                    self.call_code(&arguments[..args_len], &initializer)?;
                     instance
                 } else {
                     // plain function call
@@ -583,7 +617,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             Ok(LoxValue::Callable(
                 "fn",
                 method.borrow().name().to_string(),
-                Some(class_to_call.to_owned()),
+                Some(class_to_call.clone()),
             ))
         } else {
             Ok(instance)
@@ -894,6 +928,8 @@ mod tests {
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} class C < B {} C().test();", "B" ; "Call super method when shadowed defined in class and call shadowed")]
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} class C < B {} var c = C(); c.test();", "B" ; "Call super method when shadowed defined in class and call shadowed var variant")]
     #[test_case("class A { init(param) { this.field = param; } test() { print this.field; } } class B < A {} var b = B(10); b.test();", "10" ; "Call superclass with parameter init subclass without parameter init")]
+    #[test_case("class A { init(x) { this.f1 = x; } test() { return this.f1; } } class B < A { init(x, y) { this.f1 = x; this.f2 = y; } sum() { return this.test() + this.f1 + this.f2; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with less init parameters then subclass")]
+    #[test_case("class A { init(x, y) { this.f1 = x; this.f2 = y; } test() { return this.f1 + this.f2; } } class B < A { init(x) { this.f1 = x; } sum() { return this.test() + this.f1; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with greater init parameters then subclass")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
