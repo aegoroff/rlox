@@ -869,8 +869,11 @@ mod tests {
     #[test_case("class A {} fun f() { class B < A {} return B; } print f();", "<class B>" ; "Local class inherits from global")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } print B().bf();", "10" ; "Call inherited method inside other")]
-    #[test_case("class A { method() { print \"A method\"; }} class B < A {  method() { print \"B method\";  } test() { super.method(); }} class C < B {} C().test();", "A method" ; "Call super method inside grandchild class")]
-    #[test_case("class A { method() { print \"A method\"; }} class B < A {  method() { print \"B method\";  } test() { super.method(); }} class C < B {} B().test();", "A method" ; "Call super method when shadowed defined in class")]
+    #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { super.method(); }} class C < B {} C().test();", "A" ; "Call super method inside grandchild class")]
+    #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { super.method(); }} class C < B {} B().test();", "A" ; "Call super method when shadowed defined in class")]
+    #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} B().test();", "B" ; "Call this method when shadowed defined in class")]
+    #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} class C < B {} C().test();", "B" ; "Call super method when shadowed defined in class and call shadowed")]
+    #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} class C < B {} var c = C(); c.test();", "B" ; "Call super method when shadowed defined in class and call shadowed var variant")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
