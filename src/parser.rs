@@ -5,7 +5,7 @@ use miette::{LabeledSpan, miette};
 use crate::{
     LoxError,
     ast::{Expr, ExprKind, FunctionKind, Stmt, StmtKind},
-    lexer::{Lexer, Token},
+    lexer::{INIT, Lexer, Token},
 };
 
 pub struct Parser<'a> {
@@ -119,7 +119,7 @@ impl<'a> Parser<'a> {
         }
 
         let block = Ok(self.block());
-        let function_kind = if let Token::Identifier("init") = name {
+        let function_kind = if let Token::Identifier(INIT) = name {
             FunctionKind::Initializer
         } else {
             kind

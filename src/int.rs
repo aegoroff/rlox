@@ -9,7 +9,11 @@ use std::{
 use miette::{LabeledSpan, SourceSpan, miette};
 
 use crate::{
-    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor}, call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable}, env::Environment, lexer::{Token, SUPER, THIS}, LoxError
+    LoxError,
+    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor},
+    call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable},
+    env::Environment,
+    lexer::{INIT, SUPER, THIS, Token},
 };
 
 pub struct Interpreter<'a, W: std::io::Write> {
@@ -422,7 +426,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             };
             let callee = method.clone();
             let callee = callee.borrow();
-            if function == "init" {
+            if function == INIT {
                 // handle var c = Class(0).init(10);
                 let class = class.borrow();
                 let instance = self.call_code(&arguments, &class);
@@ -434,7 +438,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         } else {
             let callee = self.callables.get(function)?;
             let callee = callee.borrow();
-            if let Some(method) = callee.get("init") {
+            if let Some(method) = callee.get(INIT) {
                 // Call constructor if available
                 let instance = self.call_code(&arguments, &callee);
                 let ctor = method.borrow();

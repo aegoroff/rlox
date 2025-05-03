@@ -12,7 +12,7 @@ use crate::{
     LoxError,
     ast::{LoxValue, Stmt},
     env::Environment,
-    lexer::THIS,
+    lexer::{INIT, THIS},
 };
 
 pub enum CallResult<'a> {
@@ -138,7 +138,7 @@ pub struct Class<'a> {
 
 impl<'a> LoxCallable<'a> for Class<'a> {
     fn arity(&self) -> usize {
-        if let Some(method) = self.methods.get("init") {
+        if let Some(method) = self.methods.get(INIT) {
             method.borrow().arity()
         } else {
             0

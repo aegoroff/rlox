@@ -13,6 +13,7 @@ pub struct Lexer<'a> {
 
 pub const THIS: &str = "this";
 pub const SUPER: &str = "super";
+pub const INIT: &str = "init";
 
 #[derive(PartialEq, Debug)]
 pub enum Token<'a> {
