@@ -150,22 +150,10 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     fn lookup_variable(&self, obj: &Expr<'a>, name: &'a str) -> crate::Result<LoxValue> {
         if let Some(distance) = self.locals.get(&obj.get_hash_code()) {
             let val = self.environment.borrow().get_at(*distance, name)?;
-            if let LoxValue::Nil = val {
-                Err(LoxError::Error(miette!(
-                    "Using uninitialized variable '{name}'"
-                )))
-            } else {
-                Ok(val)
-            }
+            Ok(val)
         } else {
             let val = self.globals.borrow().get(name)?;
-            if let LoxValue::Nil = val {
-                Err(LoxError::Error(miette!(
-                    "Using uninitialized variable '{name}'"
-                )))
-            } else {
-                Ok(val)
-            }
+            Ok(val)
         }
     }
 
@@ -866,6 +854,7 @@ mod tests {
 
     #[test_case("print 1+2;", "3")]
     #[test_case("var x; x = 2; var y = 4; print x+y;", "6")]
+    #[test_case("var a = 1; var a; print a;", "")]
     #[test_case("var a; print a = \"arg\";", "arg")]
     #[test_case(
         "var a = 1; var b; { var a = 2; b = 3; print a; } print a; print b;",
