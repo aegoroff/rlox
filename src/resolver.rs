@@ -14,6 +14,7 @@ use miette::{LabeledSpan, miette};
 enum ClassKind {
     None = 0,
     Class = 1,
+    Subclass = 2,
 }
 
 pub struct Resolver<'a, W: std::io::Write> {
@@ -165,12 +166,12 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
         superclass: &Option<Box<Expr<'a>>>,
         methods: &'a [crate::Result<Stmt<'a>>],
     ) -> crate::Result<()> {
-        let _ = superclass;
         let enclosing_class = self.current_class;
         self.current_class = ClassKind::Class;
         self.declare(name);
         self.define(name);
         if let Some(superclass) = superclass {
+            self.current_class = ClassKind::Subclass;
             self.resolve_expression(superclass)?;
             if let ExprKind::Variable(Token::Identifier(super_name)) = &superclass.kind {
                 if let Token::Identifier(name) = name {
@@ -363,8 +364,26 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, 
         method: &Token<'a>,
     ) -> crate::Result<()> {
         let _ = method;
-        self.resolve_local(obj, keyword);
-        Ok(())
+        if let ClassKind::None = self.current_class {
+            Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(
+                    obj.location.clone(),
+                    "Can't use 'super' outside of a class."
+                )],
+                "Syntax error"
+            )))
+        } else if let ClassKind::Class = self.current_class {
+            Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(
+                    obj.location.clone(),
+                    "Can't use 'super' in a class with no superclass."
+                )],
+                "Syntax error"
+            )))
+        } else {
+            self.resolve_local(obj, keyword);
+            Ok(())
+        }
     }
 
     fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> crate::Result<()> {
