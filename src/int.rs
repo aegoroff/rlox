@@ -553,6 +553,8 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         };
         let instance = self.lookup_variable(obj, SUPER)?;
         if let LoxValue::Instance(class, _) = &instance {
+            // TODO: validate if this class contains method with the same name if so
+            // get it's parent and call it
             let callable = self.callables.get(class)?;
             let method = callable.borrow().get(method).unwrap();
             Ok(LoxValue::Callable(
