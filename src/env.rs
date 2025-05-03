@@ -36,20 +36,10 @@ impl Environment {
     pub fn get_at(&self, distance: usize, id: &str) -> crate::Result<LoxValue> {
         if distance == 0 {
             self.get(id)
+        } else if let Some(e) = self.get_env_at(distance) {
+            e.borrow().get(id)
         } else {
-            let mut parent = self.enclosing.clone();
-            for _ in 1..distance {
-                if let Some(e) = parent {
-                    let mut temp: Option<Rc<RefCell<Environment>>> = None;
-                    temp.clone_from(&e.borrow().enclosing);
-                    parent = temp;
-                }
-            }
-            if let Some(e) = parent {
-                e.borrow().get(id)
-            } else {
-                Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
-            }
+            Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
         }
     }
 
@@ -65,18 +55,8 @@ impl Environment {
     pub fn define_at(&mut self, distance: usize, id: String, initializer: LoxValue) {
         if distance == 0 {
             self.define(id, initializer);
-        } else {
-            let mut parent: Option<Rc<RefCell<Environment>>> = self.enclosing.clone();
-            for _ in 1..distance {
-                if let Some(e) = parent {
-                    let mut temp: Option<Rc<RefCell<Environment>>> = None;
-                    temp.clone_from(&e.borrow().enclosing);
-                    parent = temp;
-                }
-            }
-            if let Some(e) = parent {
-                e.borrow_mut().define(id, initializer);
-            }
+        } else if let Some(e) = self.get_env_at(distance) {
+            e.borrow_mut().define(id, initializer);
         }
     }
 
@@ -101,20 +81,22 @@ impl Environment {
     ) -> crate::Result<()> {
         if distance == 0 {
             self.assign(id, initializer)
+        } else if let Some(e) = self.get_env_at(distance) {
+            e.borrow_mut().assign(id, initializer)
         } else {
-            let mut parent: Option<Rc<RefCell<Environment>>> = self.enclosing.clone();
-            for _ in 1..distance {
-                if let Some(e) = parent {
-                    let mut temp: Option<Rc<RefCell<Environment>>> = None;
-                    temp.clone_from(&e.borrow().enclosing);
-                    parent = temp;
-                }
-            }
+            Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
+        }
+    }
+
+    fn get_env_at(&self, distance: usize) -> Option<Rc<RefCell<Environment>>> {
+        let mut parent: Option<Rc<RefCell<Environment>>> = self.enclosing.clone();
+        for _ in 1..distance {
             if let Some(e) = parent {
-                e.borrow_mut().assign(id, initializer)
-            } else {
-                Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
+                let mut temp: Option<Rc<RefCell<Environment>>> = None;
+                temp.clone_from(&e.borrow().enclosing);
+                parent = temp;
             }
         }
+        parent
     }
 }
