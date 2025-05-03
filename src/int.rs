@@ -572,7 +572,6 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         superclass: &Option<Box<Expr<'a>>>,
         methods: &'a [crate::Result<Stmt<'a>>],
     ) -> crate::Result<()> {
-        let _ = superclass;
         let Token::Identifier(id) = name else {
             return Err(LoxError::Error(miette!("Invalid class name")));
         };
@@ -589,7 +588,24 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             method.accept(self)?;
         }
 
-        let definition = LoxValue::Callable("class", (*id).to_string(), None);
+        let superclass = if let Some(superclass) = superclass {
+            let location = superclass.location.clone();
+            let superclass = self.evaluate(superclass)?;
+            let LoxValue::Callable(_, name, _) = superclass else {
+                return Err(LoxError::Error(miette!(
+                    labels = vec![LabeledSpan::at(
+                        location,
+                        format!("Superclass '{superclass}' must be a class")
+                    )],
+                    "Superclass must be a class"
+                )));
+            };
+            Some(name)
+        } else {
+            None
+        };
+
+        let definition = LoxValue::Callable("class", (*id).to_string(), superclass);
         enclosing.borrow_mut().define((*id).to_string(), definition);
 
         let mut methods = vec![];
@@ -822,6 +838,7 @@ mod tests {
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(10); c.method();", "10" ; "class constructor with arg")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
+    #[test_case("class A {} fun f() { class B < A {} return B; } print f();", "<class A.B>" ; "Local class inherits from global")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
