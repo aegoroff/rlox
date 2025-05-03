@@ -67,6 +67,10 @@ impl<'a> LoxCallable<'a> for Clock {
         "clock"
     }
 
+    fn parent(&self) -> Option<&'a str> {
+        None
+    }
+
     fn call(&self, _: &[LoxValue]) -> crate::Result<CallResult<'a>> {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
@@ -76,10 +80,6 @@ impl<'a> LoxCallable<'a> for Clock {
     }
 
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        None
-    }
-
-    fn parent(&self) -> Option<&'a str> {
         None
     }
 }
@@ -98,6 +98,10 @@ impl<'a> LoxCallable<'a> for Function<'a> {
 
     fn name(&self) -> &'a str {
         self.name
+    }
+
+    fn parent(&self) -> Option<&'a str> {
+        None
     }
 
     fn call(&self, arguments: &[LoxValue]) -> crate::Result<CallResult<'a>> {
@@ -125,10 +129,6 @@ impl<'a> LoxCallable<'a> for Function<'a> {
     }
 
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        None
-    }
-
-    fn parent(&self) -> Option<&'a str> {
         None
     }
 }
@@ -169,6 +169,14 @@ impl<'a> LoxCallable<'a> for Class<'a> {
         self.name
     }
 
+    fn parent(&self) -> Option<&'a str> {
+        if let Some(p) = &self.superclass {
+            Some(p.borrow().name())
+        } else {
+            None
+        }
+    }
+
     fn call(&self, _: &[LoxValue]) -> crate::Result<CallResult<'a>> {
         let child = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
@@ -198,14 +206,6 @@ impl<'a> LoxCallable<'a> for Class<'a> {
             } else {
                 superclass.borrow().get(child)
             }
-        } else {
-            None
-        }
-    }
-
-    fn parent(&self) -> Option<&'a str> {
-        if let Some(p) = &self.superclass {
-            Some(p.borrow().name())
         } else {
             None
         }

@@ -412,7 +412,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     // Call constructor if available
                     let initializer = method.borrow();
 
-                    // superclass may have initializer with less parameters then subclass
+                    // superclass may have initializer with lower number of parameters then subclass
                     let Ok(args_len) = align_arity(arguments.len(), super_callee.arity()) else {
                         return Err(LoxError::Error(miette!(
                             labels = vec![LabeledSpan::at(
@@ -435,7 +435,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                     let instance = self.call_code(&arguments, &callee);
                     let initializer = method.borrow();
 
-                    // subclass may have initializer with less parameters then superclass
+                    // subclass may have initializer with lower parameters number then superclass
                     let Ok(args_len) = align_arity(arguments.len(), initializer.arity()) else {
                         return Err(LoxError::Error(miette!(
                             labels = vec![LabeledSpan::at(
