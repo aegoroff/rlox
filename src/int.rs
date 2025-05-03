@@ -398,7 +398,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        let LoxValue::Callable(_, ref function, parent) = receiver else {
+        let LoxValue::Callable(kind, ref function, parent) = receiver else {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     location,
@@ -418,25 +418,52 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 )));
             };
 
-            let Some(method) = class.borrow().get(function) else {
-                return Err(LoxError::Error(miette!(
-                    labels = vec![LabeledSpan::at(
-                        location,
-                        format!("Class '{parent}' has no method '{function}'")
-                    )],
-                    "Class has no method"
-                )));
-            };
-            let callee = method.clone();
-            let callee = callee.borrow();
-            if function == INIT {
-                // handle var c = Class(0).init(10);
-                let class = class.borrow();
-                let instance = self.call_code(&arguments, &class);
-                self.call_code(&arguments, &callee)?;
-                instance
+            if let "class" = kind {
+                let super_callee = class.borrow();
+                self.call_code(&arguments, &super_callee)?;
+
+                if let Some(method) = super_callee.get(INIT) {
+                    // Create instance of the class: Class()
+                    // Call constructor if available
+                    let ctor = method.borrow();
+                    self.call_code(&arguments, &ctor)?;
+                }
+
+                let callee = self.callables.get(function)?;
+                let callee = callee.borrow();
+                if let Some(method) = callee.get(INIT) {
+                    // Create instance of the class: Class()
+                    // Call constructor if available
+                    let instance = self.call_code(&arguments, &callee);
+                    let ctor = method.borrow();
+                    self.call_code(&arguments, &ctor)?;
+                    instance
+                } else {
+                    // plain function call
+                    self.call_code(&arguments, &callee)
+                }
             } else {
-                self.call_code(&arguments, &callee)
+                let Some(method) = class.borrow().get(function) else {
+                    return Err(LoxError::Error(miette!(
+                        labels = vec![LabeledSpan::at(
+                            location,
+                            format!("Class '{parent}' has no method '{function}'")
+                        )],
+                        "Class has no method"
+                    )));
+                };
+                let callee = method.clone();
+                let callee = callee.borrow();
+
+                if function == INIT {
+                    // handle var c = Class(0).init(10);
+                    let class = class.borrow();
+                    let instance = self.call_code(&arguments, &class);
+                    self.call_code(&arguments, &callee)?;
+                    instance
+                } else {
+                    self.call_code(&arguments, &callee)
+                }
             }
         } else {
             let callee = self.callables.get(function)?;
@@ -633,7 +660,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             method.accept(self)?;
         }
 
-        let definition = LoxValue::Callable("class", (*id).to_string(), None);
+        let superclass_name = superclass.as_ref().map(|s| s.borrow().name().to_string());
+        let definition = LoxValue::Callable("class", (*id).to_string(), superclass_name);
         enclosing.borrow_mut().define((*id).to_string(), definition);
 
         let mut methods = vec![];
@@ -866,7 +894,7 @@ mod tests {
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(10); c.method();", "10" ; "class constructor with arg")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
-    #[test_case("class A {} fun f() { class B < A {} return B; } print f();", "<class B>" ; "Local class inherits from global")]
+    #[test_case("class A {} fun f() { class B < A {} return B; } print f();", "<class A.B>" ; "Local class inherits from global")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } print B().bf();", "10" ; "Call inherited method inside other")]
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { super.method(); }} class C < B {} C().test();", "A" ; "Call super method inside grandchild class")]
