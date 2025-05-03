@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
 
         if let Err(e) = self.consume(&Token::LeftBrace) {
             return Some(Err(e));
-        };
+        }
 
         let start = if let Some(Ok((s, _, _))) = self.tokens.peek() {
             *s
