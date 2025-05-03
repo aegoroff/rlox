@@ -111,7 +111,9 @@ impl<'a> Parser<'a> {
             0
         };
         let block = Ok(self.block(start));
-        let function_kind = if let Token::Identifier(INIT) = name {
+        let function_kind = if let FunctionKind::Function = kind {
+            kind
+        } else if let Token::Identifier(INIT) = name {
             FunctionKind::Initializer
         } else {
             kind
