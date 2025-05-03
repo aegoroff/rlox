@@ -12,7 +12,7 @@ use crate::{
     LoxError,
     ast::{LoxValue, Stmt},
     env::Environment,
-    lexer::{INIT, THIS},
+    lexer::{INIT, SUPER, THIS},
 };
 
 pub enum CallResult<'a> {
@@ -152,6 +152,13 @@ impl<'a> LoxCallable<'a> for Class<'a> {
     fn call(&self, _: &[LoxValue]) -> crate::Result<CallResult<'a>> {
         let child = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
+        if let Some(superclass) = &self.superclass {
+            let super_instance =
+                LoxValue::Instance(superclass.borrow().name().to_string(), child.clone());
+            self.closure
+                .borrow_mut()
+                .define(SUPER.to_string(), super_instance.clone());
+        }
         let instance = LoxValue::Instance(self.name.to_string(), child.clone());
         self.closure
             .borrow_mut()

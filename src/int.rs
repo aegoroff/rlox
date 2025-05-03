@@ -542,7 +542,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
         keyword: &Token<'a>,
         method: &Token<'a>,
     ) -> crate::Result<LoxValue> {
-        let _ = obj;
         let _ = method;
         let _ = keyword;
         self.lookup_variable(obj, SUPER)
@@ -582,16 +581,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         if self.environment.borrow().get(id).is_ok() {
             return Err(LoxError::Error(miette!("Class '{id}' redefinition")));
         }
-
         let enclosing = self.begin_scope(self.environment.clone());
-        for method in methods {
-            let method = match method {
-                Ok(m) => m,
-                Err(e) => return Err(LoxError::Error(miette!(e.to_string()))), // TODO: Handle all errors
-            };
-            method.accept(self)?;
-        }
-
         let superclass = if let Some(superclass) = superclass {
             let location = superclass.location.clone();
             let superclass = self.evaluate(superclass)?;
@@ -609,6 +599,14 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         } else {
             None
         };
+
+        for method in methods {
+            let method = match method {
+                Ok(m) => m,
+                Err(e) => return Err(LoxError::Error(miette!(e.to_string()))), // TODO: Handle all errors
+            };
+            method.accept(self)?;
+        }
 
         let definition = LoxValue::Callable("class", (*id).to_string(), None);
         enclosing.borrow_mut().define((*id).to_string(), definition);
