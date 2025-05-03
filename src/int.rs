@@ -600,18 +600,19 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
                     "Superclass must be a class"
                 )));
             };
-            Some(name)
+            let superclass = self.callables.get(&name)?;
+            Some(superclass)
         } else {
             None
         };
 
-        let definition = LoxValue::Callable("class", (*id).to_string(), superclass);
+        let definition = LoxValue::Callable("class", (*id).to_string(), None);
         enclosing.borrow_mut().define((*id).to_string(), definition);
 
         let mut methods = vec![];
         methods.append(&mut self.class_methods);
 
-        let class = Class::new(id, self.environment.clone(), methods);
+        let class = Class::new(id, self.environment.clone(), methods, superclass);
         let callable = Rc::new(RefCell::new(class));
         self.callables.define(id, callable);
         self.end_scope(enclosing);
@@ -838,7 +839,9 @@ mod tests {
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(10); c.method();", "10" ; "class constructor with arg")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
-    #[test_case("class A {} fun f() { class B < A {} return B; } print f();", "<class A.B>" ; "Local class inherits from global")]
+    #[test_case("class A {} fun f() { class B < A {} return B; } print f();", "<class B>" ; "Local class inherits from global")]
+    #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
+    #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } print B().bf();", "10" ; "Call inherited method inside other")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

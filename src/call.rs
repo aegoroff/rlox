@@ -132,6 +132,7 @@ pub struct Class<'a> {
     name: &'a str,
     closure: Rc<RefCell<Environment>>,
     methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
+    superclass: Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
 }
 
 impl<'a> LoxCallable<'a> for Class<'a> {
@@ -159,7 +160,14 @@ impl<'a> LoxCallable<'a> for Class<'a> {
     }
 
     fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        self.methods.get(child).cloned()
+        let method = self.methods.get(child).cloned();
+        if method.is_some() {
+            method
+        } else if let Some(superclass) = &self.superclass {
+            superclass.borrow().get(child)
+        } else {
+            None
+        }
     }
 }
 
@@ -168,6 +176,7 @@ impl<'a> Class<'a> {
         name: &'a str,
         closure: Rc<RefCell<Environment>>,
         functions: Vec<Function<'a>>,
+        superclass: Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
     ) -> Self {
         let mut methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>> = HashMap::new();
         for func in functions {
@@ -177,6 +186,7 @@ impl<'a> Class<'a> {
             name,
             closure,
             methods,
+            superclass,
         }
     }
 }
