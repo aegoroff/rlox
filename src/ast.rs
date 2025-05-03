@@ -27,7 +27,7 @@ pub trait ExprVisitor<'a, R> {
     fn visit_grouping_expr(&mut self, grouping: &Expr<'a>) -> R;
     fn visit_logical_expr(&mut self, operator: &Token<'a>, left: &Expr<'a>, right: &Expr<'a>) -> R;
     fn visit_set_expr(&mut self, name: &Token<'a>, obj: &Expr<'a>, val: &Expr<'a>) -> R;
-    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> R;
+    fn visit_super_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>, method: &Token<'a>) -> R;
     fn visit_this_expr(&mut self, obj: &Expr<'a>, keyword: &Token<'a>) -> R;
     fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> R;
 }
@@ -101,7 +101,7 @@ impl<'a> Expr<'a> {
             ExprKind::Grouping(grouping) => visitor.visit_grouping_expr(grouping),
             ExprKind::Logical(token, left, right) => visitor.visit_logical_expr(token, left, right),
             ExprKind::Set(name, obj, val) => visitor.visit_set_expr(name, obj, val),
-            ExprKind::Super(keyword, method) => visitor.visit_super_expr(keyword, method),
+            ExprKind::Super(keyword, method) => visitor.visit_super_expr(self, keyword, method),
             ExprKind::This(keyword) => visitor.visit_this_expr(self, keyword),
             ExprKind::Variable(name) => visitor.visit_variable_expr(self, name),
         }

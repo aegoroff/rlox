@@ -12,6 +12,7 @@ use crate::{
     LoxError,
     ast::{LoxValue, Stmt},
     env::Environment,
+    lexer::THIS,
 };
 
 pub enum CallResult<'a> {
@@ -154,7 +155,7 @@ impl<'a> LoxCallable<'a> for Class<'a> {
         let instance = LoxValue::Instance(self.name.to_string(), child.clone());
         self.closure
             .borrow_mut()
-            .define("this".to_string(), instance.clone());
+            .define(THIS.to_string(), instance.clone());
 
         Ok(CallResult::Value(instance))
     }

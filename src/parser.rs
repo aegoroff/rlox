@@ -1112,6 +1112,20 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::This(tok),
                 location: start..finish,
             })),
+            Token::Super => {
+                let dot_range = match self.consume(&Token::Dot) {
+                    Ok(range) => range,
+                    Err(e) => return Some(Err(e)),
+                };
+                let identifier = match self.consume_identifier(dot_range.start, dot_range.end) {
+                    Ok(token) => token,
+                    Err(e) => return Some(Err(e)),
+                };
+                Some(Ok(Expr {
+                    kind: ExprKind::Super(tok, identifier),
+                    location: start..finish,
+                }))
+            }
             _ => Some(Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     start..finish,

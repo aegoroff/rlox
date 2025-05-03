@@ -9,11 +9,7 @@ use std::{
 use miette::{LabeledSpan, SourceSpan, miette};
 
 use crate::{
-    LoxError,
-    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor},
-    call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable},
-    env::Environment,
-    lexer::Token,
+    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor}, call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable}, env::Environment, lexer::{Token, SUPER, THIS}, LoxError
 };
 
 pub struct Interpreter<'a, W: std::io::Write> {
@@ -536,17 +532,19 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
 
     fn visit_super_expr(
         &mut self,
+        obj: &Expr<'a>,
         keyword: &Token<'a>,
         method: &Token<'a>,
     ) -> crate::Result<LoxValue> {
+        let _ = obj;
         let _ = method;
         let _ = keyword;
-        todo!()
+        self.lookup_variable(obj, SUPER)
     }
 
     fn visit_this_expr(&mut self, obj: &Expr<'a>, _: &Token<'a>) -> crate::Result<LoxValue> {
         let _ = obj;
-        self.lookup_variable(obj, "this")
+        self.lookup_variable(obj, THIS)
     }
 
     fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<LoxValue> {
@@ -842,6 +840,7 @@ mod tests {
     #[test_case("class A {} fun f() { class B < A {} return B; } print f();", "<class B>" ; "Local class inherits from global")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } print B().bf();", "10" ; "Call inherited method inside other")]
+    #[test_case("class A { method() { print \"A method\"; }} class B < A {  method() { print \"B method\";  } test() { super.method(); }} class C < B {} C().test();", "A method" ; "Call super method inside grandchild class")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);

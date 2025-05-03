@@ -6,7 +6,7 @@ use crate::{
     LoxError,
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtVisitor},
     int::Interpreter,
-    lexer::Token,
+    lexer::{SUPER, THIS, Token},
 };
 use miette::{LabeledSpan, miette};
 
@@ -112,7 +112,8 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     fn resolve_local(&mut self, value: &Expr<'a>, name: &Token<'a>) {
         let id = match name {
             Token::Identifier(id) => id,
-            Token::This => "this",
+            Token::This => THIS,
+            Token::Super => SUPER,
             _ => {
                 return;
             }
@@ -184,14 +185,19 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
                     }
                 }
             }
+            self.begin_scope();
+            self.define(&Token::Identifier(SUPER));
         }
         self.begin_scope();
-        self.define(&Token::Identifier("this"));
+        self.define(&Token::Identifier(THIS));
 
         for method in methods {
             self.resolve_statement(method)?;
         }
         self.end_scope();
+        if superclass.is_some() {
+            self.end_scope();
+        }
         self.current_class = enclosing_class;
         Ok(())
     }
@@ -350,9 +356,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, 
         Ok(())
     }
 
-    fn visit_super_expr(&mut self, keyword: &Token<'a>, method: &Token<'a>) -> crate::Result<()> {
+    fn visit_super_expr(
+        &mut self,
+        obj: &Expr<'a>,
+        keyword: &Token<'a>,
+        method: &Token<'a>,
+    ) -> crate::Result<()> {
         let _ = method;
-        let _ = keyword;
+        self.resolve_local(obj, keyword);
         Ok(())
     }
 

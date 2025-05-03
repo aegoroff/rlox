@@ -11,6 +11,9 @@ pub struct Lexer<'a> {
     whole: &'a str,
 }
 
+pub const THIS: &str = "this";
+pub const SUPER: &str = "super";
+
 #[derive(PartialEq, Debug)]
 pub enum Token<'a> {
     LeftParen,
@@ -218,8 +221,8 @@ impl<'a> Lexer<'a> {
             "or" => Token::Or,
             "print" => Token::Print,
             "return" => Token::Return,
-            "super" => Token::Super,
-            "this" => Token::This,
+            SUPER => Token::Super,
+            THIS => Token::This,
             "true" => Token::True,
             "var" => Token::Var,
             "while" => Token::While,
