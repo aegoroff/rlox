@@ -155,7 +155,6 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                     "Using uninitialized variable '{name}'"
                 )))
             } else {
-                // TODO: println!("found in locals: {val}");
                 Ok(val)
             }
         } else {
@@ -458,7 +457,6 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
 
     fn visit_get_expr(&mut self, name: &Token<'a>, object: &Expr<'a>) -> crate::Result<LoxValue> {
         let obj = self.evaluate(object)?;
-        // TODO: println!("get on: {object:?}");
         let Token::Identifier(identifier) = name else {
             return Err(LoxError::Error(miette!(
                 "Field or method name must be an identifier"
