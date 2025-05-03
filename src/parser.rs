@@ -244,7 +244,7 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let current = self.tokens.peek()?;
         match current {
-            Ok((_, Token::If, _)) => self.if_statement(),
+            Ok((_, Token::If, _)) => Some(self.if_statement()),
             Ok((_, Token::While, _)) => Some(self.while_statement()),
             Ok((_, Token::For, _)) => Some(self.for_statement()),
             Ok((_, Token::Print, _)) => self.print_statement(),
@@ -258,71 +258,44 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn if_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
-        let start_loc = match self.consume_current_and_open_paren("if") {
-            Ok(x) => x,
-            Err(e) => return Some(Err(e)),
-        };
+    fn if_statement(&mut self) -> crate::Result<Stmt<'a>> {
+        let start_loc = self.consume_current_and_open_paren("if")?;
 
         let Some(cond) = self.expression() else {
-            return Some(Err(LoxError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     (start_loc.start + 2)..(start_loc.start + 3),
                     "Condition must start here"
                 )],
                 "Invalid condition syntax"
-            ))));
+            )));
         };
-        let cond = match cond {
-            Ok(cond) => cond,
-            Err(e) => return Some(Err(e)),
-        };
+        let cond = cond?;
 
         let cond_end = cond.location.end;
 
-        let right_paren_location = match self.consume_right_parent(cond_end) {
-            Ok(loc) => loc,
-            Err(e) => return Some(Err(e)),
-        };
+        let right_paren_location = self.consume_right_parent(cond_end)?;
 
         let Some(then_branch) = self.statement() else {
-            return Some(Err(LoxError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(right_paren_location, "Missing then branch")],
                 "Missing then branch"
-            ))));
+            )));
         };
 
-        let Some(current) = self.tokens.peek() else {
+        let Some(else_loc) = self.matches(&[Token::Else]) else {
             let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
-            return Some(Ok(Stmt {
+            return Ok(Stmt {
                 kind,
                 location: start_loc.start..right_paren_location.end,
-            }));
+            });
         };
-
-        let Ok((_, next_tok, _)) = current else {
-            // Consume token if it's not a valid
-            match self.tokens.next()? {
-                Ok(_) => unreachable!(),
-                Err(e) => return Some(Err(e)),
-            }
-        };
-
-        if !matches!(next_tok, Token::Else) {
-            let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
-            return Some(Ok(Stmt {
-                kind,
-                location: start_loc.start..right_paren_location.end,
-            }));
-        }
-
-        let else_loc = self.consume(&Token::Else).unwrap();
 
         let Some(else_branch) = self.statement() else {
-            return Some(Err(LoxError::Error(miette!(
+            return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(else_loc, "Else branch expected")],
                 "Missing else branch"
-            ))));
+            )));
         };
 
         let kind = StmtKind::If(
@@ -330,10 +303,10 @@ impl<'a> Parser<'a> {
             Box::new(then_branch),
             Some(Box::new(else_branch)),
         );
-        Some(Ok(Stmt {
+        Ok(Stmt {
             kind,
             location: start_loc.start..else_loc.end,
-        }))
+        })
     }
 
     fn while_statement(&mut self) -> crate::Result<Stmt<'a>> {
