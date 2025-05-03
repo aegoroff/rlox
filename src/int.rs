@@ -399,11 +399,15 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
+        // TODO: get correct callable in case of super
+        // if let LoxValue::Instance(x, y) = &receiver {
+
+        // }
         let LoxValue::Callable(_, ref function, parent) = receiver else {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     location,
-                    format!("Invalid callable type: {callee:?}")
+                    format!("Invalid callable type: {callee:?} evaluated to '{receiver}'")
                 )],
                 "Invalid callable type"
             )));
