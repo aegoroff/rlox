@@ -23,6 +23,7 @@ pub enum CallResult<'a> {
 pub trait LoxCallable<'a> {
     fn arity(&self) -> usize;
     fn name(&self) -> &'a str;
+    fn parent(&self) -> Option<&'a str>;
     fn call(&self, arguments: &[LoxValue]) -> crate::Result<CallResult<'a>>;
     fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>;
 }
@@ -77,10 +78,14 @@ impl<'a> LoxCallable<'a> for Clock {
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
         None
     }
+
+    fn parent(&self) -> Option<&'a str> {
+        None
+    }
 }
 
 pub struct Function<'a> {
-    pub name: &'a str,
+    name: &'a str,
     parameters: Vec<&'a str>,
     body: &'a crate::Result<Stmt<'a>>,
     closure: Rc<RefCell<Environment>>,
@@ -109,6 +114,10 @@ impl<'a> LoxCallable<'a> for Function<'a> {
     }
 
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        None
+    }
+
+    fn parent(&self) -> Option<&'a str> {
         None
     }
 }
@@ -173,6 +182,14 @@ impl<'a> LoxCallable<'a> for Class<'a> {
             method
         } else if let Some(superclass) = &self.superclass {
             superclass.borrow().get(child)
+        } else {
+            None
+        }
+    }
+
+    fn parent(&self) -> Option<&'a str> {
+        if let Some(p) = &self.superclass {
+            Some(p.borrow().name())
         } else {
             None
         }

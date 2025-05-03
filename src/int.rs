@@ -423,7 +423,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         location,
-                        format!("Class '{parent}' has no method {function}")
+                        format!("Class '{parent}' has no method '{function}'")
                     )],
                     "Class has no method"
                 )));
@@ -552,15 +552,23 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             return Err(LoxError::Error(miette!("Invalid identifier")));
         };
         let instance = self.lookup_variable(obj, SUPER)?;
-        if let LoxValue::Instance(class, _) = &instance {
-            // TODO: validate if this class contains method with the same name if so
-            // get it's parent and call it
-            let callable = self.callables.get(class)?;
-            let method = callable.borrow().get(method).unwrap();
+        if let LoxValue::Instance(class, _) = instance {
+            let callable = self.callables.get(&class)?;
+            let class_to_call = if let Some(parent) = callable.borrow().parent() {
+                // case when we call inherited from a class but this method calls shadowed method from superclass too
+                parent.to_owned()
+            } else {
+                class
+            };
+            let Some(method) = callable.borrow().get(method) else {
+                return Err(LoxError::Error(miette!(
+                    "Method '{method}' not found in '{class_to_call}'"
+                )));
+            };
             Ok(LoxValue::Callable(
                 "fn",
                 method.borrow().name().to_string(),
-                Some(class.to_owned()),
+                Some(class_to_call.to_owned()),
             ))
         } else {
             Ok(instance)
@@ -864,6 +872,7 @@ mod tests {
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } print B().bf();", "10" ; "Call inherited method inside other")]
     #[test_case("class A { method() { print \"A method\"; }} class B < A {  method() { print \"B method\";  } test() { super.method(); }} class C < B {} C().test();", "A method" ; "Call super method inside grandchild class")]
+    #[test_case("class A { method() { print \"A method\"; }} class B < A {  method() { print \"B method\";  } test() { super.method(); }} class C < B {} B().test();", "A method" ; "Call super method when shadowed defined in class")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
