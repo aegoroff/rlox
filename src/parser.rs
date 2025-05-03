@@ -59,7 +59,7 @@ impl<'a> Parser<'a> {
             return Some(Err(e));
         }
         let mut args = vec![];
-        if !self.matches(&[Token::RightParen]) {
+        if self.matches(&[Token::RightParen]).is_none() {
             loop {
                 let (arg_start, arg, arg_end) = match self.tokens.next() {
                     Some(Ok(expr)) => expr,
@@ -92,7 +92,7 @@ impl<'a> Parser<'a> {
                     ))));
                 }
 
-                if !self.matches(&[Token::Comma]) {
+                if self.matches(&[Token::Comma]).is_none() {
                     break;
                 }
             }
@@ -133,7 +133,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        let super_class = if self.matches(&[Token::Less]) {
+        let super_class = if self.matches(&[Token::Less]).is_some() {
             match self.consume_name_expr("superclass", start, finish) {
                 Ok(super_class) => Some(Box::new(super_class)),
                 Err(e) => {
@@ -149,12 +149,12 @@ impl<'a> Parser<'a> {
         }
 
         let mut methods = vec![];
-        if !self.matches(&[Token::RightBrace]) {
+        if self.matches(&[Token::RightBrace]).is_none() {
             loop {
                 let method = self.function(FunctionKind::Method)?;
                 methods.push(method);
 
-                if self.matches(&[Token::RightBrace]) {
+                if self.matches(&[Token::RightBrace]).is_some() {
                     break;
                 }
             }
@@ -455,7 +455,7 @@ impl<'a> Parser<'a> {
 
     fn return_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         if let Some(Ok((start, keyword, end))) = self.tokens.next() {
-            let expr = if self.matches(&[Token::Semicolon]) {
+            let expr = if self.matches(&[Token::Semicolon]).is_some() {
                 Expr {
                     kind: ExprKind::Literal(None),
                     location: start..end,
@@ -489,7 +489,7 @@ impl<'a> Parser<'a> {
         let mut finish = 0;
         let mut statements = vec![];
         loop {
-            if self.matches(&[Token::RightBrace]) {
+            if self.matches(&[Token::RightBrace]).is_some() {
                 break;
             }
 
@@ -530,7 +530,7 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let lhs = self.or_expression();
 
-        if !self.matches(&[Token::Equal]) {
+        if self.matches(&[Token::Equal]).is_none() {
             return lhs;
         }
 
@@ -589,31 +589,13 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.tokens.peek() else {
-                return Some(Ok(expr));
-            };
-            let Ok(next_tok) = current else {
-                // Consume token if it's not a valid
-                match self.tokens.next()? {
-                    Ok(_) => unreachable!(),
-                    Err(e) => return Some(Err(e)),
-                }
-            };
-
-            if !matches!(next_tok, (_, Token::Or, _)) {
+            let Some(loc) = self.matches(&[Token::Or]) else {
                 break;
-            }
-
-            // Consume operator
-            let (s, operator, f) = match self.tokens.next()? {
-                Ok(tok) => tok,
-                Err(e) => return Some(Err(e)),
             };
-
             let Some(and) = self.and_expression() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        s..=f,
+                        loc,
                         "Missing expression in the right part of logic expression"
                     )],
                     "Invalid syntax"
@@ -627,7 +609,7 @@ impl<'a> Parser<'a> {
 
             let start = expr.location.start;
             let end = right.location.end;
-            let kind = ExprKind::Logical(operator, Box::new(expr), Box::new(right));
+            let kind = ExprKind::Logical(Token::Or, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
@@ -645,31 +627,14 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.tokens.peek() else {
-                return Some(Ok(expr));
-            };
-            let Ok(next_tok) = current else {
-                // Consume token if it's not a valid
-                match self.tokens.next()? {
-                    Ok(_) => unreachable!(),
-                    Err(e) => return Some(Err(e)),
-                }
-            };
-
-            if !matches!(next_tok, (_, Token::And, _)) {
+            let Some(loc) = self.matches(&[Token::And]) else {
                 break;
-            }
-
-            // Consume operator
-            let (s, operator, f) = match self.tokens.next()? {
-                Ok(tok) => tok,
-                Err(e) => return Some(Err(e)),
             };
 
             let Some(equality) = self.equality() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        s..=f,
+                        loc,
                         "Missing expression in the right part of logic expression"
                     )],
                     "Invalid syntax"
@@ -683,7 +648,7 @@ impl<'a> Parser<'a> {
 
             let start = expr.location.start;
             let end = right.location.end;
-            let kind = ExprKind::Logical(operator, Box::new(expr), Box::new(right));
+            let kind = ExprKind::Logical(Token::And, Box::new(expr), Box::new(right));
 
             expr = Expr {
                 kind,
@@ -975,26 +940,17 @@ impl<'a> Parser<'a> {
             None => return None,
         };
         loop {
-            if self.matches(&[Token::LeftParen]) {
+            if self.matches(&[Token::LeftParen]).is_some() {
                 expr = match self.finish_call(expr) {
                     Some(Ok(expr)) => expr,
                     Some(Err(e)) => return Some(Err(e)),
                     None => return None,
                 };
-            } else if self.matches(&[Token::Dot]) {
-                let (start, _, finish) = match self.tokens.peek() {
-                    Some(Ok(t)) => t,
-                    Some(Err(_)) => {
-                        return Some(Err(LoxError::Error(miette!("Invalid dot operator"))));
-                    }
-                    None => return None,
-                };
-                let start = *start;
-                let finish = *finish;
-                let Ok(field) = self.consume_identifier(start, finish) else {
+            } else if let Some(range) = self.matches(&[Token::Dot]) {
+                let Ok(field) = self.consume_identifier(range.start, range.end) else {
                     return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
-                            start..=finish,
+                            range,
                             "Missing identifier after dot operator"
                         )],
                         "Invalid syntax"
@@ -1003,7 +959,7 @@ impl<'a> Parser<'a> {
                 let start = expr.location.start;
                 expr = Expr {
                     kind: ExprKind::Get(field, Box::new(expr)),
-                    location: start..finish,
+                    location: start..range.end,
                 };
             } else {
                 break;
@@ -1015,7 +971,7 @@ impl<'a> Parser<'a> {
     fn finish_call(&mut self, call: Expr<'a>) -> Option<crate::Result<Expr<'a>>> {
         let mut args = vec![];
         let location = call.location.clone();
-        if !self.matches(&[Token::RightParen]) {
+        if self.matches(&[Token::RightParen]).is_none() {
             loop {
                 let arg = match self.expression() {
                     Some(Ok(expr)) => expr,
@@ -1032,7 +988,7 @@ impl<'a> Parser<'a> {
                     ))));
                 }
                 args.push(Box::new(arg));
-                if !self.matches(&[Token::Comma]) {
+                if self.matches(&[Token::Comma]).is_none() {
                     break;
                 }
             }
@@ -1209,7 +1165,7 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_semicolon(&mut self, position: usize) -> crate::Result<()> {
-        if !self.matches(&[Token::Semicolon]) {
+        if self.matches(&[Token::Semicolon]).is_none() {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     position..=position,
@@ -1250,17 +1206,18 @@ impl<'a> Parser<'a> {
 
     /// Validates current token matches any of tokens specifies and if so
     /// consumes it advancing iterator
-    fn matches(&mut self, tokens: &[Token]) -> bool {
-        let Some(Ok((_, next_tok, _))) = self.tokens.peek() else {
-            return false;
+    fn matches(&mut self, tokens: &[Token]) -> Option<Range<usize>> {
+        let Some(Ok((s, next_tok, f))) = self.tokens.peek() else {
+            return None;
         };
+        let range = *s..*f;
         for t in tokens {
             if next_tok == t {
                 self.tokens.next();
-                return true;
+                return Some(range);
             }
         }
-        false
+        None
     }
 
     fn consume(&mut self, token: &Token<'a>) -> crate::Result<Range<usize>> {
