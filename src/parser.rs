@@ -1356,6 +1356,8 @@ mod tests {
     #[test_case("nil < false", false ; "nil lrs less")]
     #[test_case("nil == false", true ; "nil lrs equal")]
     #[test_case("!nil", true ; "not nil")]
+    #[test_case("40 <= 50 and 1 > 2 or 2 < 3", true ; "two ands + or")]
+    #[test_case("40 <= 50 and 1 < 2 and 2 < 3", true ; "three ands")]
     fn eval_predicates_tests(input: &str, expected: bool) {
         // Arrange
         let mut parser = Parser::new(input);
