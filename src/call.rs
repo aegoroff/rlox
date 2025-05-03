@@ -101,6 +101,17 @@ impl<'a> LoxCallable<'a> for Function<'a> {
     }
 
     fn call(&self, arguments: &[LoxValue]) -> crate::Result<CallResult<'a>> {
+        let expected = self.arity();
+        let actual = arguments.len();
+        if expected != actual {
+            let report = miette!(
+                "Invalid arguments number passed to '{}'. Expected: {} passed: {}",
+                self.name,
+                expected,
+                actual
+            );
+            return Err(LoxError::Error(report));
+        }
         // We need new closure here to support recursive calls for example fibonacci calculation
         let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
 
@@ -181,7 +192,12 @@ impl<'a> LoxCallable<'a> for Class<'a> {
         if method.is_some() {
             method
         } else if let Some(superclass) = &self.superclass {
-            superclass.borrow().get(child)
+            // dont call superclass initializer
+            if child == INIT {
+                None
+            } else {
+                superclass.borrow().get(child)
+            }
         } else {
             None
         }

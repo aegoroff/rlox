@@ -174,17 +174,6 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         arguments: &[LoxValue],
         callee: &std::cell::Ref<'_, dyn LoxCallable<'a>>,
     ) -> crate::Result<LoxValue> {
-        let expected = callee.arity();
-        let actual = arguments.len();
-        if expected != actual {
-            let report = miette!(
-                "Invalid arguments number passed to '{}'. Expected: {} passed: {}",
-                callee.name(),
-                expected,
-                actual
-            );
-            return Err(LoxError::Error(report));
-        }
         match callee.call(arguments)? {
             CallResult::Value(lox_value) => Ok(lox_value),
             CallResult::Code(stmt, closure) => {
@@ -904,6 +893,7 @@ mod tests {
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} B().test();", "B" ; "Call this method when shadowed defined in class")]
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} class C < B {} C().test();", "B" ; "Call super method when shadowed defined in class and call shadowed")]
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { this.method(); }} class C < B {} var c = C(); c.test();", "B" ; "Call super method when shadowed defined in class and call shadowed var variant")]
+    #[test_case("class A { init(param) { this.field = param; } test() { print this.field; } } class B < A {} var b = B(10); b.test();", "10" ; "Call superclass with parameter init subclass without parameter init")]
     fn eval_single_result_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
