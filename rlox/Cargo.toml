@@ -1,0 +1,18 @@
+[package]
+name = "rlox"
+version = "0.1.0"
+edition = "2024"
+description = "Lox language rust implementation"
+authors = ["Alexander Egorov <egoroff@gmail.com>"]
+repository = "https://git.egoroff.spb.ru/root/rlox"
+
+[dependencies]
+interpreter = { path = "../interpreter" }
+bytecode = { path = "../bytecode" }
+bugreport = "0.5.1"
+clap = { version = "4.5.37", features = ["std", "color", "suggestions", "cargo"] }
+miette = { workspace = true, features = ["fancy"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+test-case = "3.3.1"

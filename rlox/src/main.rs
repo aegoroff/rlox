@@ -9,8 +9,8 @@ use bugreport::{
     format::Markdown,
 };
 use clap::{ArgMatches, Command, command};
+use interpreter::{ast::Stmt, int::Interpreter, parser::Parser, resolver::Resolver};
 use miette::{Context, IntoDiagnostic, miette};
-use rlox::{ast::Stmt, int::Interpreter, parser::Parser, resolver::Resolver};
 
 #[macro_use]
 extern crate clap;
@@ -71,10 +71,10 @@ fn scan(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     let interpreter = Interpreter::new(stdout());
     let resolver = Resolver::new(interpreter);
-    let stmts: Vec<rlox::Result<Stmt>> = parser.collect();
+    let stmts: Vec<interpreter::Result<Stmt>> = parser.collect();
     resolver.interpret(&stmts).map_err(|err| match err {
-        rlox::LoxError::Error(e) => e.with_source_code(content),
-        rlox::LoxError::Return(val) => miette!("Unexpected return value: {val}"),
+        interpreter::LoxError::Error(e) => e.with_source_code(content),
+        interpreter::LoxError::Return(val) => miette!("Unexpected return value: {val}"),
     })
 }
 

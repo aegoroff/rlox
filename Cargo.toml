@@ -1,22 +1,27 @@
-[package]
-name = "rlox"
-version = "0.1.0"
-edition = "2024"
-description = "Lox language rust implementation"
-authors = ["Alexander Egorov <egoroff@gmail.com>"]
-repository = "https://git.egoroff.spb.ru/root/rlox"
+[workspace]
+resolver = "3"
+members = [
+  "bytecode",
+  "interpreter",
+  "rlox",
+]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
-bugreport = "0.5.1"
-clap = { version = "4.5.34", features = ["std", "color", "suggestions", "cargo"] }
-miette = { version = "7.6.0", features = ["fancy"] }
-thiserror = "2.0.12"
-
-[dev-dependencies]
-test-case = "3.3.1"
+# to be able to run with `cargo run`, `check` and so on without selecting a specific package with `-p`
+default-members = [
+  "rlox",
+]
 
 [profile.release]
 strip = true
 codegen-units = 1
 panic = 'abort'
 lto = true
+
+
+[workspace.dependencies]
+miette = { version = "7.6.0", features = ["fancy"] }
+thiserror = "2.0.12"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
