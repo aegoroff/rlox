@@ -285,7 +285,7 @@ impl<'a> Parser<'a> {
             )));
         };
 
-        let Some(else_loc) = self.matches(&[Token::Else]) else {
+        let Some((_, else_loc)) = self.matches(&[Token::Else]) else {
             let kind = StmtKind::If(Box::new(cond), Box::new(then_branch), None);
             return Ok(Stmt {
                 kind,
@@ -560,7 +560,7 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(loc) = self.matches(&[Token::Or]) else {
+            let Some((_, loc)) = self.matches(&[Token::Or]) else {
                 break;
             };
             let Some(and) = self.and_expression() else {
@@ -598,7 +598,7 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(loc) = self.matches(&[Token::And]) else {
+            let Some((_, loc)) = self.matches(&[Token::And]) else {
                 break;
             };
 
@@ -637,31 +637,20 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.tokens.peek() else {
-                return Some(Ok(expr));
-            };
-            let Ok(next_tok) = current else {
-                // Consume token if it's not a valid
-                match self.tokens.next()? {
-                    Ok(_) => unreachable!(),
-                    Err(e) => return Some(Err(e)),
-                }
-            };
-
-            if !matches!(next_tok, (_, Token::EqualEqual | Token::BangEqual, _)) {
+            let Some((operator, loc)) = self.matches(&[Token::EqualEqual, Token::BangEqual]) else {
                 break;
-            }
-
-            // Consume operator
-            let (_, operator, f) = match self.tokens.next()? {
-                Ok(tok) => tok,
-                Err(e) => return Some(Err(e)),
+            };
+            // Awkward, but we cannot borrow self as mutable in a loop
+            let operator = match operator {
+                Token::BangEqual => Token::BangEqual,
+                Token::EqualEqual => Token::EqualEqual,
+                _ => break,
             };
 
             let Some(comparison) = self.comparison() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        f..f,
+                        loc.end..loc.end,
                         "Missing comparison expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
@@ -693,38 +682,22 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.tokens.peek() else {
-                return Some(Ok(expr));
-            };
-            let Ok(next_tok) = current else {
-                // Consume token if it's not a valid
-                match self.tokens.next()? {
-                    Ok(_) => unreachable!(),
-                    Err(e) => return Some(Err(e)),
-                }
-            };
-
-            if !matches!(
-                next_tok,
-                (
-                    _,
-                    Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual,
-                    _
-                )
-            ) {
+            let Some((operator, loc)) = self.matches(&[Token::Greater, Token::GreaterEqual, Token::Less, Token::LessEqual]) else {
                 break;
-            }
-
-            // Consume operator
-            let (s, operator, f) = match self.tokens.next()? {
-                Ok(tok) => tok,
-                Err(e) => return Some(Err(e)),
+            };
+            // Awkward, but we cannot borrow self as mutable in a loop
+            let operator = match operator {
+                Token::Greater => Token::Greater,
+                Token::GreaterEqual => Token::GreaterEqual,
+                Token::Less => Token::Less,
+                Token::LessEqual => Token::LessEqual,
+                _ => break,
             };
 
             let Some(term) = self.term() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        s..=f,
+                        loc,
                         "Missing term expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
@@ -756,31 +729,20 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some(current) = self.tokens.peek() else {
-                return Some(Ok(expr));
-            };
-            let Ok(next_tok) = current else {
-                // Consume token if it's not a valid
-                match self.tokens.next()? {
-                    Ok(_) => unreachable!(),
-                    Err(e) => return Some(Err(e)),
-                }
-            };
-
-            if !matches!(next_tok, (_, Token::Plus | Token::Minus, _)) {
+            let Some((operator, loc)) = self.matches(&[Token::Plus, Token::Minus]) else {
                 break;
-            }
-
-            // Consume operator
-            let (_, operator, f) = match self.tokens.next()? {
-                Ok(tok) => tok,
-                Err(e) => return Some(Err(e)),
+            };
+            // Awkward, but we cannot borrow self as mutable in a loop
+            let operator = match operator {
+                Token::Plus => Token::Plus,
+                Token::Minus => Token::Minus,
+                _ => break,
             };
 
             let Some(factor) = self.factor() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        f..f,
+                        loc,
                         "Missing factor expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
@@ -811,31 +773,20 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
         loop {
-            let Some(current) = self.tokens.peek() else {
-                return Some(Ok(expr));
-            };
-            let Ok(next_tok) = current else {
-                // Consume token if it's not a valid
-                match self.tokens.next()? {
-                    Ok(_) => unreachable!(),
-                    Err(e) => return Some(Err(e)),
-                }
-            };
-
-            if !matches!(next_tok, (_, Token::Star | Token::Slash, _)) {
+            let Some((operator, loc)) = self.matches(&[Token::Star, Token::Slash]) else {
                 break;
-            }
-
-            // Consume operator
-            let (_, operator, f) = match self.tokens.next()? {
-                Ok(tok) => tok,
-                Err(e) => return Some(Err(e)),
+            };
+            // Awkward, but we cannot borrow self as mutable in a loop
+            let operator = match operator {
+                Token::Star => Token::Star,
+                Token::Slash => Token::Slash,
+                _ => break,
             };
 
             let Some(unary) = self.unary() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
-                        f..f,
+                        loc,
                         "Missing unary expression in the right part of binary expression"
                     )],
                     "Invalid syntax"
@@ -917,7 +868,7 @@ impl<'a> Parser<'a> {
                     Some(Err(e)) => return Some(Err(e)),
                     None => return None,
                 };
-            } else if let Some(range) = self.matches(&[Token::Dot]) {
+            } else if let Some((_, range)) = self.matches(&[Token::Dot]) {
                 let Ok(field) = self.consume_identifier(range.start, range.end) else {
                     return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
@@ -1177,15 +1128,16 @@ impl<'a> Parser<'a> {
 
     /// Validates current token matches any of tokens specifies and if so
     /// consumes it advancing iterator
-    fn matches(&mut self, tokens: &[Token]) -> Option<Range<usize>> {
-        let Some(Ok((s, next_tok, f))) = self.tokens.peek() else {
+    fn matches(&mut self, tokens: &[Token]) -> Option<(Token, Range<usize>)> {
+        let Some(Ok((_, next_tok, _))) = self.tokens.peek() else {
             return None;
         };
-        let range = *s..*f;
         for t in tokens {
             if next_tok == t {
-                self.tokens.next();
-                return Some(range);
+                let Some(Ok((s, tok, f))) = self.tokens.next() else {
+                    return None;
+                };
+                return Some((tok, s..f));
             }
         }
         None

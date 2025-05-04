@@ -669,7 +669,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
                     )],
                     "Superclass must be a class"
                 )));
-            };
+            }
             let superclass = self.callables.get(&name)?;
             Some(superclass)
         } else {
