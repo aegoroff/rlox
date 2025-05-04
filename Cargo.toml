@@ -14,3 +14,9 @@ thiserror = "2.0.12"
 
 [dev-dependencies]
 test-case = "3.3.1"
+
+[profile.release]
+strip = true
+codegen-units = 1
+panic = 'abort'
+lto = true
