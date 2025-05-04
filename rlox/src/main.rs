@@ -15,6 +15,8 @@ use miette::{Context, IntoDiagnostic, miette};
 #[macro_use]
 extern crate clap;
 
+const INTERPRET_CMD: &str = "n";
+const COMPILE_CMD: &str = "c";
 const FILE_CMD: &str = "f";
 const STDIN_CMD: &str = "i";
 const BUGREPORT_CMD: &str = "bugreport";
@@ -26,12 +28,28 @@ fn main() -> miette::Result<()> {
     let matches = app.get_matches();
 
     match matches.subcommand() {
-        Some((FILE_CMD, cmd)) => scan_file(cmd),
-        Some((STDIN_CMD, cmd)) => scan_stdin(cmd),
+        Some((INTERPRET_CMD, cmd)) => interpretation(cmd),
+        Some((COMPILE_CMD, cmd)) => compilation(cmd),
         Some((BUGREPORT_CMD, cmd)) => {
             print_bugreport(cmd);
             Ok(())
         }
+        _ => Ok(()),
+    }
+}
+
+fn interpretation(cmd: &ArgMatches) -> miette::Result<()> {
+    match cmd.subcommand() {
+        Some((FILE_CMD, cmd)) => from_file(cmd, interpret),
+        Some((STDIN_CMD, cmd)) => from_stdin(cmd, interpret),
+        _ => Ok(()),
+    }
+}
+
+fn compilation(cmd: &ArgMatches) -> miette::Result<()> {
+    match cmd.subcommand() {
+        Some((FILE_CMD, cmd)) => from_file(cmd, compile),
+        Some((STDIN_CMD, cmd)) => from_stdin(cmd, compile),
         _ => Ok(()),
     }
 }
@@ -41,14 +59,17 @@ fn main() -> miette::Result<()> {
 /// # Errors
 ///
 /// This function will return an error if scanning failed.
-fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
+fn from_file(
+    cmd: &ArgMatches,
+    action: fn(content: String) -> miette::Result<()>,
+) -> miette::Result<()> {
     let path = cmd
         .get_one::<String>(PATH)
         .ok_or(miette! {"Path required"})?;
     let content = fs::read_to_string(path)
         .into_diagnostic()
         .wrap_err(format!("Failed to read: {path}"))?;
-    scan(content)?;
+    action(content)?;
     Ok(())
 }
 
@@ -57,17 +78,20 @@ fn scan_file(cmd: &ArgMatches) -> miette::Result<()> {
 /// # Errors
 ///
 /// This function will return an error if scanning failed.
-fn scan_stdin(_cmd: &ArgMatches) -> miette::Result<()> {
+fn from_stdin(
+    _cmd: &ArgMatches,
+    action: fn(content: String) -> miette::Result<()>,
+) -> miette::Result<()> {
     let mut content = String::new();
     io::stdin()
         .read_to_string(&mut content)
         .into_diagnostic()
         .wrap_err("Failed to read stdin content")?;
-    scan(content)?;
+    action(content)?;
     Ok(())
 }
 
-fn scan(content: String) -> miette::Result<()> {
+fn interpret(content: String) -> miette::Result<()> {
     let mut parser = Parser::new(&content);
     let interpreter = Interpreter::new(stdout());
     let resolver = Resolver::new(interpreter);
@@ -76,6 +100,11 @@ fn scan(content: String) -> miette::Result<()> {
         interpreter::LoxError::Error(e) => e.with_source_code(content),
         interpreter::LoxError::Return(val) => miette!("Unexpected return value: {val}"),
     })
+}
+
+fn compile(content: String) -> miette::Result<()> {
+    // TODO: compilation entry point here
+    Ok(())
 }
 
 fn print_bugreport(_matches: &ArgMatches) {
@@ -94,9 +123,25 @@ fn build_cli() -> Command {
         .version(crate_version!())
         .author(crate_authors!("\n"))
         .about(crate_description!())
+        .subcommand(interpret_cmd())
+        .subcommand(compile_cmd())
+        .subcommand(bugreport_cmd())
+}
+
+fn compile_cmd() -> Command {
+    Command::new(COMPILE_CMD)
+        .aliases(["compile"])
+        .about("Use bytecode compiler")
         .subcommand(file_cmd())
         .subcommand(stdin_cmd())
-        .subcommand(bugreport_cmd())
+}
+
+fn interpret_cmd() -> Command {
+    Command::new(INTERPRET_CMD)
+        .aliases(["interpret"])
+        .about("Use interpreter")
+        .subcommand(file_cmd())
+        .subcommand(stdin_cmd())
 }
 
 fn file_cmd() -> Command {
