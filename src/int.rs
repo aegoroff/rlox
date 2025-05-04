@@ -74,6 +74,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         let mut errors = vec![];
 
         let mut spans = HashSet::new();
+        let mut messages = HashSet::new();
         let mut add_error = |e: &LoxError| {
             if let LoxError::Error(e) = e {
                 if let Some(label) = e.labels() {
@@ -84,6 +85,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                         }
                     }
                 }
+                messages.insert(e.to_string());
             }
         };
 
@@ -99,15 +101,19 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                         add_error(&e);
                     }
                 }
-                Err(e) => add_error(e),
+                Err(e) => {
+                    add_error(e);
+                }
             }
         }
-        if errors.is_empty() {
+        if errors.is_empty() && messages.is_empty() {
             Ok(())
         } else {
+            let default = "Unknown".to_owned();
+            let message = messages.iter().next().unwrap_or(&default);
             Err(LoxError::Error(miette!(
                 labels = errors,
-                "Program completed with errors"
+                "Program completed with errors: '{message}'"
             )))
         }
     }
@@ -115,10 +121,10 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
     fn interpret_one(&mut self, statement: &'a crate::Result<Stmt<'a>>) -> crate::Result<()> {
         match statement {
             Ok(s) => s.accept(self),
-            Err(e) => {
+            Err(err) => {
                 let mut errors = vec![];
                 let mut spans = HashSet::new();
-                if let LoxError::Error(e) = e {
+                if let LoxError::Error(e) = err {
                     if let Some(label) = e.labels() {
                         for l in label {
                             if !spans.contains(&(l.len(), l.offset())) {
@@ -128,10 +134,7 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
                         }
                     }
                 }
-                Err(LoxError::Error(miette!(
-                    labels = errors,
-                    "Invalid statement"
-                )))
+                Err(LoxError::Error(miette!(labels = errors, "{err}")))
             }
         }
     }
@@ -943,7 +946,7 @@ mod tests {
     #[test_case("fun f() 123;" ; "Invalid function body")]
     #[test_case("fun foo() {} class Subclass < foo {}" ; "Inherit from function")]
     #[test_case("var Nil = nil; class Foo < Nil {}" ; "Inherit from nil")]
-    #[test_case("class A {} class B < A { method() { super.; } }" ; "Super without name")]
+    #[test_case("class A {} class B < A { method() { super.; } } var b = B(); b.method();" ; "Super without name")]
     fn interpretation_negative(input: &str) {
         // Arrange
         let mut parser = Parser::new(input);
