@@ -8,6 +8,7 @@ use bugreport::{
     collector::{CompileTimeInformation, EnvironmentVariables, OperatingSystem, SoftwareVersion},
     format::Markdown,
 };
+use bytecode::chunk::Chunk;
 use clap::{ArgMatches, Command, command};
 use interpreter::{ast::Stmt, int::Interpreter, parser::Parser, resolver::Resolver};
 use miette::{Context, IntoDiagnostic, miette};
@@ -104,6 +105,9 @@ fn interpret(content: String) -> miette::Result<()> {
 
 fn compile(content: String) -> miette::Result<()> {
     // TODO: compilation entry point here
+    let mut chunk = Chunk::new();
+    chunk.write_code(bytecode::chunk::OpCode::Return);
+    chunk.disasembly("test chunk");
     Ok(())
 }
 
