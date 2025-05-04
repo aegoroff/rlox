@@ -110,7 +110,7 @@ impl<'a> Parser<'a> {
         } else {
             0
         };
-        let block = Ok(self.block(start));
+        let block = self.block(start);
         let function_kind = if let FunctionKind::Function = kind {
             kind
         } else if let Token::Identifier(INIT) = name {
@@ -254,7 +254,7 @@ impl<'a> Parser<'a> {
             Ok((s, Token::LeftBrace, _)) => {
                 let start = *s;
                 self.tokens.next();
-                Some(Ok(self.block(start)))
+                Some(self.block(start))
             }
             _ => self.expr_statement(),
         }
@@ -460,7 +460,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn block(&mut self, start: usize) -> Stmt<'a> {
+    fn block(&mut self, start: usize) -> crate::Result<Stmt<'a>> {
         let mut finish = 0;
         let mut statements = vec![];
         loop {
@@ -469,20 +469,16 @@ impl<'a> Parser<'a> {
             }
 
             if let Some(opt) = self.declaration() {
-                match opt {
-                    Ok(stmt) => {
-                        finish = stmt.location.end;
-                        statements.push(Ok(stmt));
-                    }
-                    Err(e) => statements.push(Err(e)),
-                }
+                let decl = opt?;
+                finish = decl.location.end;
+                statements.push(Ok(decl));
             }
         }
         let kind = StmtKind::Block(statements);
-        Stmt {
+        Ok(Stmt {
             kind,
             location: start..finish,
-        }
+        })
     }
 
     fn semicolon_terminated_expression(&mut self) -> Option<crate::Result<Expr<'a>>> {
