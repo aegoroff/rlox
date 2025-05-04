@@ -946,7 +946,8 @@ mod tests {
     #[test_case("fun f() 123;" ; "Invalid function body")]
     #[test_case("fun foo() {} class Subclass < foo {}" ; "Inherit from function")]
     #[test_case("var Nil = nil; class Foo < Nil {}" ; "Inherit from nil")]
-    #[test_case("class A {} class B < A { method() { super.; } } var b = B(); b.method();" ; "Super without name")]
+    #[test_case("class A {} class B < A { method() { super.; } } var b = B(); b.method();" ; "Super without name with run")]
+    #[test_case("class A {} class B < A { method() { super.; } }" ; "Super without name no run")]
     fn interpretation_negative(input: &str) {
         // Arrange
         let mut parser = Parser::new(input);
