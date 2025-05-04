@@ -682,7 +682,12 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let Some((operator, loc)) = self.matches(&[Token::Greater, Token::GreaterEqual, Token::Less, Token::LessEqual]) else {
+            let Some((operator, loc)) = self.matches(&[
+                Token::Greater,
+                Token::GreaterEqual,
+                Token::Less,
+                Token::LessEqual,
+            ]) else {
                 break;
             };
             // Awkward, but we cannot borrow self as mutable in a loop
@@ -931,17 +936,16 @@ impl<'a> Parser<'a> {
         };
         match tok {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
-                let end = finish - 1;
                 Some(Ok(Expr {
                     kind: ExprKind::Literal(Some(tok)),
-                    location: start..end,
+                    location: start..finish,
                 }))
             }
             Token::LeftParen => {
                 let Some(expr) = self.expression() else {
                     return Some(Err(LoxError::Error(miette!(
                         labels = vec![LabeledSpan::at(
-                            start..=finish,
+                            start..finish,
                             "Expect expression after '('"
                         )],
                         "Expect expression after '('"
@@ -952,7 +956,7 @@ impl<'a> Parser<'a> {
                         let Some(next) = self.tokens.next() else {
                             return Some(Err(LoxError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
-                                    start..=finish,
+                                    start..finish,
                                     "Expect ')' after grouping expression that starts here"
                                 )],
                                 "Expect ')' after expression"
@@ -960,15 +964,14 @@ impl<'a> Parser<'a> {
                         };
 
                         if let Ok((_, Token::RightParen, finish)) = next {
-                            let end = finish - 1;
                             Some(Ok(Expr {
                                 kind: ExprKind::Grouping(Box::new(expr)),
-                                location: start..end,
+                                location: start..finish,
                             }))
                         } else {
                             Some(Err(LoxError::Error(miette!(
                                 labels = vec![LabeledSpan::at(
-                                    start..=finish,
+                                    start..finish,
                                     "Expect ')' after grouping expression that starts here"
                                 )],
                                 "Expect ')' after expression"
