@@ -578,14 +578,10 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = expr.location.start;
-            let end = right.location.end;
+            let location = expr.location.start..right.location.end;
             let kind = ExprKind::Logical(Token::Or, Box::new(expr), Box::new(right));
 
-            expr = Expr {
-                kind,
-                location: start..end,
-            };
+            expr = Expr { kind, location };
         }
 
         Some(Ok(expr))
@@ -617,14 +613,10 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = expr.location.start;
-            let end = right.location.end;
+            let location = expr.location.start..right.location.end;
             let kind = ExprKind::Logical(Token::And, Box::new(expr), Box::new(right));
 
-            expr = Expr {
-                kind,
-                location: start..end,
-            };
+            expr = Expr { kind, location };
         }
 
         Some(Ok(expr))
@@ -662,14 +654,10 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = expr.location.start;
-            let end = right.location.end;
+            let location = expr.location.start..right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
-            expr = Expr {
-                kind,
-                location: start..end,
-            };
+            expr = Expr { kind, location };
         }
 
         Some(Ok(expr))
@@ -714,14 +702,10 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = expr.location.start;
-            let end = right.location.end;
+            let location = expr.location.start..right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
-            expr = Expr {
-                kind,
-                location: start..end,
-            };
+            expr = Expr { kind, location };
         }
 
         Some(Ok(expr))
@@ -759,14 +743,10 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = expr.location.start;
-            let end = right.location.end;
+            let location = expr.location.start..right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
-            expr = Expr {
-                kind,
-                location: start..end,
-            };
+            expr = Expr { kind, location };
         }
 
         Some(Ok(expr))
@@ -803,14 +783,10 @@ impl<'a> Parser<'a> {
                 Err(e) => return Some(Err(e)),
             };
 
-            let start = expr.location.start;
-            let end = right.location.end;
+            let location = expr.location.start..right.location.end;
             let kind = ExprKind::Binary(operator, Box::new(expr), Box::new(right));
 
-            expr = Expr {
-                kind,
-                location: start..end,
-            };
+            expr = Expr { kind, location };
         }
 
         Some(Ok(expr))
