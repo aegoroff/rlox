@@ -652,11 +652,20 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         let superclass = if let Some(superclass) = superclass {
             let location = superclass.location.clone();
             let superclass = self.evaluate(superclass)?;
-            let LoxValue::Callable(_, name, _) = superclass else {
+            let LoxValue::Callable(kind, name, _) = superclass else {
                 return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         location,
                         format!("Superclass '{superclass}' must be a class")
+                    )],
+                    "Superclass must be a class"
+                )));
+            };
+            if kind != "class" {
+                return Err(LoxError::Error(miette!(
+                    labels = vec![LabeledSpan::at(
+                        location,
+                        format!("Superclass '{name}' must be a class but in was '{kind}'")
                     )],
                     "Superclass must be a class"
                 )));
