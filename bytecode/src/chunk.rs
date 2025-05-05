@@ -45,14 +45,14 @@ impl Chunk {
         self.constants.len() - 1
     }
 
-    pub fn disasembly(&self, name: &str) {
+    pub fn disassembly(&self, name: &str) {
         println!("=== {name} ===");
         for (offset, instruction) in self.instructions.iter().enumerate() {
-            Chunk::disasembly_instruction(instruction, offset);
+            Chunk::disassembly_instruction(instruction, offset);
         }
     }
 
-    fn disasembly_instruction(code: &OpCode, offset: usize) {
+    fn disassembly_instruction(code: &OpCode, offset: usize) {
         println!("{offset:04} {code}");
     }
 }

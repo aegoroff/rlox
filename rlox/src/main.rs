@@ -107,7 +107,7 @@ fn compile(content: String) -> miette::Result<()> {
     // TODO: compilation entry point here
     let mut chunk = Chunk::new();
     chunk.write_code(bytecode::chunk::OpCode::Return);
-    chunk.disasembly("test chunk");
+    chunk.disassembly("test chunk");
     Ok(())
 }
 
