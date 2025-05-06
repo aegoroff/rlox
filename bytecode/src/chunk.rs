@@ -60,6 +60,7 @@ impl Chunk {
         let Some(code) = OpCode::from_u8(self.instructions[offset]) else {
             return offset + 1;
         };
+        print!("{offset:04} ");
         match code {
             OpCode::Constant => self.disassembly_constant(offset, &code),
             OpCode::Return => self.disassembly_return(offset, &code),
@@ -67,14 +68,14 @@ impl Chunk {
     }
 
     fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
-        let op1 = self.instructions[offset + 1];
+        let op1 = self.instructions[offset + 1]; // first operand defines constant index in the constants vector
         let constant = &self.constants[op1 as usize];
-        println!("{offset:04} {code} '{constant}'");
+        println!("{code:-16} {op1:04} '{constant}'");
         offset + 2
     }
 
     fn disassembly_return(&self, offset: usize, code: &OpCode) -> usize {
-        println!("{offset:04} {code}");
+        println!("{code}");
         offset + 1
     }
 }
