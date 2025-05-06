@@ -107,11 +107,13 @@ fn compile(content: String) -> miette::Result<()> {
     // TODO: compilation entry point here
     let mut chunk = Chunk::new();
 
-    let constant = chunk.add_constant(LoxValue::Number(1.2));
-    chunk.write_code(bytecode::chunk::OpCode::Constant, 123);
-    chunk.write_operand(constant, 123);
+    let mut line = 123;
+    for i in 1..=260 {
+        line = 123 + i;
+        chunk.write_constant(LoxValue::Number(i as f64), line);
+    }
 
-    chunk.write_code(bytecode::chunk::OpCode::Return, 123);
+    chunk.write_code(bytecode::chunk::OpCode::Return, line);
     chunk.disassembly("test chunk");
     Ok(())
 }

@@ -10,6 +10,7 @@ use crate::value::LoxValue;
 pub enum OpCode {
     Constant = 0,
     Return = 1,
+    ConstantLong = 2,
 }
 
 impl Display for OpCode {
@@ -17,6 +18,7 @@ impl Display for OpCode {
         match self {
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Constant => write!(f, "OP_CONSTANT"),
+            OpCode::ConstantLong => write!(f, "OP_CONSTANT_LONG"),
         }
     }
 }
@@ -46,9 +48,18 @@ impl Chunk {
         self.lines.push(line);
     }
 
-    pub fn add_constant(&mut self, value: LoxValue) -> u8 {
-        self.constants.push(value);
-        (self.constants.len() - 1) as u8
+    pub fn write_constant(&mut self, value: LoxValue, line: usize) {
+        let constant = self.add_constant(value);
+        if constant > 255 {
+            self.write_code(OpCode::ConstantLong, line);
+            let bytes = into_three_bytes(constant);
+            self.write_operand(bytes[0], line);
+            self.write_operand(bytes[1], line);
+            self.write_operand(bytes[2], line);
+        } else {
+            self.write_code(OpCode::Constant, line);
+            self.write_operand(constant as u8, line);
+        }
     }
 
     pub fn disassembly(&self, name: &str) {
@@ -57,6 +68,11 @@ impl Chunk {
         while offset < self.instructions.len() {
             offset = self.disassembly_instruction(offset);
         }
+    }
+
+    fn add_constant(&mut self, value: LoxValue) -> usize {
+        self.constants.push(value);
+        self.constants.len() - 1
     }
 
     fn disassembly_instruction(&self, offset: usize) -> usize {
@@ -72,6 +88,7 @@ impl Chunk {
         match code {
             OpCode::Constant => self.disassembly_constant(offset, &code),
             OpCode::Return => self.disassembly_return(offset, &code),
+            OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
         }
     }
 
@@ -82,8 +99,25 @@ impl Chunk {
         offset + 2
     }
 
+    fn disassembly_constant_long(&self, offset: usize, code: &OpCode) -> usize {
+        let op1 = self.instructions[offset + 1]; // first operand defines constant index in the constants vector
+        let op2 = self.instructions[offset + 2]; // second operand defines constant index in the constants vector
+        let op3 = self.instructions[offset + 3]; // third operand defines constant index in the constants vector
+        let ix: usize = (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize);
+        let constant = &self.constants[ix];
+        println!("{code:-16} {ix:4} '{constant}'");
+        offset + 4
+    }
+
     fn disassembly_return(&self, offset: usize, code: &OpCode) -> usize {
         println!("{code}");
         offset + 1
     }
+}
+
+fn into_three_bytes(value: usize) -> [u8; 3] {
+    let op1 = (value & 0xFF) as u8;
+    let op2 = ((value & 0xFF00) >> 8) as u8;
+    let op3 = ((value & 0xFF0000) >> 16) as u8;
+    [op1, op2, op3]
 }
