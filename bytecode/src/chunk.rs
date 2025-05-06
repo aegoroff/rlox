@@ -43,9 +43,9 @@ impl Chunk {
         self.instructions.push(value);
     }
 
-    pub fn add_constant(&mut self, value: LoxValue) -> usize {
+    pub fn add_constant(&mut self, value: LoxValue) -> u8 {
         self.constants.push(value);
-        self.constants.len() - 1
+        (self.constants.len() - 1) as u8
     }
 
     pub fn disassembly(&self, name: &str) {
