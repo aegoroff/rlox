@@ -3,7 +3,7 @@ use num_traits::FromPrimitive;
 use crate::chunk::{Chunk, OpCode};
 
 #[derive(Default)]
-pub struct VM<'a> {
+pub struct VirtualMachine<'a> {
     chunk: Option<&'a Chunk>,
     ip: usize,
 }
@@ -14,7 +14,7 @@ pub enum InterpretResult {
     RuntimeError = 2,
 }
 
-impl<'a> VM<'a> {
+impl<'a> VirtualMachine<'a> {
     pub fn new() -> Self {
         Self { chunk: None, ip: 0 }
     }

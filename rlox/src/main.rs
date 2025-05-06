@@ -8,7 +8,7 @@ use bugreport::{
     collector::{CompileTimeInformation, EnvironmentVariables, OperatingSystem, SoftwareVersion},
     format::Markdown,
 };
-use bytecode::{chunk::Chunk, value::LoxValue, vm::VM};
+use bytecode::{chunk::Chunk, value::LoxValue, vm::VirtualMachine};
 use clap::{ArgMatches, Command, command};
 use interpreter::{ast::Stmt, int::Interpreter, parser::Parser, resolver::Resolver};
 use miette::{Context, IntoDiagnostic, miette};
@@ -116,7 +116,7 @@ fn compile(content: String) -> miette::Result<()> {
     chunk.write_code(bytecode::chunk::OpCode::Return, line);
     chunk.disassembly("test chunk");
 
-    let mut vm = VM::new();
+    let mut vm = VirtualMachine::new();
     vm.interpret(&chunk);
     Ok(())
 }
