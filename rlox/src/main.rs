@@ -106,10 +106,12 @@ fn interpret(content: String) -> miette::Result<()> {
 fn compile(content: String) -> miette::Result<()> {
     // TODO: compilation entry point here
     let mut chunk = Chunk::new();
-    chunk.write_code(bytecode::chunk::OpCode::Return);
-    chunk.write_code(bytecode::chunk::OpCode::Constant);
+
     let constant = chunk.add_constant(LoxValue::Number(123.0));
+    chunk.write_code(bytecode::chunk::OpCode::Constant);
     chunk.write_operand(constant);
+
+    chunk.write_code(bytecode::chunk::OpCode::Return);
     chunk.disassembly("test chunk");
     Ok(())
 }

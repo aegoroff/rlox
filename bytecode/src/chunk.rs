@@ -57,19 +57,20 @@ impl Chunk {
     }
 
     fn disassembly_instruction(&self, offset: usize) -> usize {
-        let code = self.instructions[offset];
-        match OpCode::from_u8(code) {
-            Some(OpCode::Constant) => {
+        let Some(code) = OpCode::from_u8(self.instructions[offset]) else {
+            return offset + 1;
+        };
+        match code {
+            OpCode::Constant => {
                 let op1 = self.instructions[offset + 1];
                 let constant = &self.constants[op1 as usize];
-                println!("{offset:04} {code} {constant}");
+                println!("{offset:04} {code} '{constant}'");
                 offset + 2
             }
-            Some(OpCode::Return) => {
+            OpCode::Return => {
                 println!("{offset:04} {code}");
                 offset + 1
             }
-            None => offset + 1,
         }
     }
 }
