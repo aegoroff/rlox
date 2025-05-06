@@ -37,12 +37,13 @@ impl Chunk {
         }
     }
 
-    pub fn write_code(&mut self, code: OpCode) {
-        self.instructions.push(code as u8);
+    pub fn write_code(&mut self, code: OpCode, line: usize) {
+        self.write_operand(code as u8, line);
     }
 
-    pub fn write_operand(&mut self, value: u8) {
+    pub fn write_operand(&mut self, value: u8, line: usize) {
         self.instructions.push(value);
+        self.lines.push(line);
     }
 
     pub fn add_constant(&mut self, value: LoxValue) -> u8 {
