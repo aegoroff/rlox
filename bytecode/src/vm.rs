@@ -26,11 +26,11 @@ impl<'a> VM<'a> {
     }
 
     fn run(&mut self) -> InterpretResult {
-        let Some(instructions) = self.chunk else {
+        let Some(chunk) = self.chunk else {
             return InterpretResult::Ok;
         };
-        let instr = &instructions.instructions;
-        let constants = &instructions.constants;
+        let instr = &chunk.instructions;
+        let constants = &chunk.constants;
         while self.ip < instr.len() {
             let Some(code) = OpCode::from_u8(instr[self.ip]) else {
                 return InterpretResult::RuntimeError;
