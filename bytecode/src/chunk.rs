@@ -25,6 +25,7 @@ impl Display for OpCode {
 pub struct Chunk {
     instructions: Vec<u8>,
     constants: Vec<LoxValue>,
+    lines: Vec<usize>,
 }
 
 impl Chunk {
@@ -32,6 +33,7 @@ impl Chunk {
         Self {
             instructions: vec![],
             constants: vec![],
+            lines: vec![],
         }
     }
 
