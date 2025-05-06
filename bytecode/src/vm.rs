@@ -34,6 +34,10 @@ impl<'a> VirtualMachine<'a> {
             let Some(code) = OpCode::from_u8(instr[self.ip]) else {
                 return InterpretResult::RuntimeError;
             };
+            #[cfg(feature = "disassembly")]
+            {
+                chunk.disassembly_instruction(self.ip);
+            }
             match code {
                 OpCode::Constant => {
                     let constant = chunk.read_constant(self.ip);

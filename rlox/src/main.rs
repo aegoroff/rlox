@@ -107,14 +107,9 @@ fn compile(content: String) -> miette::Result<()> {
     // TODO: compilation entry point here
     let mut chunk = Chunk::new();
 
-    let mut line = 123;
-    for i in 1..=260 {
-        line = 123 + i;
-        chunk.write_constant(LoxValue::Number(i as f64), line);
-    }
-
+    let line = 123;
+    chunk.write_constant(LoxValue::Number(1.2), line);
     chunk.write_code(bytecode::chunk::OpCode::Return, line);
-    chunk.disassembly("test chunk");
 
     let mut vm = VirtualMachine::new();
     vm.interpret(&chunk);
