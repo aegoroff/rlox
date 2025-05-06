@@ -1,8 +1,9 @@
 use std::fmt::Display;
 
+#[repr(u8)]
 pub enum OpCode {
-    Return,
-    Constant(usize),
+    Constant = 0,
+    Return = 1,
 }
 
 #[derive(Clone, Debug)]
@@ -17,14 +18,14 @@ impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OpCode::Return => write!(f, "OP_RETURN"),
-            OpCode::Constant(index) => write!(f, "OP_CONSTANT {}", index),
+            OpCode::Constant => write!(f, "OP_CONSTANT"),
         }
     }
 }
 
 #[derive(Default)]
 pub struct Chunk {
-    instructions: Vec<OpCode>,
+    instructions: Vec<u8>,
     constants: Vec<LoxValue>,
 }
 
@@ -37,7 +38,11 @@ impl Chunk {
     }
 
     pub fn write_code(&mut self, code: OpCode) {
-        self.instructions.push(code);
+        self.instructions.push(code as u8);
+    }
+
+    pub fn write_operand(&mut self, value: u8) {
+        self.instructions.push(value);
     }
 
     pub fn add_constant(&mut self, value: LoxValue) -> usize {
@@ -52,7 +57,7 @@ impl Chunk {
         }
     }
 
-    fn disassembly_instruction(code: &OpCode, offset: usize) {
+    fn disassembly_instruction(code: &u8, offset: usize) {
         println!("{offset:04} {code}");
     }
 }
