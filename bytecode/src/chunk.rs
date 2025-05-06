@@ -61,16 +61,20 @@ impl Chunk {
             return offset + 1;
         };
         match code {
-            OpCode::Constant => {
-                let op1 = self.instructions[offset + 1];
-                let constant = &self.constants[op1 as usize];
-                println!("{offset:04} {code} '{constant}'");
-                offset + 2
-            }
-            OpCode::Return => {
-                println!("{offset:04} {code}");
-                offset + 1
-            }
+            OpCode::Constant => self.disassembly_constant(offset, &code),
+            OpCode::Return => self.disassembly_return(offset, &code),
         }
+    }
+
+    fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
+        let op1 = self.instructions[offset + 1];
+        let constant = &self.constants[op1 as usize];
+        println!("{offset:04} {code} '{constant}'");
+        offset + 2
+    }
+
+    fn disassembly_return(&self, offset: usize, code: &OpCode) -> usize {
+        println!("{offset:04} {code}");
+        offset + 1
     }
 }
