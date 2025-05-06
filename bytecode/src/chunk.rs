@@ -61,6 +61,11 @@ impl Chunk {
         }
     }
 
+    pub fn read_constant(&self, offset: usize) -> LoxValue {
+        let ix = self.get_constant_ix(offset);
+        self.constants[ix].clone()
+    }
+
     pub fn disassembly(&self, name: &str) {
         println!("=== {name} ===");
         let mut offset = 0;
@@ -69,12 +74,7 @@ impl Chunk {
         }
     }
 
-    fn add_constant(&mut self, value: LoxValue) -> usize {
-        self.constants.push(value);
-        self.constants.len() - 1
-    }
-
-    fn disassembly_instruction(&self, offset: usize) -> usize {
+    pub fn disassembly_instruction(&self, offset: usize) -> usize {
         let Some(code) = OpCode::from_u8(self.instructions[offset]) else {
             return offset + 1;
         };
@@ -92,20 +92,39 @@ impl Chunk {
     }
 
     fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
-        let op1 = self.instructions[offset + 1]; // first operand defines constant index in the constants vector
-        let constant = &self.constants[op1 as usize];
-        println!("{code:-16} {op1:4} '{constant}'");
+        let ix = self.get_constant_ix(offset);
+        let constant = &self.constants[ix];
+        println!("{code:-16} {ix:4} '{constant}'");
         offset + 2
     }
 
     fn disassembly_constant_long(&self, offset: usize, code: &OpCode) -> usize {
-        let op1 = self.instructions[offset + 1]; // first operand defines constant index in the constants vector
-        let op2 = self.instructions[offset + 2]; // second operand defines constant index in the constants vector
-        let op3 = self.instructions[offset + 3]; // third operand defines constant index in the constants vector
-        let ix: usize = (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize);
+        let ix = self.get_constant_ix(offset);
         let constant = &self.constants[ix];
         println!("{code:-16} {ix:4} '{constant}'");
         offset + 4
+    }
+
+    fn add_constant(&mut self, value: LoxValue) -> usize {
+        self.constants.push(value);
+        self.constants.len() - 1
+    }
+
+    fn get_constant_ix(&self, offset: usize) -> usize {
+        let Some(code) = OpCode::from_u8(self.instructions[offset]) else {
+            return 0;
+        };
+        match code {
+            OpCode::Constant => self.instructions[offset + 1] as usize,
+            OpCode::ConstantLong => {
+                let op1 = self.instructions[offset + 1]; // first operand defines constant index in the constants vector
+                let op2 = self.instructions[offset + 2]; // second operand defines constant index in the constants vector
+                let op3 = self.instructions[offset + 3]; // third operand defines constant index in the constants vector
+
+                (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize)
+            }
+            _ => 0,
+        }
     }
 
     fn disassembly_return(&self, offset: usize, code: &OpCode) -> usize {

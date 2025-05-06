@@ -30,15 +30,13 @@ impl<'a> VM<'a> {
             return InterpretResult::Ok;
         };
         let instr = &chunk.instructions;
-        let constants = &chunk.constants;
         while self.ip < instr.len() {
             let Some(code) = OpCode::from_u8(instr[self.ip]) else {
                 return InterpretResult::RuntimeError;
             };
             match code {
                 OpCode::Constant => {
-                    let op1 = instr[self.ip + 1];
-                    let constant = &constants[op1 as usize];
+                    let constant = chunk.read_constant(self.ip);
                     println!("{constant}");
                     self.ip += 2
                 }
@@ -47,11 +45,7 @@ impl<'a> VM<'a> {
                     return InterpretResult::Ok;
                 }
                 OpCode::ConstantLong => {
-                    let op1 = instr[self.ip + 1];
-                    let op2 = instr[self.ip + 2];
-                    let op3 = instr[self.ip + 3];
-                    let ix: usize = (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize);
-                    let constant = &constants[ix];
+                    let constant = chunk.read_constant(self.ip);
                     println!("{constant}");
                     self.ip += 4
                 }
