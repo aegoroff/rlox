@@ -52,10 +52,9 @@ impl Chunk {
         let constant = self.add_constant(value);
         if constant > 255 {
             self.write_code(OpCode::ConstantLong, line);
-            let bytes = into_three_bytes(constant);
-            self.write_operand(bytes[0], line);
-            self.write_operand(bytes[1], line);
-            self.write_operand(bytes[2], line);
+            for b in into_three_bytes(constant) {
+                self.write_operand(b, line);
+            }
         } else {
             self.write_code(OpCode::Constant, line);
             self.write_operand(constant as u8, line);
