@@ -25,8 +25,8 @@ impl Display for OpCode {
 
 #[derive(Default)]
 pub struct Chunk {
-    instructions: Vec<u8>,
-    constants: Vec<LoxValue>,
+    pub instructions: Vec<u8>,
+    pub constants: Vec<LoxValue>,
     lines: Vec<usize>,
 }
 
