@@ -1,17 +1,15 @@
 use std::fmt::Display;
 
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+
+use crate::value::LoxValue;
+
 #[repr(u8)]
+#[derive(FromPrimitive)]
 pub enum OpCode {
     Constant = 0,
     Return = 1,
-}
-
-#[derive(Clone, Debug)]
-pub enum LoxValue {
-    String(String),
-    Number(f64),
-    Bool(bool),
-    Nil,
 }
 
 impl Display for OpCode {
@@ -52,12 +50,26 @@ impl Chunk {
 
     pub fn disassembly(&self, name: &str) {
         println!("=== {name} ===");
-        for (offset, instruction) in self.instructions.iter().enumerate() {
-            Chunk::disassembly_instruction(instruction, offset);
+        let mut offset = 0;
+        while offset < self.instructions.len() {
+            offset = self.disassembly_instruction(offset);
         }
     }
 
-    fn disassembly_instruction(code: &u8, offset: usize) {
-        println!("{offset:04} {code}");
+    fn disassembly_instruction(&self, offset: usize) -> usize {
+        let code = self.instructions[offset];
+        match OpCode::from_u8(code) {
+            Some(OpCode::Constant) => {
+                let op1 = self.instructions[offset + 1];
+                let constant = &self.constants[op1 as usize];
+                println!("{offset:04} {code} {constant}");
+                offset + 2
+            }
+            Some(OpCode::Return) => {
+                println!("{offset:04} {code}");
+                offset + 1
+            }
+            None => offset + 1,
+        }
     }
 }

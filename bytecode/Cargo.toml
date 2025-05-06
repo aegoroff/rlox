@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 miette = { workspace = true, features = ["fancy"] }
 thiserror = { workspace = true }
+num-derive = "0.4.2"
+num-traits = "0.2.19"
 
 [dev-dependencies]
 test-case = "3.3.1"
