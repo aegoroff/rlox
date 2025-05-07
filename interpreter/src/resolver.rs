@@ -6,9 +6,9 @@ use crate::{
     LoxError,
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtVisitor},
     int::Interpreter,
-    lexer::{SUPER, THIS, Token},
 };
 use miette::{LabeledSpan, miette};
+use scanner::lexer::{SUPER, THIS, Token};
 
 #[derive(Debug, Clone, Copy)]
 enum ClassKind {

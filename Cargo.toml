@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   "bytecode",
   "interpreter",
+  "scanner",
   "rlox",
 ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

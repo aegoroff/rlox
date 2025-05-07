@@ -5,8 +5,8 @@ use miette::{LabeledSpan, miette};
 use crate::{
     LoxError,
     ast::{Expr, ExprKind, FunctionKind, Stmt, StmtKind},
-    lexer::{INIT, Lexer, Token},
 };
+use scanner::lexer::{INIT, Lexer, Token};
 
 pub struct Parser<'a> {
     tokens: Peekable<Lexer<'a>>,
@@ -63,7 +63,7 @@ impl<'a> Parser<'a> {
             loop {
                 let (arg_start, arg, arg_end) = match self.tokens.next() {
                     Some(Ok(expr)) => expr,
-                    Some(Err(e)) => return Some(Err(e)),
+                    Some(Err(e)) => return Some(Err(LoxError::Error(e))),
                     None => return None,
                 };
 
@@ -799,7 +799,7 @@ impl<'a> Parser<'a> {
                     // Consume operator
                     let (s, operator, f) = match self.tokens.next()? {
                         Ok(tok) => tok,
-                        Err(e) => return Some(Err(e)),
+                        Err(e) => return Some(Err(LoxError::Error(e))),
                     };
                     let Some(unary) = self.unary() else {
                         return Some(Err(LoxError::Error(miette!(
@@ -830,7 +830,7 @@ impl<'a> Parser<'a> {
                 // Consume token if it's not a valid unary operator
                 match self.tokens.next()? {
                     Ok(_) => unreachable!(),
-                    Err(e) => Some(Err(e)),
+                    Err(e) => Some(Err(LoxError::Error(e))),
                 }
             }
         }
@@ -908,7 +908,7 @@ impl<'a> Parser<'a> {
     fn primary(&mut self) -> Option<crate::Result<Expr<'a>>> {
         let (start, tok, finish) = match self.tokens.next()? {
             Ok(t) => t,
-            Err(e) => return Some(Err(e)),
+            Err(e) => return Some(Err(LoxError::Error(e))),
         };
         match tok {
             Token::String(_) | Token::Number(_) | Token::False | Token::Nil | Token::True => {
@@ -1090,7 +1090,7 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_current_and_open_paren(&mut self, token: &str) -> crate::Result<Range<usize>> {
-        let (start_token, _, end_token) = self.tokens.next().unwrap()?; // consume token TODO: include print start position into stmt location
+        let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
         if self.tokens.peek().is_none() {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
@@ -1130,7 +1130,7 @@ impl<'a> Parser<'a> {
             // Consume and validate token
             match self.tokens.next() {
                 Some(Ok(_)) | None => unreachable!(),
-                Some(Err(e)) => return Err(e),
+                Some(Err(e)) => return Err(LoxError::Error(e)),
             }
         };
         let start = *start;

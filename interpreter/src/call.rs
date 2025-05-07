@@ -12,8 +12,9 @@ use crate::{
     LoxError,
     ast::{LoxValue, Stmt},
     env::Environment,
-    lexer::{INIT, SUPER, THIS},
 };
+
+use scanner::lexer::{INIT, SUPER, THIS};
 
 pub enum CallResult<'a> {
     Value(LoxValue),

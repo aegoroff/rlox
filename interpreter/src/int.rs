@@ -13,8 +13,9 @@ use crate::{
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor},
     call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable},
     env::Environment,
-    lexer::{INIT, SUPER, THIS, Token},
 };
+
+use scanner::lexer::{INIT, SUPER, THIS, Token};
 
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Current environment that keeps current scope vars. Global by default
