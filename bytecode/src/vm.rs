@@ -1,6 +1,7 @@
 use num_traits::FromPrimitive;
 
 use crate::{
+    CompileError,
     chunk::{Chunk, OpCode},
     value::LoxValue,
 };
@@ -20,20 +21,12 @@ pub enum InterpretResult {
 
 macro_rules! binary_op {
     ($this:ident, $op:tt, $div:literal) => {{
-        let Some(b) = $this.pop() else {
-            return InterpretResult::RuntimeError;
-        };
-        let Some(a) = $this.pop() else {
-            return InterpretResult::RuntimeError;
-        };
-        let LoxValue::Number(a) = a else {
-            return InterpretResult::RuntimeError;
-        };
-        let LoxValue::Number(b) = b else {
-            return InterpretResult::RuntimeError;
-        };
+        let b = $this.pop_number()?;
+        let a = $this.pop_number()?;
         if $div && b == 0.0 {
-            return InterpretResult::RuntimeError;
+            return Err(CompileError::RuntimeError(miette::miette!(
+                "Divizion by zero"
+            )));
         }
         $this.push(LoxValue::Number(a $op b));
         $this.ip += 1;
@@ -49,7 +42,7 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    pub fn interpret(&mut self, chunk: &'a Chunk) -> InterpretResult {
+    pub fn interpret(&mut self, chunk: &'a Chunk) -> crate::Result<()> {
         self.chunk = Some(chunk);
         self.ip = 0;
         self.run()
@@ -63,19 +56,33 @@ impl<'a> VirtualMachine<'a> {
         self.stack.push(value);
     }
 
-    pub fn pop(&mut self) -> Option<LoxValue> {
-        self.stack.pop()
+    pub fn pop(&mut self) -> crate::Result<LoxValue> {
+        self.stack
+            .pop()
+            .ok_or(CompileError::RuntimeError(miette::miette!(
+                "Instructions stack empty"
+            )))
     }
 
-    fn run(&mut self) -> InterpretResult {
+    pub fn pop_number(&mut self) -> crate::Result<f64> {
+        let value = self.pop()?;
+        let LoxValue::Number(n) = value else {
+            return Err(CompileError::CompileError(miette::miette!(
+                "Number expectet but was: {value}"
+            )));
+        };
+        Ok(n)
+    }
+
+    fn run(&mut self) -> crate::Result<()> {
         let Some(chunk) = self.chunk else {
-            return InterpretResult::Ok;
+            return Ok(());
         };
         let instr = &chunk.instructions;
         while self.ip < instr.len() {
-            let Some(code) = OpCode::from_u8(instr[self.ip]) else {
-                return InterpretResult::RuntimeError;
-            };
+            let code = OpCode::from_u8(instr[self.ip]).ok_or(CompileError::CompileError(
+                miette::miette!("Invalid instruction: {}", instr[self.ip]),
+            ))?;
             #[cfg(feature = "disassembly")]
             {
                 for value in self.stack.iter() {
@@ -90,12 +97,10 @@ impl<'a> VirtualMachine<'a> {
                     self.ip += 2;
                 }
                 OpCode::Return => {
-                    let Some(value) = self.pop() else {
-                        return InterpretResult::RuntimeError;
-                    };
+                    let value = self.pop()?;
                     println!("{value}");
                     self.ip += 1;
-                    return InterpretResult::Ok;
+                    return Ok(());
                 }
                 OpCode::ConstantLong => {
                     let constant = chunk.read_constant(self.ip);
@@ -103,13 +108,8 @@ impl<'a> VirtualMachine<'a> {
                     self.ip += 4
                 }
                 OpCode::Negate => {
-                    let Some(value) = self.pop() else {
-                        return InterpretResult::RuntimeError;
-                    };
-                    let LoxValue::Number(n) = value else {
-                        return InterpretResult::RuntimeError;
-                    };
-                    self.push(LoxValue::Number(-n));
+                    let value = self.pop_number()?;
+                    self.push(LoxValue::Number(-value));
                     self.ip += 1;
                 }
                 OpCode::Add => binary_op!(self, +, false),
@@ -118,6 +118,6 @@ impl<'a> VirtualMachine<'a> {
                 OpCode::Divide => binary_op!(self, /, true),
             }
         }
-        InterpretResult::Ok
+        Ok(())
     }
 }

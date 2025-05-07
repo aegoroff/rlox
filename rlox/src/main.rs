@@ -118,8 +118,10 @@ fn compile(content: String) -> miette::Result<()> {
 
     let mut vm = VirtualMachine::new();
     vm.init();
-    vm.interpret(&chunk);
-    Ok(())
+    vm.interpret(&chunk).map_err(|err| match err {
+        bytecode::CompileError::CompileError(e) => e.with_source_code(content),
+        bytecode::CompileError::RuntimeError(e) => e.with_source_code(content),
+    })
 }
 
 fn print_bugreport(_matches: &ArgMatches) {
