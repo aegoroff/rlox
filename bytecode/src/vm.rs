@@ -41,8 +41,8 @@ impl VirtualMachine {
     pub fn interpret(&mut self, content: &str) -> crate::Result<()> {
         self.chunk = Chunk::new();
         self.ip = 0;
-        let mut parser = Parser::new();
-        parser.compile(content, &mut self.chunk)?;
+        let mut parser = Parser::new(content);
+        parser.compile(&mut self.chunk)?;
 
         self.run()
     }
