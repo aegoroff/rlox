@@ -1,4 +1,5 @@
 use num_traits::FromPrimitive;
+use scanner::lexer::Lexer;
 
 use crate::{
     CompileError,
@@ -67,6 +68,14 @@ impl<'a> VirtualMachine<'a> {
             )));
         };
         Ok(n)
+    }
+
+    pub fn compile(content: &'a str) -> crate::Result<()> {
+        let lexer = Lexer::new(content);
+        for t in lexer {
+            let _ = t.map_err(CompileError::CompileError)?;
+        }
+        Ok(())
     }
 
     fn run(&mut self) -> crate::Result<()> {
