@@ -8,8 +8,8 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct VirtualMachine<'a> {
-    chunk: Option<&'a Chunk>,
+pub struct VirtualMachine {
+    chunk: Chunk,
     ip: usize,
     stack: Vec<LoxValue>,
 }
@@ -29,18 +29,23 @@ macro_rules! binary_op {
     }}
 }
 
-impl<'a> VirtualMachine<'a> {
+impl VirtualMachine {
     pub fn new() -> Self {
         Self {
-            chunk: None,
+            chunk: Chunk::new(),
             ip: 0,
             stack: Vec::new(),
         }
     }
 
-    pub fn interpret(&mut self, chunk: &'a Chunk) -> crate::Result<()> {
-        self.chunk = Some(chunk);
+    pub fn interpret(&mut self, content: &str) -> crate::Result<()> {
+        self.chunk = Chunk::new();
         self.ip = 0;
+        let lexer = Lexer::new(content);
+        for t in lexer {
+            let _ = t.map_err(CompileError::CompileError)?;
+        }
+
         self.run()
     }
 
@@ -48,11 +53,11 @@ impl<'a> VirtualMachine<'a> {
         self.stack.clear();
     }
 
-    pub fn push(&mut self, value: LoxValue) {
+    fn push(&mut self, value: LoxValue) {
         self.stack.push(value);
     }
 
-    pub fn pop(&mut self) -> crate::Result<LoxValue> {
+    fn pop(&mut self) -> crate::Result<LoxValue> {
         self.stack
             .pop()
             .ok_or(CompileError::RuntimeError(miette::miette!(
@@ -60,7 +65,7 @@ impl<'a> VirtualMachine<'a> {
             )))
     }
 
-    pub fn pop_number(&mut self) -> crate::Result<f64> {
+    fn pop_number(&mut self) -> crate::Result<f64> {
         let value = self.pop()?;
         let LoxValue::Number(n) = value else {
             return Err(CompileError::CompileError(miette::miette!(
@@ -70,23 +75,12 @@ impl<'a> VirtualMachine<'a> {
         Ok(n)
     }
 
-    pub fn compile(content: &'a str) -> crate::Result<()> {
-        let lexer = Lexer::new(content);
-        for t in lexer {
-            let _ = t.map_err(CompileError::CompileError)?;
-        }
-        Ok(())
-    }
-
     fn run(&mut self) -> crate::Result<()> {
-        let Some(chunk) = self.chunk else {
-            return Ok(());
-        };
-        let instr = &chunk.instructions;
-        while self.ip < instr.len() {
-            let code = OpCode::from_u8(instr[self.ip]).ok_or(CompileError::CompileError(
-                miette::miette!("Invalid instruction: {}", instr[self.ip]),
-            ))?;
+        while self.ip < self.chunk.code.len() {
+            let code =
+                OpCode::from_u8(self.chunk.code[self.ip]).ok_or(CompileError::CompileError(
+                    miette::miette!("Invalid instruction: {}", self.chunk.code[self.ip]),
+                ))?;
             #[cfg(feature = "disassembly")]
             {
                 for value in self.stack.iter() {
@@ -96,7 +90,7 @@ impl<'a> VirtualMachine<'a> {
             }
             match code {
                 OpCode::Constant => {
-                    let constant = chunk.read_constant(self.ip);
+                    let constant = self.chunk.read_constant(self.ip);
                     self.push(constant);
                     self.ip += 2;
                 }
@@ -107,7 +101,7 @@ impl<'a> VirtualMachine<'a> {
                     return Ok(());
                 }
                 OpCode::ConstantLong => {
-                    let constant = chunk.read_constant(self.ip);
+                    let constant = self.chunk.read_constant(self.ip);
                     self.push(constant);
                     self.ip += 4
                 }

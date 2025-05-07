@@ -35,7 +35,7 @@ impl Display for OpCode {
 
 #[derive(Default)]
 pub struct Chunk {
-    pub instructions: Vec<u8>,
+    pub code: Vec<u8>,
     pub constants: Vec<LoxValue>,
     lines: Vec<usize>,
 }
@@ -43,7 +43,7 @@ pub struct Chunk {
 impl Chunk {
     pub fn new() -> Self {
         Self {
-            instructions: vec![],
+            code: vec![],
             constants: vec![],
             lines: vec![],
         }
@@ -54,7 +54,7 @@ impl Chunk {
     }
 
     pub fn write_operand(&mut self, value: u8, line: usize) {
-        self.instructions.push(value);
+        self.code.push(value);
         self.lines.push(line);
     }
 
@@ -79,13 +79,13 @@ impl Chunk {
     pub fn disassembly(&self, name: &str) {
         println!("=== {name} ===");
         let mut offset = 0;
-        while offset < self.instructions.len() {
+        while offset < self.code.len() {
             offset = self.disassembly_instruction(offset);
         }
     }
 
     pub fn disassembly_instruction(&self, offset: usize) -> usize {
-        let Some(code) = OpCode::from_u8(self.instructions[offset]) else {
+        let Some(code) = OpCode::from_u8(self.code[offset]) else {
             return offset + 1;
         };
         print!("{offset:04} ");
@@ -134,7 +134,7 @@ impl Chunk {
         println!("{code}");
         offset + 1
     }
-    
+
     fn disassembly_multiply(&self, offset: usize, code: &OpCode) -> usize {
         println!("{code}");
         offset + 1
@@ -150,15 +150,15 @@ impl Chunk {
     }
 
     fn get_constant_ix(&self, offset: usize) -> usize {
-        let Some(code) = OpCode::from_u8(self.instructions[offset]) else {
+        let Some(code) = OpCode::from_u8(self.code[offset]) else {
             return 0;
         };
         match code {
-            OpCode::Constant => self.instructions[offset + 1] as usize,
+            OpCode::Constant => self.code[offset + 1] as usize,
             OpCode::ConstantLong => {
-                let op1 = self.instructions[offset + 1]; // first operand defines constant index in the constants vector
-                let op2 = self.instructions[offset + 2]; // second operand defines constant index in the constants vector
-                let op3 = self.instructions[offset + 3]; // third operand defines constant index in the constants vector
+                let op1 = self.code[offset + 1]; // first operand defines constant index in the constants vector
+                let op2 = self.code[offset + 2]; // second operand defines constant index in the constants vector
+                let op3 = self.code[offset + 3]; // third operand defines constant index in the constants vector
 
                 (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize)
             }
