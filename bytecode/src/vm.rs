@@ -67,7 +67,7 @@ impl VirtualMachine {
         let value = self.pop()?;
         let LoxValue::Number(n) = value else {
             return Err(CompileError::CompileError(miette::miette!(
-                "Number expectet but was: {value}"
+                "Number expected but was: {value}"
             )));
         };
         Ok(n)
@@ -116,7 +116,7 @@ impl VirtualMachine {
                     let a = self.pop_number()?;
                     if b == 0.0 {
                         return Err(CompileError::RuntimeError(miette::miette!(
-                            "Divizion by zero"
+                            "Division by zero"
                         )));
                     }
                     self.push(LoxValue::Number(a / b));
