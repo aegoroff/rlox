@@ -90,6 +90,73 @@ impl<'a> VirtualMachine<'a> {
                     self.push(LoxValue::Number(-n));
                     self.ip += 1;
                 }
+                OpCode::Add => {
+                    let Some(b) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let Some(a) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(a) = a else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(b) = b else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    self.push(LoxValue::Number(a + b));
+                    self.ip += 1;
+                }
+                OpCode::Subtract => {
+                    let Some(b) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let Some(a) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(a) = a else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(b) = b else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    self.push(LoxValue::Number(a - b));
+                    self.ip += 1;
+                }
+                OpCode::Multiply => {
+                    let Some(b) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let Some(a) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(a) = a else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(b) = b else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    self.push(LoxValue::Number(a * b));
+                    self.ip += 1;
+                }
+                OpCode::Divide => {
+                    let Some(b) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let Some(a) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(a) = a else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(b) = b else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    if b == 0.0 {
+                        return InterpretResult::RuntimeError;
+                    }
+                    self.push(LoxValue::Number(a / b));
+                    self.ip += 1;
+                }
             }
         }
         InterpretResult::Ok

@@ -109,6 +109,10 @@ fn compile(content: String) -> miette::Result<()> {
 
     let line = 123;
     chunk.write_constant(LoxValue::Number(1.2), line);
+    chunk.write_constant(LoxValue::Number(3.4), line);
+    chunk.write_code(bytecode::chunk::OpCode::Add, line);
+    chunk.write_constant(LoxValue::Number(5.6), line);
+    chunk.write_code(bytecode::chunk::OpCode::Divide, line);
     chunk.write_code(bytecode::chunk::OpCode::Negate, line);
     chunk.write_code(bytecode::chunk::OpCode::Return, line);
 

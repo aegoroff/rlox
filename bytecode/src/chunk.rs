@@ -10,8 +10,12 @@ use crate::value::LoxValue;
 pub enum OpCode {
     Constant = 0,
     ConstantLong = 1,
-    Negate = 2,
-    Return = 3,
+    Add = 2,
+    Subtract = 3,
+    Multiply = 4,
+    Divide = 5,
+    Negate = 6,
+    Return = 7,
 }
 
 impl Display for OpCode {
@@ -21,6 +25,10 @@ impl Display for OpCode {
             OpCode::Constant => write!(f, "OP_CONSTANT"),
             OpCode::ConstantLong => write!(f, "OP_CONSTANT_LONG"),
             OpCode::Negate => write!(f, "OP_NEGATE"),
+            OpCode::Add => write!(f, "OP_ADD"),
+            OpCode::Subtract => write!(f, "OP_SUBTRACT"),
+            OpCode::Multiply => write!(f, "OP_MULTIPLY"),
+            OpCode::Divide => write!(f, "OP_DIVIDE"),
         }
     }
 }
@@ -91,12 +99,16 @@ impl Chunk {
             OpCode::Return => self.disassembly_return(offset, &code),
             OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
             OpCode::Negate => self.disassembly_negate(offset, &code),
+            OpCode::Add => self.disassembly_add(offset, &code),
+            OpCode::Subtract => self.disassembly_subtract(offset, &code),
+            OpCode::Multiply => self.disassembly_multiply(offset, &code),
+            OpCode::Divide => self.disassembly_divide(offset, &code),
         }
     }
 
     fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
         let ix = self.get_constant_ix(offset);
-        let constant = &self.constants[ix]; 
+        let constant = &self.constants[ix];
         println!("{code:-16} {ix:4} '{constant}'");
         offset + 2
     }
@@ -113,6 +125,25 @@ impl Chunk {
         offset + 1
     }
 
+    fn disassembly_add(&self, offset: usize, code: &OpCode) -> usize {
+        println!("{code}");
+        offset + 1
+    }
+
+    fn disassembly_subtract(&self, offset: usize, code: &OpCode) -> usize {
+        println!("{code}");
+        offset + 1
+    }
+    
+    fn disassembly_multiply(&self, offset: usize, code: &OpCode) -> usize {
+        println!("{code}");
+        offset + 1
+    }
+
+    fn disassembly_divide(&self, offset: usize, code: &OpCode) -> usize {
+        println!("{code}");
+        offset + 1
+    }
     fn add_constant(&mut self, value: LoxValue) -> usize {
         self.constants.push(value);
         self.constants.len() - 1
