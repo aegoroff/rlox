@@ -80,6 +80,16 @@ impl<'a> VirtualMachine<'a> {
                     self.push(constant);
                     self.ip += 4
                 }
+                OpCode::Negate => {
+                    let Some(value) = self.pop() else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    let LoxValue::Number(n) = value else {
+                        return InterpretResult::RuntimeError;
+                    };
+                    self.push(LoxValue::Number(-n));
+                    self.ip += 1;
+                }
             }
         }
         InterpretResult::Ok

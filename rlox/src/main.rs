@@ -109,6 +109,7 @@ fn compile(content: String) -> miette::Result<()> {
 
     let line = 123;
     chunk.write_constant(LoxValue::Number(1.2), line);
+    chunk.write_code(bytecode::chunk::OpCode::Negate, line);
     chunk.write_code(bytecode::chunk::OpCode::Return, line);
 
     let mut vm = VirtualMachine::new();

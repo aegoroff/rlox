@@ -9,8 +9,9 @@ use crate::value::LoxValue;
 #[derive(FromPrimitive)]
 pub enum OpCode {
     Constant = 0,
-    Return = 1,
-    ConstantLong = 2,
+    ConstantLong = 1,
+    Negate = 2,
+    Return = 3,
 }
 
 impl Display for OpCode {
@@ -19,6 +20,7 @@ impl Display for OpCode {
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Constant => write!(f, "OP_CONSTANT"),
             OpCode::ConstantLong => write!(f, "OP_CONSTANT_LONG"),
+            OpCode::Negate => write!(f, "OP_NEGATE"),
         }
     }
 }
@@ -88,12 +90,13 @@ impl Chunk {
             OpCode::Constant => self.disassembly_constant(offset, &code),
             OpCode::Return => self.disassembly_return(offset, &code),
             OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
+            OpCode::Negate => self.disassembly_negate(offset, &code),
         }
     }
 
     fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
         let ix = self.get_constant_ix(offset);
-        let constant = &self.constants[ix];
+        let constant = &self.constants[ix]; 
         println!("{code:-16} {ix:4} '{constant}'");
         offset + 2
     }
@@ -103,6 +106,11 @@ impl Chunk {
         let constant = &self.constants[ix];
         println!("{code:-16} {ix:4} '{constant}'");
         offset + 4
+    }
+
+    fn disassembly_negate(&self, offset: usize, code: &OpCode) -> usize {
+        println!("{code}");
+        offset + 1
     }
 
     fn add_constant(&mut self, value: LoxValue) -> usize {
