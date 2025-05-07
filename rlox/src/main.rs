@@ -8,8 +8,8 @@ use bugreport::{
     collector::{CompileTimeInformation, EnvironmentVariables, OperatingSystem, SoftwareVersion},
     format::Markdown,
 };
-use bytecode::{chunk::Chunk, value::LoxValue, vm::VirtualMachine};
 use clap::{ArgMatches, Command, command};
+use compiler::vm::VirtualMachine;
 use interpreter::{ast::Stmt, int::Interpreter, parser::Parser, resolver::Resolver};
 use miette::{Context, IntoDiagnostic, miette};
 
@@ -104,24 +104,12 @@ fn interpret(content: String) -> miette::Result<()> {
 }
 
 fn compile(content: String) -> miette::Result<()> {
-    // TODO: compilation entry point here
-    let mut chunk = Chunk::new();
-
-    let line = 123;
-    chunk.write_constant(LoxValue::Number(1.2), line);
-    chunk.write_constant(LoxValue::Number(3.4), line);
-    chunk.write_code(bytecode::chunk::OpCode::Add, line);
-    chunk.write_constant(LoxValue::Number(5.6), line);
-    chunk.write_code(bytecode::chunk::OpCode::Divide, line);
-    chunk.write_code(bytecode::chunk::OpCode::Negate, line);
-    chunk.write_code(bytecode::chunk::OpCode::Return, line);
-
     let mut vm = VirtualMachine::new();
     vm.init();
 
     vm.interpret(&content).map_err(|err| match err {
-        bytecode::CompileError::CompileError(e) => e.with_source_code(content),
-        bytecode::CompileError::RuntimeError(e) => e.with_source_code(content),
+        compiler::CompileError::CompileError(e) => e.with_source_code(content),
+        compiler::CompileError::RuntimeError(e) => e.with_source_code(content),
     })
 }
 

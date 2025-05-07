@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-  "bytecode",
+  "compiler",
   "interpreter",
   "scanner",
   "rlox",

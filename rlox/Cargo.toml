@@ -8,14 +8,10 @@ repository = "https://git.egoroff.spb.ru/root/rlox"
 
 [dependencies]
 interpreter = { path = "../interpreter" }
-bytecode = { path = "../bytecode" }
+compiler = { path = "../compiler" }
 bugreport = "0.5.1"
 clap = { version = "4.5.37", features = ["std", "color", "suggestions", "cargo"] }
 miette = { workspace = true, features = ["fancy"] }
-thiserror = { workspace = true }
-
-[dev-dependencies]
-test-case = "3.3.1"
 
 [features]
-disassembly = ["bytecode/disassembly"]
+disassembly = ["compiler/disassembly"]
