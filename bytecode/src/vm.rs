@@ -20,14 +20,9 @@ pub enum InterpretResult {
 }
 
 macro_rules! binary_op {
-    ($this:ident, $op:tt, $div:literal) => {{
+    ($this:ident, $op:tt) => {{
         let b = $this.pop_number()?;
         let a = $this.pop_number()?;
-        if $div && b == 0.0 {
-            return Err(CompileError::RuntimeError(miette::miette!(
-                "Divizion by zero"
-            )));
-        }
         $this.push(LoxValue::Number(a $op b));
         $this.ip += 1;
     }}
@@ -112,10 +107,20 @@ impl<'a> VirtualMachine<'a> {
                     self.push(LoxValue::Number(-value));
                     self.ip += 1;
                 }
-                OpCode::Add => binary_op!(self, +, false),
-                OpCode::Subtract => binary_op!(self, -, false),
-                OpCode::Multiply => binary_op!(self, *, false),
-                OpCode::Divide => binary_op!(self, /, true),
+                OpCode::Add => binary_op!(self, +),
+                OpCode::Subtract => binary_op!(self, -),
+                OpCode::Multiply => binary_op!(self, *),
+                OpCode::Divide => {
+                    let b = self.pop_number()?;
+                    let a = self.pop_number()?;
+                    if b == 0.0 {
+                        return Err(CompileError::RuntimeError(miette::miette!(
+                            "Divizion by zero"
+                        )));
+                    }
+                    self.push(LoxValue::Number(a / b));
+                    self.ip += 1;
+                }
             }
         }
         Ok(())
