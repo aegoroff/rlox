@@ -1,9 +1,9 @@
 use num_traits::FromPrimitive;
-use scanner::lexer::Lexer;
 
 use crate::{
     CompileError,
     chunk::{Chunk, OpCode},
+    compile::Parser,
     value::LoxValue,
 };
 
@@ -41,10 +41,8 @@ impl VirtualMachine {
     pub fn interpret(&mut self, content: &str) -> crate::Result<()> {
         self.chunk = Chunk::new();
         self.ip = 0;
-        let lexer = Lexer::new(content);
-        for t in lexer {
-            let _ = t.map_err(CompileError::CompileError)?;
-        }
+        let mut parser = Parser::new();
+        parser.compile(content, &mut self.chunk)?;
 
         self.run()
     }
