@@ -112,6 +112,7 @@ fn compile(content: String) -> miette::Result<()> {
     chunk.write_code(bytecode::chunk::OpCode::Return, line);
 
     let mut vm = VirtualMachine::new();
+    vm.init();
     vm.interpret(&chunk);
     Ok(())
 }
