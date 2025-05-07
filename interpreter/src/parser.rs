@@ -6,7 +6,7 @@ use crate::{
     LoxError,
     ast::{Expr, ExprKind, FunctionKind, Stmt, StmtKind},
 };
-use scanner::lexer::{INIT, Lexer, Token};
+use scanner::{INIT, Lexer, Token};
 
 pub struct Parser<'a> {
     tokens: Peekable<Lexer<'a>>,

@@ -8,7 +8,7 @@ use crate::{
     int::Interpreter,
 };
 use miette::{LabeledSpan, miette};
-use scanner::lexer::{SUPER, THIS, Token};
+use scanner::{SUPER, THIS, Token};
 
 #[derive(Debug, Clone, Copy)]
 enum ClassKind {

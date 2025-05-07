@@ -15,7 +15,7 @@ use crate::{
     env::Environment,
 };
 
-use scanner::lexer::{INIT, SUPER, THIS, Token};
+use scanner::{INIT, SUPER, THIS, Token};
 
 pub struct Interpreter<'a, W: std::io::Write> {
     /// Current environment that keeps current scope vars. Global by default

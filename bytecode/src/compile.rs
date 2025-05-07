@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use scanner::lexer::Lexer;
+use scanner::Lexer;
 
 use crate::chunk::Chunk;
 

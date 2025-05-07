@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{LoxError, env::Environment};
-use scanner::lexer::Token;
+use scanner::Token;
 
 // Traits
 

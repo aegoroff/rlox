@@ -14,7 +14,7 @@ use crate::{
     env::Environment,
 };
 
-use scanner::lexer::{INIT, SUPER, THIS};
+use scanner::{INIT, SUPER, THIS};
 
 pub enum CallResult<'a> {
     Value(LoxValue),
