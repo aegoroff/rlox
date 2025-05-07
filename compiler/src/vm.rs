@@ -14,18 +14,12 @@ pub struct VirtualMachine {
     stack: Vec<LoxValue>,
 }
 
-pub enum InterpretResult {
-    Ok = 0,
-    CompileError = 1,
-    RuntimeError = 2,
-}
-
 macro_rules! binary_op {
-    ($this:ident, $op:tt) => {{
-        let b = $this.pop_number()?;
-        let a = $this.pop_number()?;
-        $this.push(LoxValue::Number(a $op b));
-        $this.ip += 1;
+    ($self:ident, $op:tt) => {{
+        let b = $self.pop_number()?;
+        let a = $self.pop_number()?;
+        $self.push(LoxValue::Number(a $op b));
+        $self.ip += 1;
     }}
 }
 
