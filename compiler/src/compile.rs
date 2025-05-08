@@ -3,6 +3,7 @@ use scanner::{Lexer, Token};
 use crate::{
     CompileError,
     chunk::{Chunk, OpCode},
+    value::LoxValue,
 };
 
 pub struct Parser<'a> {
@@ -28,6 +29,35 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn unary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        let current = self.advance()?;
+        if let Token::Minus = current {
+            self.expression()?;
+            self.emit_opcode(chunk, OpCode::Negate);
+        } else {
+            self.expression()?;
+        }
+        Ok(())
+    }
+
+    fn grouping(&mut self) -> crate::Result<()> {
+        self.expression()?;
+        self.consume(&Token::RightParen)?;
+        Ok(())
+    }
+
+    fn number(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        let current = self.advance()?;
+        if let Token::Number(number) = current {
+            self.emit_constant(chunk, LoxValue::Number(number));
+            Ok(())
+        } else {
+            Err(CompileError::CompileError(miette::miette!(
+                "Unexpected token: '{current}' Expected: 'number'"
+            )))
+        }
+    }
+
     fn advance(&mut self) -> crate::Result<Token<'a>> {
         match self.tokens.next() {
             Some(Ok((_, t, _))) => Ok(t),
@@ -47,6 +77,14 @@ impl<'a> Parser<'a> {
                 "Unexpected token: '{current}' Expected: '{token}'"
             )))
         }
+    }
+
+    fn emit_constant(&self, chunk: &mut Chunk, value: LoxValue) {
+        chunk.write_constant(value, self.tokens.line);
+    }
+
+    fn emit_opcode(&self, chunk: &mut Chunk, opcode: OpCode) {
+        chunk.write_code(opcode, self.tokens.line);
     }
 
     fn emit_byte(&self, chunk: &mut Chunk, byte: u8) {
