@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use scanner::{Lexer, Token};
 
 use crate::{
@@ -14,6 +16,8 @@ pub struct Parser<'a> {
     previous: Rc<RefCell<Token<'a>>>,
 }
 
+#[repr(u8)]
+#[derive(FromPrimitive, Clone, Copy)]
 enum Precedence {
     None = 0,
     Assignment = 1,
@@ -41,18 +45,45 @@ impl<'a> Parser<'a> {
     pub fn compile(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         self.advance()?;
         self.expression(chunk)?;
+        self.consume(&Token::Eof)?;
         self.end_compiler(chunk);
         Ok(())
     }
 
     fn expression(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        self.parse_precedence(Precedence::Assignment)?;
+        self.parse_precedence(chunk, Precedence::Assignment)?;
+        Ok(())
+    }
+
+    fn binary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        let previous = self.previous.clone();
+        let precedence = self.get_precedence(&previous.borrow());
+        let precedence = precedence as u8 + 1;
+        let precedence = Precedence::from_u8(precedence).ok_or(CompileError::CompileError(
+            miette::miette!("Invalid precedence: {}", precedence),
+        ))?;
+        self.parse_precedence(chunk, precedence)?;
+        match *previous.borrow() {
+            Token::Minus => {
+                self.emit_opcode(chunk, OpCode::Subtract);
+            }
+            Token::Slash => {
+                self.emit_opcode(chunk, OpCode::Divide);
+            }
+            Token::Star => {
+                self.emit_opcode(chunk, OpCode::Multiply);
+            }
+            Token::Plus => {
+                self.emit_opcode(chunk, OpCode::Add);
+            }
+            _ => (),
+        }
         Ok(())
     }
 
     fn unary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let previous = self.previous.clone();
-        self.parse_precedence(Precedence::Unary)?;
+        self.parse_precedence(chunk, Precedence::Unary)?;
         if let Token::Minus = *previous.borrow() {
             self.emit_opcode(chunk, OpCode::Negate);
         }
@@ -77,8 +108,79 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_precedence(&mut self, _precedence: Precedence) -> crate::Result<()> {
+    fn parse_precedence(&mut self, chunk: &mut Chunk, precedence: Precedence) -> crate::Result<()> {
+        self.advance()?;
+        let previous = self.previous.clone();
+        self.call_prefix(chunk, &previous.borrow())?;
+        while self.get_precedence(&self.current.borrow()) as u8 >= precedence as u8 {
+            self.advance()?;
+            let previous = self.previous.clone();
+            self.call_infix(chunk, &previous.borrow())?;
+        }
         Ok(())
+    }
+
+    fn get_precedence(&self, token: &Token) -> Precedence {
+        match token {
+            Token::Minus => Precedence::Term,
+            Token::LeftParen => Precedence::None,
+            Token::RightParen => Precedence::None,
+            Token::LeftBrace => Precedence::None,
+            Token::RightBrace => Precedence::None,
+            Token::Comma => Precedence::None,
+            Token::Dot => Precedence::None,
+            Token::Plus => Precedence::Term,
+            Token::Semicolon => Precedence::None,
+            Token::Slash => Precedence::Factor,
+            Token::Star => Precedence::Factor,
+            Token::Bang => Precedence::None,
+            Token::BangEqual => Precedence::None,
+            Token::Equal => Precedence::None,
+            Token::EqualEqual => Precedence::None,
+            Token::Greater => Precedence::None,
+            Token::GreaterEqual => Precedence::None,
+            Token::Less => Precedence::None,
+            Token::LessEqual => Precedence::None,
+            Token::Identifier(_) => Precedence::None,
+            Token::String(_) => Precedence::None,
+            Token::Number(_) => Precedence::None,
+            Token::And => Precedence::None,
+            Token::Class => Precedence::None,
+            Token::Else => Precedence::None,
+            Token::False => Precedence::None,
+            Token::Fun => Precedence::None,
+            Token::For => Precedence::None,
+            Token::If => Precedence::None,
+            Token::Nil => Precedence::None,
+            Token::Or => Precedence::None,
+            Token::Print => Precedence::None,
+            Token::Return => Precedence::None,
+            Token::Super => Precedence::None,
+            Token::This => Precedence::None,
+            Token::True => Precedence::None,
+            Token::Var => Precedence::None,
+            Token::While => Precedence::None,
+            Token::Eof => Precedence::None,
+        }
+    }
+
+    fn call_infix(&mut self, chunk: &mut Chunk, token: &Token) -> crate::Result<()> {
+        match token {
+            Token::Minus => self.binary(chunk),
+            Token::Plus => self.binary(chunk),
+            Token::Slash => self.binary(chunk),
+            Token::Star => self.binary(chunk),
+            _ => Ok(()),
+        }
+    }
+
+    fn call_prefix(&mut self, chunk: &mut Chunk, token: &Token) -> crate::Result<()> {
+        match token {
+            Token::Minus => self.unary(chunk),
+            Token::LeftParen => self.grouping(chunk),
+            Token::Number(_) => self.number(chunk),
+            _ => Ok(()),
+        }
     }
 
     fn advance(&mut self) -> crate::Result<()> {
@@ -89,9 +191,11 @@ impl<'a> Parser<'a> {
                 Ok(())
             }
             Some(Err(r)) => Err(CompileError::CompileError(r)),
-            None => Err(CompileError::CompileError(miette::miette!(
-                "Unexpected EOF"
-            ))),
+            None => {
+                self.previous = self.current.clone();
+                self.current = Rc::new(RefCell::new(Token::Eof));
+                Ok(())
+            }
         }
     }
 
@@ -113,10 +217,6 @@ impl<'a> Parser<'a> {
 
     fn emit_opcode(&self, chunk: &mut Chunk, opcode: OpCode) {
         chunk.write_code(opcode, self.tokens.line);
-    }
-
-    fn emit_byte(&self, chunk: &mut Chunk, byte: u8) {
-        chunk.write_operand(byte, self.tokens.line);
     }
 
     fn emit_return(&self, chunk: &mut Chunk) {

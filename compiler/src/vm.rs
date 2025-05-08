@@ -37,7 +37,6 @@ impl VirtualMachine {
         self.ip = 0;
         let mut parser = Parser::new(content);
         parser.compile(&mut self.chunk)?;
-
         self.run()
     }
 
