@@ -35,4 +35,15 @@ impl<'a> Parser<'a> {
             ))),
         }
     }
+
+    fn consume(&mut self, token: &Token) -> crate::Result<Token<'a>> {
+        let current = self.advance()?;
+        if &current == token {
+            Ok(current)
+        } else {
+            Err(CompileError::CompileError(miette::miette!(
+                "Unexpected token: {current} Expected: {token}"
+            )))
+        }
+    }
 }
