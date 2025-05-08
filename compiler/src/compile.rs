@@ -1,6 +1,9 @@
 use scanner::{Lexer, Token};
 
-use crate::{CompileError, chunk::Chunk};
+use crate::{
+    CompileError,
+    chunk::{Chunk, OpCode},
+};
 
 pub struct Parser<'a> {
     tokens: Lexer<'a>,
@@ -14,9 +17,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn compile(&mut self, _chunk: &mut Chunk) -> crate::Result<()> {
+    pub fn compile(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let _current = self.advance()?;
         self.expression()?;
+        self.end_compiler(chunk);
         Ok(())
     }
 
@@ -45,7 +49,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn emit_byte(chunk: &mut Chunk, byte: u8, line: usize) {
-        chunk.write_operand(byte, line);
+    fn emit_byte(&self, chunk: &mut Chunk, byte: u8) {
+        chunk.write_operand(byte, self.tokens.line);
+    }
+
+    fn emit_return(&self, chunk: &mut Chunk) {
+        chunk.write_code(OpCode::Return, self.tokens.line);
+    }
+
+    fn end_compiler(&self, chunk: &mut Chunk) {
+        self.emit_return(chunk);
     }
 }

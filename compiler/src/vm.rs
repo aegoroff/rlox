@@ -78,7 +78,7 @@ impl VirtualMachine {
                 for value in self.stack.iter() {
                     println!("[{value}]");
                 }
-                chunk.disassembly_instruction(self.ip);
+                self.chunk.disassembly_instruction(self.ip);
             }
             match code {
                 OpCode::Constant => {
