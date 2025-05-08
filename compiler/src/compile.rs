@@ -122,54 +122,15 @@ impl<'a> Parser<'a> {
 
     fn get_precedence(&self, token: &Token) -> Precedence {
         match token {
-            Token::Minus => Precedence::Term,
-            Token::LeftParen => Precedence::None,
-            Token::RightParen => Precedence::None,
-            Token::LeftBrace => Precedence::None,
-            Token::RightBrace => Precedence::None,
-            Token::Comma => Precedence::None,
-            Token::Dot => Precedence::None,
-            Token::Plus => Precedence::Term,
-            Token::Semicolon => Precedence::None,
-            Token::Slash => Precedence::Factor,
-            Token::Star => Precedence::Factor,
-            Token::Bang => Precedence::None,
-            Token::BangEqual => Precedence::None,
-            Token::Equal => Precedence::None,
-            Token::EqualEqual => Precedence::None,
-            Token::Greater => Precedence::None,
-            Token::GreaterEqual => Precedence::None,
-            Token::Less => Precedence::None,
-            Token::LessEqual => Precedence::None,
-            Token::Identifier(_) => Precedence::None,
-            Token::String(_) => Precedence::None,
-            Token::Number(_) => Precedence::None,
-            Token::And => Precedence::None,
-            Token::Class => Precedence::None,
-            Token::Else => Precedence::None,
-            Token::False => Precedence::None,
-            Token::Fun => Precedence::None,
-            Token::For => Precedence::None,
-            Token::If => Precedence::None,
-            Token::Nil => Precedence::None,
-            Token::Or => Precedence::None,
-            Token::Print => Precedence::None,
-            Token::Return => Precedence::None,
-            Token::Super => Precedence::None,
-            Token::This => Precedence::None,
-            Token::True => Precedence::None,
-            Token::Var => Precedence::None,
-            Token::While => Precedence::None,
-            Token::Eof => Precedence::None,
+            Token::Minus | Token::Plus => Precedence::Term,
+            Token::Slash | Token::Star => Precedence::Factor,
+            _ => Precedence::None,
         }
     }
 
     fn call_infix(&mut self, chunk: &mut Chunk, token: &Token) -> crate::Result<()> {
         match token {
-            Token::Minus => self.binary(chunk),
-            Token::Plus => self.binary(chunk),
-            Token::Slash => self.binary(chunk),
-            Token::Star => self.binary(chunk),
+            Token::Minus | Token::Plus | Token::Slash | Token::Star => self.binary(chunk),
             _ => Ok(()),
         }
     }

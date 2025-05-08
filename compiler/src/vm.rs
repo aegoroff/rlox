@@ -24,6 +24,7 @@ macro_rules! binary_op {
 }
 
 impl VirtualMachine {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             chunk: Chunk::new(),
@@ -74,7 +75,7 @@ impl VirtualMachine {
                 ))?;
             #[cfg(feature = "disassembly")]
             {
-                for value in self.stack.iter() {
+                for value in &self.stack {
                     println!("[{value}]");
                 }
                 self.chunk.disassembly_instruction(self.ip);
@@ -94,7 +95,7 @@ impl VirtualMachine {
                 OpCode::ConstantLong => {
                     let constant = self.chunk.read_constant(self.ip);
                     self.push(constant);
-                    self.ip += 4
+                    self.ip += 4;
                 }
                 OpCode::Negate => {
                     let value = self.pop_number()?;

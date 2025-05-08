@@ -108,8 +108,9 @@ fn compile(content: String) -> miette::Result<()> {
     vm.init();
 
     vm.interpret(&content).map_err(|err| match err {
-        compiler::CompileError::CompileError(e) => e.with_source_code(content),
-        compiler::CompileError::RuntimeError(e) => e.with_source_code(content),
+        compiler::CompileError::CompileError(e) | compiler::CompileError::RuntimeError(e) => {
+            e.with_source_code(content)
+        }
     })
 }
 
