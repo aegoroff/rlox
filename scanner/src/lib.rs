@@ -54,6 +54,7 @@ pub enum Token<'a> {
     True,
     Var,
     While,
+    Eof,
 }
 
 impl std::hash::Hash for Token<'_> {
@@ -343,6 +344,7 @@ impl Display for Token<'_> {
             Token::True => write!(f, "TRUE"),
             Token::Var => write!(f, "VAR"),
             Token::While => write!(f, "WHILE"),
+            Token::Eof => write!(f, "EOF"),
         }
     }
 }

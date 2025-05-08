@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use scanner::{Lexer, Token};
 
 use crate::{
@@ -8,6 +10,8 @@ use crate::{
 
 pub struct Parser<'a> {
     tokens: Lexer<'a>,
+    current: Rc<RefCell<Token<'a>>>,
+    previous: Rc<RefCell<Token<'a>>>,
 }
 
 impl<'a> Parser<'a> {
@@ -15,52 +19,56 @@ impl<'a> Parser<'a> {
     pub fn new(content: &'a str) -> Self {
         Self {
             tokens: Lexer::new(content),
+            current: Rc::new(RefCell::new(Token::Eof)),
+            previous: Rc::new(RefCell::new(Token::Eof)),
         }
     }
 
     pub fn compile(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        let _current = self.advance()?;
-        self.expression()?;
+        self.advance()?;
+        self.expression(chunk)?;
         self.end_compiler(chunk);
         Ok(())
     }
 
-    fn expression(&mut self) -> crate::Result<()> {
+    fn expression(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         Ok(())
     }
 
     fn unary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        let current = self.advance()?;
-        if let Token::Minus = current {
-            self.expression()?;
+        let previous = self.previous.clone();
+        self.expression(chunk)?;
+        if let Token::Minus = *previous.borrow() {
             self.emit_opcode(chunk, OpCode::Negate);
-        } else {
-            self.expression()?;
         }
         Ok(())
     }
 
-    fn grouping(&mut self) -> crate::Result<()> {
-        self.expression()?;
+    fn grouping(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.expression(chunk)?;
         self.consume(&Token::RightParen)?;
         Ok(())
     }
 
     fn number(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        let current = self.advance()?;
-        if let Token::Number(number) = current {
+        if let Token::Number(number) = *self.previous.borrow() {
             self.emit_constant(chunk, LoxValue::Number(number));
             Ok(())
         } else {
             Err(CompileError::CompileError(miette::miette!(
-                "Unexpected token: '{current}' Expected: 'number'"
+                "Unexpected token: '{}' Expected: 'number'",
+                self.previous.borrow()
             )))
         }
     }
 
-    fn advance(&mut self) -> crate::Result<Token<'a>> {
+    fn advance(&mut self) -> crate::Result<()> {
         match self.tokens.next() {
-            Some(Ok((_, t, _))) => Ok(t),
+            Some(Ok((_, t, _))) => {
+                self.previous = self.current.clone();
+                self.current = Rc::new(RefCell::new(t));
+                Ok(())
+            }
             Some(Err(r)) => Err(CompileError::CompileError(r)),
             None => Err(CompileError::CompileError(miette::miette!(
                 "Unexpected EOF"
@@ -68,13 +76,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn consume(&mut self, token: &Token) -> crate::Result<Token<'a>> {
-        let current = self.advance()?;
-        if &current == token {
-            Ok(current)
+    fn consume(&mut self, token: &Token) -> crate::Result<()> {
+        if *self.current.borrow() == *token {
+            self.advance()?;
+            Ok(())
         } else {
             Err(CompileError::CompileError(miette::miette!(
-                "Unexpected token: '{current}' Expected: '{token}'"
+                "Unexpected token: '{}' Expected: '{token}'",
+                self.current.borrow()
             )))
         }
     }
