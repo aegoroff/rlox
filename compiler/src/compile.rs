@@ -1,8 +1,8 @@
 use std::iter::Peekable;
 
-use scanner::Lexer;
+use scanner::{Lexer, Token};
 
-use crate::chunk::Chunk;
+use crate::{CompileError, chunk::Chunk};
 
 pub struct Parser<'a> {
     tokens: Peekable<Lexer<'a>>,
@@ -16,12 +16,23 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn compile(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+    pub fn compile(&mut self, _chunk: &mut Chunk) -> crate::Result<()> {
+        let _current = self.advance()?;
         self.expression()?;
         Ok(())
     }
 
     fn expression(&mut self) -> crate::Result<()> {
         Ok(())
+    }
+
+    fn advance(&mut self) -> crate::Result<Token<'a>> {
+        match self.tokens.next() {
+            Some(Ok((_, t, _))) => Ok(t),
+            Some(Err(r)) => Err(CompileError::CompileError(r)),
+            None => Err(CompileError::CompileError(miette::miette!(
+                "Unexpected EOF"
+            ))),
+        }
     }
 }
