@@ -7,6 +7,7 @@ pub type Spanned<Tok, Loc> = miette::Result<(Loc, Tok, Loc)>;
 pub struct Lexer<'a> {
     chars: std::iter::Peekable<CharIndices<'a>>,
     whole: &'a str,
+    pub line: usize,
 }
 
 pub const THIS: &str = "this";
@@ -67,6 +68,7 @@ impl<'a> Lexer<'a> {
         Self {
             chars: content.char_indices().peekable(),
             whole: content,
+            line: 1,
         }
     }
 
@@ -282,7 +284,11 @@ impl<'a> Iterator for Lexer<'a> {
                 '"' => Some(self.string(i)),
                 'a'..='z' | 'A'..='Z' | '_' => Some(Ok(self.identifier_or_keyword(i))),
                 '0'..='9' => Some(self.number(i)),
-                ' ' | '\t' | '\r' | '\n' => continue, // skip whitespaces
+                ' ' | '\t' | '\r' => continue, // skip whitespaces
+                '\n' => {
+                    self.line += 1;
+                    continue; // skip line break
+                }
                 _ => Some(Err(miette::miette!(
                     labels = vec![LabeledSpan::at(
                         i..=i,
