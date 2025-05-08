@@ -57,7 +57,7 @@ impl<'a> Parser<'a> {
 
     fn binary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let previous = self.previous.clone();
-        let precedence = self.get_precedence(&previous.borrow());
+        let precedence = Parser::get_precedence(&previous.borrow());
         let precedence = precedence as u8 + 1;
         let precedence = Precedence::from_u8(precedence).ok_or(CompileError::CompileError(
             miette::miette!("Invalid precedence: {}", precedence),
@@ -112,7 +112,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
         let previous = self.previous.clone();
         self.call_prefix(chunk, &previous.borrow())?;
-        while self.get_precedence(&self.current.borrow()) as u8 >= precedence as u8 {
+        while Parser::get_precedence(&self.current.borrow()) as u8 >= precedence as u8 {
             self.advance()?;
             let previous = self.previous.clone();
             self.call_infix(chunk, &previous.borrow())?;
@@ -120,7 +120,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn get_precedence(&self, token: &Token) -> Precedence {
+    fn get_precedence(token: &Token) -> Precedence {
         match token {
             Token::Minus | Token::Plus => Precedence::Term,
             Token::Slash | Token::Star => Precedence::Factor,
