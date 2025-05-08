@@ -14,6 +14,20 @@ pub struct Parser<'a> {
     previous: Rc<RefCell<Token<'a>>>,
 }
 
+enum Precedence {
+    None = 0,
+    Assignment = 1,
+    Or = 2,
+    And = 3,
+    Equality = 4,
+    Comparison = 5,
+    Term = 6,
+    Factor = 7,
+    Unary = 8,
+    Call = 9,
+    Primary = 10,
+}
+
 impl<'a> Parser<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {
@@ -32,12 +46,13 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.parse_precedence(Precedence::Assignment)?;
         Ok(())
     }
 
     fn unary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let previous = self.previous.clone();
-        self.expression(chunk)?;
+        self.parse_precedence(Precedence::Unary)?;
         if let Token::Minus = *previous.borrow() {
             self.emit_opcode(chunk, OpCode::Negate);
         }
@@ -60,6 +75,10 @@ impl<'a> Parser<'a> {
                 self.previous.borrow()
             )))
         }
+    }
+
+    fn parse_precedence(&mut self, _precedence: Precedence) -> crate::Result<()> {
+        Ok(())
     }
 
     fn advance(&mut self) -> crate::Result<()> {
