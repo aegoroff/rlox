@@ -80,6 +80,27 @@ impl<'a> Parser<'a> {
             Token::Plus => {
                 self.emit_opcode(chunk, OpCode::Add);
             }
+            Token::BangEqual => {
+                self.emit_opcode(chunk, OpCode::Equal);
+                self.emit_opcode(chunk, OpCode::Not);
+            }
+            Token::EqualEqual => {
+                self.emit_opcode(chunk, OpCode::Equal);
+            }
+            Token::Greater => {
+                self.emit_opcode(chunk, OpCode::Greater);
+            }
+            Token::GreaterEqual => {
+                self.emit_opcode(chunk, OpCode::Less);
+                self.emit_opcode(chunk, OpCode::Not);
+            }
+            Token::Less => {
+                self.emit_opcode(chunk, OpCode::Less);
+            }
+            Token::LessEqual => {
+                self.emit_opcode(chunk, OpCode::Greater);
+                self.emit_opcode(chunk, OpCode::Not);
+            }
             _ => (),
         }
         Ok(())
@@ -155,13 +176,26 @@ impl<'a> Parser<'a> {
         match token {
             Token::Minus | Token::Plus => Precedence::Term,
             Token::Slash | Token::Star => Precedence::Factor,
+            Token::BangEqual | Token::EqualEqual => Precedence::Equality,
+            Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual => {
+                Precedence::Comparison
+            }
             _ => Precedence::None,
         }
     }
 
     fn call_infix(&mut self, chunk: &mut Chunk, token: &Token) -> crate::Result<()> {
         match token {
-            Token::Minus | Token::Plus | Token::Slash | Token::Star => self.binary(chunk),
+            Token::Minus
+            | Token::Plus
+            | Token::Slash
+            | Token::Star
+            | Token::BangEqual
+            | Token::EqualEqual
+            | Token::Greater
+            | Token::GreaterEqual
+            | Token::Less
+            | Token::LessEqual => self.binary(chunk),
             _ => Ok(()),
         }
     }

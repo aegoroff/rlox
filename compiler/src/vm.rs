@@ -16,8 +16,10 @@ pub struct VirtualMachine {
 
 macro_rules! binary_op {
     ($self:ident, $op:tt) => {{
-        let b = $self.pop_number()?;
-        let a = $self.pop_number()?;
+        let b = $self.pop()?;
+        let a = $self.pop()?;
+        let a = a.try_num()?;
+        let b = b.try_num()?;
         $self.push(LoxValue::Number(a $op b));
         $self.ip += 1;
     }}
@@ -68,30 +70,6 @@ impl VirtualMachine {
         }
     }
 
-    fn pop_number(&mut self) -> crate::Result<f64> {
-        let value = self.pop()?;
-        let LoxValue::Number(n) = value else {
-            return Err(CompileError::RuntimeError(miette::miette!(
-                "Number expected but was: {value}"
-            )));
-        };
-        Ok(n)
-    }
-
-    fn pop_boolean(&mut self) -> crate::Result<bool> {
-        let value = self.pop()?;
-        let n = match value {
-            LoxValue::Bool(n) => n,
-            LoxValue::Nil => false,
-            _ => {
-                return Err(CompileError::RuntimeError(miette::miette!(
-                    "Bool or nil expected but was: {value}"
-                )));
-            }
-        };
-        Ok(n)
-    }
-
     fn run(&mut self) -> crate::Result<()> {
         while self.ip < self.chunk.code.len() {
             let code =
@@ -123,7 +101,8 @@ impl VirtualMachine {
                     self.ip += 4;
                 }
                 OpCode::Negate => {
-                    let value = self.pop_number()?;
+                    let value = self.pop()?;
+                    let value = value.try_num()?;
                     self.push(LoxValue::Number(-value));
                     self.ip += 1;
                 }
@@ -131,8 +110,10 @@ impl VirtualMachine {
                 OpCode::Subtract => binary_op!(self, -),
                 OpCode::Multiply => binary_op!(self, *),
                 OpCode::Divide => {
-                    let b = self.pop_number()?;
-                    let a = self.pop_number()?;
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let a = a.try_num()?;
+                    let b = b.try_num()?;
                     if b == 0.0 {
                         return Err(CompileError::RuntimeError(miette::miette!(
                             "Division by zero"
@@ -154,8 +135,31 @@ impl VirtualMachine {
                     self.ip += 1;
                 }
                 OpCode::Not => {
-                    let value = self.pop_boolean()?;
-                    self.push(LoxValue::Bool(!value));
+                    let value = self.pop()?;
+                    let val = value.try_bool()?;
+                    self.push(LoxValue::Bool(!val));
+                    self.ip += 1;
+                }
+                OpCode::Equal => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let result = a.equal(&b);
+                    self.push(LoxValue::Bool(result));
+                    self.ip += 1;
+                }
+                OpCode::Less => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let result = a.less(&b)?;
+                    self.push(LoxValue::Bool(result));
+                    self.ip += 1;
+                }
+                OpCode::Greater => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let lt = a.less(&b)?;
+                    let gt = !lt && !a.equal(&b);
+                    self.push(LoxValue::Bool(gt));
                     self.ip += 1;
                 }
             }

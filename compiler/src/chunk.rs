@@ -13,13 +13,16 @@ pub enum OpCode {
     Nil = 2,
     True = 3,
     False = 4,
-    Add = 5,
-    Subtract = 6,
-    Multiply = 7,
-    Divide = 8,
-    Not = 9,
-    Negate = 10,
-    Return = 11,
+    Equal = 5,
+    Greater = 6,
+    Less = 7,
+    Add = 8,
+    Subtract = 9,
+    Multiply = 10,
+    Divide = 11,
+    Not = 12,
+    Negate = 13,
+    Return = 14,
 }
 
 impl Display for OpCode {
@@ -37,6 +40,9 @@ impl Display for OpCode {
             OpCode::Multiply => write!(f, "OP_MULTIPLY"),
             OpCode::Divide => write!(f, "OP_DIVIDE"),
             OpCode::Not => write!(f, "OP_NOT"),
+            OpCode::Equal => write!(f, "OP_EQUAL"),
+            OpCode::Greater => write!(f, "OP_GREATER"),
+            OpCode::Less => write!(f, "OP_LESS"),
         }
     }
 }
@@ -115,6 +121,9 @@ impl Chunk {
             OpCode::Multiply => self.disassembly_simple_instruction(offset, &code),
             OpCode::Divide => self.disassembly_simple_instruction(offset, &code),
             OpCode::Not => self.disassembly_simple_instruction(offset, &code),
+            OpCode::Equal => self.disassembly_simple_instruction(offset, &code),
+            OpCode::Greater => self.disassembly_simple_instruction(offset, &code),
+            OpCode::Less => self.disassembly_simple_instruction(offset, &code),
         }
     }
 
