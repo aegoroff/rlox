@@ -47,6 +47,10 @@ impl<'a> Parser<'a> {
         self.expression(chunk)?;
         self.consume(&Token::Eof)?;
         self.end_compiler(chunk);
+        #[cfg(feature = "printcode")]
+        {
+            chunk.disassembly("main");
+        }
         Ok(())
     }
 
