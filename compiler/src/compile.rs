@@ -88,8 +88,14 @@ impl<'a> Parser<'a> {
     fn unary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let previous = self.previous.clone();
         self.parse_precedence(chunk, Precedence::Unary)?;
-        if let Token::Minus = *previous.borrow() {
-            self.emit_opcode(chunk, OpCode::Negate);
+        match *previous.borrow() {
+            Token::Minus => {
+                self.emit_opcode(chunk, OpCode::Negate);
+            }
+            Token::Bang => {
+                self.emit_opcode(chunk, OpCode::Not);
+            }
+            _ => (),
         }
         Ok(())
     }
@@ -109,6 +115,27 @@ impl<'a> Parser<'a> {
                 "Unexpected token: '{}' Expected: 'number'",
                 self.previous.borrow()
             )))
+        }
+    }
+
+    fn literal(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        match *self.previous.borrow() {
+            Token::True => {
+                self.emit_opcode(chunk, OpCode::True);
+                Ok(())
+            }
+            Token::False => {
+                self.emit_opcode(chunk, OpCode::False);
+                Ok(())
+            }
+            Token::Nil => {
+                self.emit_opcode(chunk, OpCode::Nil);
+                Ok(())
+            }
+            _ => Err(CompileError::CompileError(miette::miette!(
+                "Unexpected token: '{}' Expected one of: 'true', 'false', 'nil'",
+                self.previous.borrow()
+            ))),
         }
     }
 
@@ -141,9 +168,10 @@ impl<'a> Parser<'a> {
 
     fn call_prefix(&mut self, chunk: &mut Chunk, token: &Token) -> crate::Result<()> {
         match token {
-            Token::Minus => self.unary(chunk),
+            Token::Minus | Token::Bang => self.unary(chunk),
             Token::LeftParen => self.grouping(chunk),
             Token::Number(_) => self.number(chunk),
+            Token::True | Token::False | Token::Nil => self.literal(chunk),
             _ => Ok(()),
         }
     }

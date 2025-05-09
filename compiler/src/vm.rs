@@ -80,10 +80,14 @@ impl VirtualMachine {
 
     fn pop_boolean(&mut self) -> crate::Result<bool> {
         let value = self.pop()?;
-        let LoxValue::Bool(n) = value else {
-            return Err(CompileError::RuntimeError(miette::miette!(
-                "Bool expected but was: {value}"
-            )));
+        let n = match value {
+            LoxValue::Bool(n) => n,
+            LoxValue::Nil => false,
+            _ => {
+                return Err(CompileError::RuntimeError(miette::miette!(
+                    "Bool or nil expected but was: {value}"
+                )));
+            }
         };
         Ok(n)
     }
@@ -135,6 +139,23 @@ impl VirtualMachine {
                         )));
                     }
                     self.push(LoxValue::Number(a / b));
+                    self.ip += 1;
+                }
+                OpCode::Nil => {
+                    self.push(LoxValue::Nil);
+                    self.ip += 1;
+                }
+                OpCode::True => {
+                    self.push(LoxValue::Bool(true));
+                    self.ip += 1;
+                }
+                OpCode::False => {
+                    self.push(LoxValue::Bool(false));
+                    self.ip += 1;
+                }
+                OpCode::Not => {
+                    let value = self.pop_boolean()?;
+                    self.push(LoxValue::Bool(!value));
                     self.ip += 1;
                 }
             }
