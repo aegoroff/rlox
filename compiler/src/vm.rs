@@ -57,11 +57,32 @@ impl VirtualMachine {
             )))
     }
 
+    fn peek(&mut self, distance: usize) -> crate::Result<&LoxValue> {
+        if self.stack.len() < distance {
+            Err(CompileError::RuntimeError(miette::miette!(
+                "Not enough stack capacity for distance {distance}. Current stack size is {}",
+                self.stack.len()
+            )))
+        } else {
+            Ok(&self.stack[self.stack.len() - 1 - distance])
+        }
+    }
+
     fn pop_number(&mut self) -> crate::Result<f64> {
         let value = self.pop()?;
         let LoxValue::Number(n) = value else {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(CompileError::RuntimeError(miette::miette!(
                 "Number expected but was: {value}"
+            )));
+        };
+        Ok(n)
+    }
+
+    fn pop_boolean(&mut self) -> crate::Result<bool> {
+        let value = self.pop()?;
+        let LoxValue::Bool(n) = value else {
+            return Err(CompileError::RuntimeError(miette::miette!(
+                "Bool expected but was: {value}"
             )));
         };
         Ok(n)
