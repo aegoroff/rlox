@@ -188,8 +188,13 @@ impl Chunk {
             return 0;
         };
         match code {
-            OpCode::Constant => self.code[offset + 1] as usize,
-            OpCode::ConstantLong => {
+            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
+                self.code[offset + 1] as usize
+            }
+            OpCode::ConstantLong
+            | OpCode::DefineGlobalLong
+            | OpCode::GetGlobalLong
+            | OpCode::SetGlobalLong => {
                 let op1 = self.code[offset + 1]; // first operand defines constant index in the constants vector
                 let op2 = self.code[offset + 2]; // second operand defines constant index in the constants vector
                 let op3 = self.code[offset + 3]; // third operand defines constant index in the constants vector
