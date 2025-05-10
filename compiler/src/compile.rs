@@ -67,18 +67,23 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         if self.matches(&Token::Print)? {
-            self.print_statement(chunk)?;
+            self.print_statement(chunk)
         } else {
-            // TODO: implement
-            self.advance()?;
+            self.expression_statement(chunk)
         }
-        Ok(())
     }
 
     fn print_statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         self.expression(chunk)?;
         self.consume(&Token::Semicolon)?;
         self.emit_opcode(chunk, OpCode::Print);
+        Ok(())
+    }
+
+    fn expression_statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.expression(chunk)?;
+        self.consume(&Token::Semicolon)?;
+        self.emit_opcode(chunk, OpCode::Pop);
         Ok(())
     }
 

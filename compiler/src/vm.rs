@@ -187,6 +187,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.ip += 1;
                     return Ok(());
                 }
+                OpCode::Pop => {
+                    self.pop()?;
+                    self.ip += 1;
+                }
             }
         }
         Ok(())
