@@ -70,12 +70,9 @@ impl<'a> Parser<'a> {
 
     fn var_declaration(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let global = self.parse_variable(chunk)?;
-        //print!("var: '{global}' ");
         if self.matches(&Token::Equal)? {
-            //println!(" Init by expression");
             self.expression(chunk)?;
         } else {
-            //println!(" Init by nil");
             self.emit_opcode(chunk, OpCode::Nil);
         }
         self.consume(&Token::Semicolon)?;
@@ -91,7 +88,6 @@ impl<'a> Parser<'a> {
         };
         self.advance()?;
         let constant = self.identifier_constant(chunk, id)?;
-        //print!("var: '{id}' constant ix: '{constant}' ");
         Ok(constant)
     }
 
