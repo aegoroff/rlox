@@ -61,7 +61,49 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        self.statement(chunk)?;
+        if self.matches(&Token::Var)? {
+            self.var_declaration(chunk)
+        } else {
+            self.statement(chunk)
+        }
+    }
+
+    fn var_declaration(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        let global = self.parse_variable(chunk)?;
+        if self.matches(&Token::Equal)? {
+            self.expression(chunk)?;
+        } else {
+            self.emit_opcode(chunk, OpCode::Nil);
+        }
+        self.consume(&Token::Semicolon)?;
+        self.define_variable(chunk, global)?;
+        Ok(())
+    }
+
+    fn parse_variable(&mut self, chunk: &mut Chunk) -> crate::Result<usize> {
+        let Token::Identifier(id) = *self.current.borrow() else {
+            return Err(CompileError::CompileError(miette::miette!(
+                "Identifier expected"
+            )));
+        };
+        self.advance()?;
+        let constant = self.identifier_constant(chunk, id)?;
+        Ok(constant)
+    }
+
+    fn identifier_constant(&mut self, chunk: &mut Chunk, id: &str) -> crate::Result<usize> {
+        let constant = self.make_constant(chunk, LoxValue::String(id.to_string()));
+        Ok(constant)
+    }
+
+    fn define_variable(&mut self, chunk: &mut Chunk, global: usize) -> crate::Result<()> {
+        if global > 255 {
+            self.emit_opcode(chunk, OpCode::DefineGlobalLong);
+        } else {
+            self.emit_opcode(chunk, OpCode::DefineGlobal);
+        }
+        self.emit_operand(chunk, global);
+
         Ok(())
     }
 
@@ -200,6 +242,32 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn variable(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.named_variable(chunk, self.previous.clone())
+    }
+
+    fn named_variable(
+        &mut self,
+        chunk: &mut Chunk,
+        token: Rc<RefCell<Token>>,
+    ) -> crate::Result<()> {
+        if let Token::Identifier(id) = *token.borrow() {
+            let constant = self.identifier_constant(chunk, id)?;
+            if constant > 255 {
+                self.emit_opcode(chunk, OpCode::GetGlobalLong);
+            } else {
+                self.emit_opcode(chunk, OpCode::GetGlobal);
+            }
+            self.emit_operand(chunk, constant);
+            Ok(())
+        } else {
+            Err(CompileError::CompileError(miette::miette!(
+                "Unexpected token: '{}' Expected: 'idenitifier'",
+                self.previous.borrow()
+            )))
+        }
+    }
+
     fn parse_precedence(&mut self, chunk: &mut Chunk, precedence: Precedence) -> crate::Result<()> {
         self.advance()?;
         let previous = self.previous.clone();
@@ -246,6 +314,7 @@ impl<'a> Parser<'a> {
             Token::LeftParen => self.grouping(chunk),
             Token::Number(_) => self.number(chunk),
             Token::String(_) => self.string(chunk),
+            Token::Identifier(_) => self.variable(chunk),
             Token::True | Token::False | Token::Nil => self.literal(chunk),
             _ => Ok(()),
         }
@@ -287,12 +356,20 @@ impl<'a> Parser<'a> {
         *self.current.borrow() == *token
     }
 
-    fn emit_constant(&self, chunk: &mut Chunk, value: LoxValue) {
-        chunk.write_constant(value, self.tokens.line);
+    fn emit_constant(&self, chunk: &mut Chunk, value: LoxValue) -> usize {
+        chunk.write_constant(value, self.tokens.line)
+    }
+
+    fn make_constant(&self, chunk: &mut Chunk, value: LoxValue) -> usize {
+        chunk.add_constant(value)
     }
 
     fn emit_opcode(&self, chunk: &mut Chunk, opcode: OpCode) {
         chunk.write_code(opcode, self.tokens.line);
+    }
+
+    fn emit_operand(&self, chunk: &mut Chunk, value: usize) {
+        chunk.write_operand(value, self.tokens.line);
     }
 
     fn emit_return(&self, chunk: &mut Chunk) {

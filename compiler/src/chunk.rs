@@ -14,17 +14,21 @@ pub enum OpCode {
     True = 3,
     False = 4,
     Pop = 5,
-    Equal = 6,
-    Greater = 7,
-    Less = 8,
-    Add = 9,
-    Subtract = 10,
-    Multiply = 11,
-    Divide = 12,
-    Not = 13,
-    Negate = 14,
-    Print = 15,
-    Return = 16,
+    GetGlobal = 6,
+    GetGlobalLong = 7,
+    DefineGlobal = 8,
+    DefineGlobalLong = 9,
+    Equal = 10,
+    Greater = 11,
+    Less = 12,
+    Add = 13,
+    Subtract = 14,
+    Multiply = 15,
+    Divide = 16,
+    Not = 17,
+    Negate = 18,
+    Print = 19,
+    Return = 20,
 }
 
 impl Display for OpCode {
@@ -47,6 +51,10 @@ impl Display for OpCode {
             OpCode::Less => write!(f, "OP_LESS"),
             OpCode::Print => write!(f, "OP_PRINT"),
             OpCode::Pop => write!(f, "OP_POP"),
+            OpCode::DefineGlobal => write!(f, "OP_DEFINE_GLOBAL"),
+            OpCode::DefineGlobalLong => write!(f, "OP_DEFINE_LONG"),
+            OpCode::GetGlobal => write!(f, "OP_GET_GLOBAL"),
+            OpCode::GetGlobalLong => write!(f, "OP_GET_GLOBAL_LONG"),
         }
     }
 }
@@ -68,24 +76,29 @@ impl Chunk {
     }
 
     pub fn write_code(&mut self, code: OpCode, line: usize) {
-        self.write_operand(code as u8, line);
+        self.write_operand(code as usize, line);
     }
 
-    pub fn write_operand(&mut self, value: u8, line: usize) {
-        self.code.push(value);
-        self.lines.push(line);
-    }
-
-    pub fn write_constant(&mut self, value: LoxValue, line: usize) {
+    pub fn write_constant(&mut self, value: LoxValue, line: usize) -> usize {
         let constant = self.add_constant(value);
         if constant > 255 {
             self.write_code(OpCode::ConstantLong, line);
-            for b in into_three_bytes(constant) {
-                self.write_operand(b, line);
-            }
         } else {
             self.write_code(OpCode::Constant, line);
-            self.write_operand(constant as u8, line);
+        }
+        self.write_operand(constant, line);
+        constant
+    }
+
+    pub fn write_operand(&mut self, value: usize, line: usize) {
+        if value > 255 {
+            for b in into_three_bytes(value) {
+                self.code.push(b);
+            }
+            self.lines.push(line);
+        } else {
+            self.code.push(value as u8);
+            self.lines.push(line);
         }
     }
 
@@ -130,6 +143,10 @@ impl Chunk {
             OpCode::Less => self.disassembly_simple_instruction(offset, &code),
             OpCode::Print => self.disassembly_simple_instruction(offset, &code),
             OpCode::Pop => self.disassembly_simple_instruction(offset, &code),
+            OpCode::DefineGlobal => self.disassembly_constant(offset, &code),
+            OpCode::DefineGlobalLong => self.disassembly_constant_long(offset, &code),
+            OpCode::GetGlobal => self.disassembly_constant(offset, &code),
+            OpCode::GetGlobalLong => self.disassembly_constant_long(offset, &code),
         }
     }
 
@@ -152,7 +169,7 @@ impl Chunk {
         offset + 1
     }
 
-    fn add_constant(&mut self, value: LoxValue) -> usize {
+    pub fn add_constant(&mut self, value: LoxValue) -> usize {
         self.constants.push(value);
         self.constants.len() - 1
     }

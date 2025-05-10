@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use num_traits::FromPrimitive;
 
 use crate::{
@@ -12,6 +14,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     ip: usize,
     stack: Vec<LoxValue>,
     writer: W,
+    globals: HashMap<String, LoxValue>,
 }
 
 macro_rules! binary_op {
@@ -33,6 +36,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             ip: 0,
             stack: Vec::new(),
             writer,
+            globals: HashMap::new(),
         }
     }
 
@@ -191,6 +195,46 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop()?;
                     self.ip += 1;
                 }
+                OpCode::DefineGlobal => {
+                    let name = self.chunk.read_constant(self.ip);
+                    let name = name.try_str()?;
+                    let value = self.peek(0)?;
+                    let value = value.clone();
+                    self.globals.insert(name.clone(), value);
+                    self.pop()?;
+                    self.ip += 2;
+                }
+                OpCode::DefineGlobalLong => {
+                    let name = self.chunk.read_constant(self.ip);
+                    let name = name.try_str()?;
+                    let value = self.peek(0)?;
+                    let value = value.clone();
+                    self.globals.insert(name.clone(), value);
+                    self.pop()?;
+                    self.ip += 4;
+                }
+                OpCode::GetGlobal => {
+                    let name = self.chunk.read_constant(self.ip);
+                    let name = name.try_str()?;
+                    let Some(val) = self.globals.get(name) else {
+                        return Err(CompileError::RuntimeError(miette::miette!(
+                            "Undefined variable '{name}'"
+                        )));
+                    };
+                    self.push(val.clone());
+                    self.ip += 2;
+                }
+                OpCode::GetGlobalLong => {
+                    let name = self.chunk.read_constant(self.ip);
+                    let name = name.try_str()?;
+                    let Some(val) = self.globals.get(name) else {
+                        return Err(CompileError::RuntimeError(miette::miette!(
+                            "Undefined variable '{name}'"
+                        )));
+                    };
+                    self.push(val.clone());
+                    self.ip += 4;
+                }
             }
         }
         Ok(())
@@ -244,6 +288,8 @@ mod tests {
     #[test_case("print (5 - (3-1)) * -1;", "-3")]
     #[test_case("print ((5 - (3-1)) * -2) / 4;", "-1.5")]
     #[test_case("print ((5 - (3-1) + 3) * -2) / 4;", "-3")]
+    #[test_case("var x = 1; var y = x + 1; print y;", "2")]
+    #[test_case("print 1 + 3; print 2 + 4;", "4\n6")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
