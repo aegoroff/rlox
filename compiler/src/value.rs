@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::CompileError;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LoxValue {
     String(String),
     Number(f64),

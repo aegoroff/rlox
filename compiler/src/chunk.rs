@@ -179,8 +179,16 @@ impl Chunk {
     }
 
     pub fn add_constant(&mut self, value: LoxValue) -> usize {
-        self.constants.push(value);
-        self.constants.len() - 1
+        let Some((i, _)) = self
+            .constants
+            .iter()
+            .enumerate()
+            .find(|(_, c)| *c == &value)
+        else {
+            self.constants.push(value);
+            return self.constants.len() - 1;
+        };
+        i
     }
 
     fn get_constant_ix(&self, offset: usize) -> usize {
