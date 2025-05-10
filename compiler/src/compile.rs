@@ -242,42 +242,58 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn variable(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        self.named_variable(chunk, self.previous.clone())
+    fn variable(&mut self, chunk: &mut Chunk, can_assign: bool) -> crate::Result<()> {
+        self.named_variable(chunk, self.previous.clone(), can_assign)
     }
 
     fn named_variable(
         &mut self,
         chunk: &mut Chunk,
         token: Rc<RefCell<Token>>,
+        can_assign: bool,
     ) -> crate::Result<()> {
-        if let Token::Identifier(id) = *token.borrow() {
-            let constant = self.identifier_constant(chunk, id)?;
-            if constant > 255 {
-                self.emit_opcode(chunk, OpCode::GetGlobalLong);
-            } else {
-                self.emit_opcode(chunk, OpCode::GetGlobal);
-            }
-            self.emit_operand(chunk, constant);
-            Ok(())
-        } else {
-            Err(CompileError::CompileError(miette::miette!(
+        let Token::Identifier(id) = *token.borrow() else {
+            return Err(CompileError::CompileError(miette::miette!(
                 "Unexpected token: '{}' Expected: 'idenitifier'",
                 self.previous.borrow()
-            )))
+            )));
+        };
+        let arg = self.identifier_constant(chunk, id)?;
+
+        if can_assign && self.matches(&Token::Equal)? {
+            self.expression(chunk)?;
+            if arg > 255 {
+                self.emit_opcode(chunk, OpCode::SetGlobalLong);
+            } else {
+                self.emit_opcode(chunk, OpCode::SetGlobal);
+            }
+        } else if arg > 255 {
+            self.emit_opcode(chunk, OpCode::GetGlobalLong);
+        } else {
+            self.emit_opcode(chunk, OpCode::GetGlobal);
         }
+        self.emit_operand(chunk, arg);
+
+        Ok(())
     }
 
     fn parse_precedence(&mut self, chunk: &mut Chunk, precedence: Precedence) -> crate::Result<()> {
         self.advance()?;
         let previous = self.previous.clone();
-        self.call_prefix(chunk, &previous.borrow())?;
+        let can_assign = precedence as u8 <= Precedence::Assignment as u8;
+        self.call_prefix(chunk, &previous.borrow(), can_assign)?;
         while Parser::get_precedence(&self.current.borrow()) as u8 >= precedence as u8 {
             self.advance()?;
             let previous = self.previous.clone();
             self.call_infix(chunk, &previous.borrow())?;
         }
-        Ok(())
+        if can_assign && self.matches(&Token::Equal)? {
+            Err(CompileError::CompileError(miette::miette!(
+                "Invalid assignment target."
+            )))
+        } else {
+            Ok(())
+        }
     }
 
     fn get_precedence(token: &Token) -> Precedence {
@@ -308,13 +324,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn call_prefix(&mut self, chunk: &mut Chunk, token: &Token) -> crate::Result<()> {
+    fn call_prefix(
+        &mut self,
+        chunk: &mut Chunk,
+        token: &Token,
+        can_assign: bool,
+    ) -> crate::Result<()> {
         match token {
             Token::Minus | Token::Bang => self.unary(chunk),
             Token::LeftParen => self.grouping(chunk),
             Token::Number(_) => self.number(chunk),
             Token::String(_) => self.string(chunk),
-            Token::Identifier(_) => self.variable(chunk),
+            Token::Identifier(_) => self.variable(chunk, can_assign),
             Token::True | Token::False | Token::Nil => self.literal(chunk),
             _ => Ok(()),
         }
@@ -356,7 +377,7 @@ impl<'a> Parser<'a> {
         *self.current.borrow() == *token
     }
 
-    fn emit_constant(&self, chunk: &mut Chunk, value: LoxValue) -> usize {
+    fn emit_constant(&self, chunk: &mut Chunk, value: LoxValue) {
         chunk.write_constant(value, self.tokens.line)
     }
 

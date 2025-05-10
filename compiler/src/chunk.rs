@@ -18,17 +18,19 @@ pub enum OpCode {
     GetGlobalLong = 7,
     DefineGlobal = 8,
     DefineGlobalLong = 9,
-    Equal = 10,
-    Greater = 11,
-    Less = 12,
-    Add = 13,
-    Subtract = 14,
-    Multiply = 15,
-    Divide = 16,
-    Not = 17,
-    Negate = 18,
-    Print = 19,
-    Return = 20,
+    SetGlobal = 10,
+    SetGlobalLong = 11,
+    Equal = 12,
+    Greater = 13,
+    Less = 14,
+    Add = 15,
+    Subtract = 16,
+    Multiply = 17,
+    Divide = 18,
+    Not = 19,
+    Negate = 20,
+    Print = 21,
+    Return = 22,
 }
 
 impl Display for OpCode {
@@ -55,6 +57,8 @@ impl Display for OpCode {
             OpCode::DefineGlobalLong => write!(f, "OP_DEFINE_LONG"),
             OpCode::GetGlobal => write!(f, "OP_GET_GLOBAL"),
             OpCode::GetGlobalLong => write!(f, "OP_GET_GLOBAL_LONG"),
+            OpCode::SetGlobal => write!(f, "OP_SET_GLOBAL"),
+            OpCode::SetGlobalLong => write!(f, "OP_SET_GLOBAL_LONG"),
         }
     }
 }
@@ -79,7 +83,7 @@ impl Chunk {
         self.write_operand(code as usize, line);
     }
 
-    pub fn write_constant(&mut self, value: LoxValue, line: usize) -> usize {
+    pub fn write_constant(&mut self, value: LoxValue, line: usize) {
         let constant = self.add_constant(value);
         if constant > 255 {
             self.write_code(OpCode::ConstantLong, line);
@@ -87,7 +91,6 @@ impl Chunk {
             self.write_code(OpCode::Constant, line);
         }
         self.write_operand(constant, line);
-        constant
     }
 
     pub fn write_operand(&mut self, value: usize, line: usize) {
@@ -151,6 +154,8 @@ impl Chunk {
             OpCode::DefineGlobalLong => self.disassembly_constant_long(offset, &code),
             OpCode::GetGlobal => self.disassembly_constant(offset, &code),
             OpCode::GetGlobalLong => self.disassembly_constant_long(offset, &code),
+            OpCode::SetGlobal => self.disassembly_constant(offset, &code),
+            OpCode::SetGlobalLong => self.disassembly_constant_long(offset, &code),
         }
     }
 

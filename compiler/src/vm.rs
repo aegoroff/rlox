@@ -238,6 +238,32 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(val.clone());
                     self.ip += 4;
                 }
+                OpCode::SetGlobal => {
+                    let name = self.chunk.read_constant(self.ip);
+                    let name = name.try_str()?;
+                    if !self.globals.contains_key(name) {
+                        return Err(CompileError::RuntimeError(miette::miette!(
+                            "Undefined variable '{name}'"
+                        )));
+                    };
+                    let value = self.peek(0)?;
+                    let value = value.clone();
+                    self.globals.insert(name.clone(), value);
+                    self.ip += 2;
+                }
+                OpCode::SetGlobalLong => {
+                    let name = self.chunk.read_constant(self.ip);
+                    let name = name.try_str()?;
+                    if !self.globals.contains_key(name) {
+                        return Err(CompileError::RuntimeError(miette::miette!(
+                            "Undefined variable '{name}'"
+                        )));
+                    };
+                    let value = self.peek(0)?;
+                    let value = value.clone();
+                    self.globals.insert(name.clone(), value);
+                    self.ip += 2;
+                }
             }
         }
         Ok(())
