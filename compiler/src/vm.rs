@@ -234,7 +234,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             return Err(CompileError::RuntimeError(miette::miette!(
                 "Undefined variable '{name}'"
             )));
-        };
+        }
         let value = self.peek(0)?;
         let value = value.clone();
         self.globals.insert(name.clone(), value);

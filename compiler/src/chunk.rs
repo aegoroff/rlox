@@ -133,43 +133,42 @@ impl Chunk {
             print!("{:4} ", self.lines[offset]);
         }
         match code {
-            OpCode::Constant => self.disassembly_constant(offset, &code),
-            OpCode::Return => self.disassembly_simple_instruction(offset, &code),
-            OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
-            OpCode::Nil => self.disassembly_simple_instruction(offset, &code),
-            OpCode::True => self.disassembly_simple_instruction(offset, &code),
-            OpCode::False => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Negate => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Add => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Subtract => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Multiply => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Divide => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Not => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Equal => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Greater => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Less => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Print => self.disassembly_simple_instruction(offset, &code),
-            OpCode::Pop => self.disassembly_simple_instruction(offset, &code),
-            OpCode::DefineGlobal => self.disassembly_constant(offset, &code),
-            OpCode::DefineGlobalLong => self.disassembly_constant_long(offset, &code),
-            OpCode::GetGlobal => self.disassembly_constant(offset, &code),
-            OpCode::GetGlobalLong => self.disassembly_constant_long(offset, &code),
-            OpCode::SetGlobal => self.disassembly_constant(offset, &code),
-            OpCode::SetGlobalLong => self.disassembly_constant_long(offset, &code),
+            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
+                self.disassembly_constant(offset, &code)
+            }
+            OpCode::Return
+            | OpCode::Nil
+            | OpCode::True
+            | OpCode::False
+            | OpCode::Negate
+            | OpCode::Add
+            | OpCode::Subtract
+            | OpCode::Multiply
+            | OpCode::Divide
+            | OpCode::Not
+            | OpCode::Equal
+            | OpCode::Greater
+            | OpCode::Less
+            | OpCode::Print
+            | OpCode::Pop => self.disassembly_simple_instruction(offset, &code),
+            OpCode::GetGlobalLong
+            | OpCode::SetGlobalLong
+            | OpCode::DefineGlobalLong
+            | OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
         }
     }
 
     fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
         let ix = self.get_constant_ix(offset);
         let constant = &self.constants[ix];
-        println!("{code:-16} {ix:4} '{constant}'");
+        println!("{:<16} {ix:4} '{constant}'", code.to_string());
         offset + 2
     }
 
     fn disassembly_constant_long(&self, offset: usize, code: &OpCode) -> usize {
         let ix = self.get_constant_ix(offset);
         let constant = &self.constants[ix];
-        println!("{code:-16} {ix:4} '{constant}'");
+        println!("{:<16} {ix:4} '{constant}'", code.to_string());
         offset + 4
     }
 

@@ -76,7 +76,7 @@ impl<'a> Parser<'a> {
             self.emit_opcode(chunk, OpCode::Nil);
         }
         self.consume(&Token::Semicolon)?;
-        self.define_variable(chunk, global)?;
+        self.define_variable(chunk, global);
         Ok(())
     }
 
@@ -87,24 +87,21 @@ impl<'a> Parser<'a> {
             )));
         };
         self.advance()?;
-        let constant = self.identifier_constant(chunk, id)?;
+        let constant = self.identifier_constant(chunk, id);
         Ok(constant)
     }
 
-    fn identifier_constant(&mut self, chunk: &mut Chunk, id: &str) -> crate::Result<usize> {
-        let constant = self.make_constant(chunk, LoxValue::String(id.to_string()));
-        Ok(constant)
+    fn identifier_constant(&mut self, chunk: &mut Chunk, id: &str) -> usize {
+        self.make_constant(chunk, LoxValue::String(id.to_string()))
     }
 
-    fn define_variable(&mut self, chunk: &mut Chunk, global: usize) -> crate::Result<()> {
+    fn define_variable(&mut self, chunk: &mut Chunk, global: usize) {
         if global > 255 {
             self.emit_opcode(chunk, OpCode::DefineGlobalLong);
         } else {
             self.emit_opcode(chunk, OpCode::DefineGlobal);
         }
         self.emit_operand(chunk, global);
-
-        Ok(())
     }
 
     fn statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
@@ -258,7 +255,7 @@ impl<'a> Parser<'a> {
                 self.previous.borrow()
             )));
         };
-        let arg = self.identifier_constant(chunk, id)?;
+        let arg = self.identifier_constant(chunk, id);
 
         if can_assign && self.matches(&Token::Equal)? {
             self.expression(chunk)?;
@@ -378,7 +375,7 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_constant(&self, chunk: &mut Chunk, value: LoxValue) {
-        chunk.write_constant(value, self.tokens.line)
+        chunk.write_constant(value, self.tokens.line);
     }
 
     fn make_constant(&self, chunk: &mut Chunk, value: LoxValue) -> usize {
