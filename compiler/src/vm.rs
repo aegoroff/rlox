@@ -291,7 +291,7 @@ mod tests {
     #[test_case("print (5 - (3-1)) * -1;", "-3")]
     #[test_case("print ((5 - (3-1)) * -2) / 4;", "-1.5")]
     #[test_case("print ((5 - (3-1) + 3) * -2) / 4;", "-3")]
-    #[test_case("var x = 1; var y = x + 1; print y;", "2")]
+    #[test_case("var x = 1; var y = x + 1; print x; print y;", "1\n2")]
     #[test_case("print 1; print 2;", "1\n2")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
