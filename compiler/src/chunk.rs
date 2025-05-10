@@ -22,7 +22,8 @@ pub enum OpCode {
     Divide = 11,
     Not = 12,
     Negate = 13,
-    Return = 14,
+    Print = 14,
+    Return = 15,
 }
 
 impl Display for OpCode {
@@ -43,6 +44,7 @@ impl Display for OpCode {
             OpCode::Equal => write!(f, "OP_EQUAL"),
             OpCode::Greater => write!(f, "OP_GREATER"),
             OpCode::Less => write!(f, "OP_LESS"),
+            OpCode::Print => write!(f, "OP_PRINT"),
         }
     }
 }
@@ -124,6 +126,7 @@ impl Chunk {
             OpCode::Equal => self.disassembly_simple_instruction(offset, &code),
             OpCode::Greater => self.disassembly_simple_instruction(offset, &code),
             OpCode::Less => self.disassembly_simple_instruction(offset, &code),
+            OpCode::Print => self.disassembly_simple_instruction(offset, &code),
         }
     }
 

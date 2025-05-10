@@ -91,10 +91,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.ip += 2;
                 }
                 OpCode::Return => {
-                    let value = self.pop()?;
-                    writeln!(self.writer, "{value}")
-                        .map_err(|e| CompileError::RuntimeError(miette::miette!(e)))?;
-                    self.ip += 1;
                     return Ok(());
                 }
                 OpCode::ConstantLong => {
@@ -184,6 +180,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(LoxValue::Bool(gt));
                     self.ip += 1;
                 }
+                OpCode::Print => {
+                    let value = self.pop()?;
+                    writeln!(self.writer, "{value}")
+                        .map_err(|e| CompileError::RuntimeError(miette::miette!(e)))?;
+                    self.ip += 1;
+                    return Ok(());
+                }
             }
         }
         Ok(())
@@ -195,48 +198,48 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
-    #[test_case("(\"a\" + 4) + \"c\"", "a4c")]
-    #[test_case("(4 + \"a\") + \"c\"", "4ac")]
-    #[test_case("(true + \"a\") + \"c\"", "trueac")]
-    #[test_case("(nil + \"a\") + \"c\"", "ac")]
-    #[test_case("(\"a\" == \"b\")", "false")]
-    #[test_case("(\"a\" != \"c\")", "true")]
-    #[test_case("(\"ab\" == \"ab\")", "true")]
-    #[test_case("(\"aa\" > \"bb\")", "false")]
-    #[test_case("(\"bb\" > \"aa\")", "true")]
-    #[test_case("(\"bba\" >= \"aaa\")", "true")]
-    #[test_case("(\"bba\" <= \"aaa\")", "false")]
-    #[test_case("1 == 2", "false")]
-    #[test_case("2 == 2", "true")]
-    #[test_case("3 >= 3", "true")]
-    #[test_case("3 >= 2", "true")]
-    #[test_case("3 <= 1", "false")]
-    #[test_case("(3 - 1) * 200 <= 1", "false")]
-    #[test_case("3 > 1 == true", "true")]
-    #[test_case("20 <= 20", "true")]
-    #[test_case("40 <= 50", "true")]
-    #[test_case("nil <= false", "true" ; "nil lrs less or equal")]
-    #[test_case("nil < false", "false" ; "nil lrs less")]
-    #[test_case("nil == false", "true" ; "nil lrs equal")]
-    #[test_case("!nil", "true" ; "not nil")]
+    #[test_case("print (\"a\" + \"b\") + \"c\";", "abc")]
+    #[test_case("print (\"a\" + 4) + \"c\";", "a4c")]
+    #[test_case("print (4 + \"a\") + \"c\";", "4ac")]
+    #[test_case("print (true + \"a\") + \"c\";", "trueac")]
+    #[test_case("print (nil + \"a\") + \"c\";", "ac")]
+    #[test_case("print (\"a\" == \"b\");", "false")]
+    #[test_case("print (\"a\" != \"c\");", "true")]
+    #[test_case("print (\"ab\" == \"ab\");", "true")]
+    #[test_case("print (\"aa\" > \"bb\");", "false")]
+    #[test_case("print (\"bb\" > \"aa\");", "true")]
+    #[test_case("print (\"bba\" >= \"aaa\");", "true")]
+    #[test_case("print (\"bba\" <= \"aaa\");", "false")]
+    #[test_case("print 1 == 2;", "false")]
+    #[test_case("print 2 == 2;", "true")]
+    #[test_case("print 3 >= 3;", "true")]
+    #[test_case("print 3 >= 2;", "true")]
+    #[test_case("print 3 <= 1;", "false")]
+    #[test_case("print (3 - 1) * 200 <= 1;", "false")]
+    #[test_case("print 3 > 1 == true;", "true")]
+    #[test_case("print 20 <= 20;", "true")]
+    #[test_case("print 40 <= 50;", "true")]
+    #[test_case("print nil <= false;", "true" ; "nil lrs less or equal")]
+    #[test_case("print nil < false;", "false" ; "nil lrs less")]
+    #[test_case("print nil == false;", "true" ; "nil lrs equal")]
+    #[test_case("print !nil;", "true" ; "not nil")]
     // TODO: #[test_case("40 <= 50 and 1 > 2 or 2 < 3", "true" ; "two ands + or")]
     // TODO: #[test_case("40 <= 50 and 1 < 2 and 2 < 3", "true" ; "three ands")]
-    #[test_case("--1", "1")]
-    #[test_case("1 - 1", "0")]
-    #[test_case("1 - 2", "-1")]
-    #[test_case("2 - 1", "1")]
-    #[test_case("2 + 3", "5")]
-    #[test_case("2 + 3 - 1", "4")]
-    #[test_case("3 + 3 / 3", "4")]
-    #[test_case("(3 + 3) / 3", "2")]
-    #[test_case("4 / 2", "2")]
-    #[test_case("4 / 1", "4")]
-    #[test_case("5 / -1", "-5")]
-    #[test_case("(5 - (3-1)) + -1", "2")]
-    #[test_case("(5 - (3-1)) * -1", "-3")]
-    #[test_case("((5 - (3-1)) * -2) / 4", "-1.5")]
-    #[test_case("((5 - (3-1) + 3) * -2) / 4", "-3")]
+    #[test_case("print --1;", "1")]
+    #[test_case("print 1 - 1;", "0")]
+    #[test_case("print 1 - 2;", "-1")]
+    #[test_case("print 2 - 1;", "1")]
+    #[test_case("print 2 + 3;", "5")]
+    #[test_case("print 2 + 3 - 1;", "4")]
+    #[test_case("print 3 + 3 / 3;", "4")]
+    #[test_case("print (3 + 3) / 3;", "2")]
+    #[test_case("print 4 / 2;", "2")]
+    #[test_case("print 4 / 1;", "4")]
+    #[test_case("print 5 / -1;", "-5")]
+    #[test_case("print (5 - (3-1)) + -1;", "2")]
+    #[test_case("print (5 - (3-1)) * -1;", "-3")]
+    #[test_case("print ((5 - (3-1)) * -2) / 4;", "-1.5")]
+    #[test_case("print ((5 - (3-1) + 3) * -2) / 4;", "-3")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

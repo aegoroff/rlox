@@ -44,8 +44,9 @@ impl<'a> Parser<'a> {
 
     pub fn compile(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         self.advance()?;
-        self.expression(chunk)?;
-        self.consume(&Token::Eof)?;
+        while !self.matches(&Token::Eof)? {
+            self.declaration(chunk)?;
+        }
         self.end_compiler(chunk);
         #[cfg(feature = "printcode")]
         {
@@ -56,6 +57,28 @@ impl<'a> Parser<'a> {
 
     fn expression(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         self.parse_precedence(chunk, Precedence::Assignment)?;
+        Ok(())
+    }
+
+    fn declaration(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.statement(chunk)?;
+        Ok(())
+    }
+
+    fn statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        if self.matches(&Token::Print)? {
+            self.print_statement(chunk)?;
+        } else {
+            // TODO: implement
+            self.advance()?;
+        }
+        Ok(())
+    }
+
+    fn print_statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.expression(chunk)?;
+        self.consume(&Token::Semicolon)?;
+        self.emit_opcode(chunk, OpCode::Print);
         Ok(())
     }
 
@@ -235,9 +258,17 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn consume(&mut self, token: &Token) -> crate::Result<()> {
-        if *self.current.borrow() == *token {
+    fn matches(&mut self, token: &Token) -> crate::Result<bool> {
+        if self.check(token) {
             self.advance()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn consume(&mut self, token: &Token) -> crate::Result<()> {
+        if self.matches(token)? {
             Ok(())
         } else {
             Err(CompileError::CompileError(miette::miette!(
@@ -245,6 +276,10 @@ impl<'a> Parser<'a> {
                 self.current.borrow()
             )))
         }
+    }
+
+    fn check(&self, token: &Token) -> bool {
+        *self.current.borrow() == *token
     }
 
     fn emit_constant(&self, chunk: &mut Chunk, value: LoxValue) {
