@@ -116,10 +116,6 @@ impl Chunk {
         while offset < self.code.len() {
             offset = self.disassembly_instruction(offset);
         }
-        println!("==== constants ====");
-        for (i, c) in self.constants.iter().enumerate() {
-            println!("{i}: {c}");
-        }
     }
 
     pub fn disassembly_instruction(&self, offset: usize) -> usize {
