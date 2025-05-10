@@ -139,6 +139,18 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn string(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        if let Token::String(str) = *self.previous.borrow() {
+            self.emit_constant(chunk, LoxValue::String(str.to_owned()));
+            Ok(())
+        } else {
+            Err(CompileError::CompileError(miette::miette!(
+                "Unexpected token: '{}' Expected: 'string'",
+                self.previous.borrow()
+            )))
+        }
+    }
+
     fn literal(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         match *self.previous.borrow() {
             Token::True => {
@@ -205,6 +217,7 @@ impl<'a> Parser<'a> {
             Token::Minus | Token::Bang => self.unary(chunk),
             Token::LeftParen => self.grouping(chunk),
             Token::Number(_) => self.number(chunk),
+            Token::String(_) => self.string(chunk),
             Token::True | Token::False | Token::Nil => self.literal(chunk),
             _ => Ok(()),
         }

@@ -106,7 +106,27 @@ impl VirtualMachine {
                     self.push(LoxValue::Number(-value));
                     self.ip += 1;
                 }
-                OpCode::Add => binary_op!(self, +),
+                OpCode::Add => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let lr = a.try_str();
+                    let rr = b.try_str();
+                    if lr.is_ok() || rr.is_ok() {
+                        // concat strings here if any of the operands is a string
+                        if let Ok(l) = lr {
+                            let result = l.to_owned() + &b.to_string();
+                            self.push(LoxValue::String(result));
+                        } else if let Ok(r) = rr {
+                            let result = a.to_string() + r;
+                            self.push(LoxValue::String(result));
+                        }
+                    } else if let Ok(l) = a.try_num() {
+                        let r = b.try_num()?;
+                        self.push(LoxValue::Number(l + r));
+                    }
+
+                    self.ip += 1;
+                }
                 OpCode::Subtract => binary_op!(self, -),
                 OpCode::Multiply => binary_op!(self, *),
                 OpCode::Divide => {
