@@ -76,6 +76,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn run(&mut self) -> crate::Result<()> {
+        #[cfg(feature = "disassembly")]
+        {
+            println!("--- start run ---");
+        }
         while self.ip < self.chunk.code.len() {
             let code =
                 OpCode::from_u8(self.chunk.code[self.ip]).ok_or(CompileError::CompileError(
@@ -189,7 +193,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     writeln!(self.writer, "{value}")
                         .map_err(|e| CompileError::RuntimeError(miette::miette!(e)))?;
                     self.ip += 1;
-                    return Ok(());
                 }
                 OpCode::Pop => {
                     self.pop()?;
@@ -289,7 +292,7 @@ mod tests {
     #[test_case("print ((5 - (3-1)) * -2) / 4;", "-1.5")]
     #[test_case("print ((5 - (3-1) + 3) * -2) / 4;", "-3")]
     #[test_case("var x = 1; var y = x + 1; print y;", "2")]
-    #[test_case("print 1 + 3; print 2 + 4;", "4\n6")]
+    #[test_case("print 1; print 2;", "1\n2")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
