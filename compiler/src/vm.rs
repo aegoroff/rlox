@@ -199,73 +199,67 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.ip += 1;
                 }
                 OpCode::DefineGlobal => {
-                    let name = self.chunk.read_constant(self.ip);
-                    let name = name.try_str()?;
-                    let value = self.peek(0)?;
-                    let value = value.clone();
-                    self.globals.insert(name.clone(), value);
-                    self.pop()?;
+                    self.define_global()?;
                     self.ip += 2;
                 }
                 OpCode::DefineGlobalLong => {
-                    let name = self.chunk.read_constant(self.ip);
-                    let name = name.try_str()?;
-                    let value = self.peek(0)?;
-                    let value = value.clone();
-                    self.globals.insert(name.clone(), value);
-                    self.pop()?;
+                    self.define_global()?;
                     self.ip += 4;
                 }
                 OpCode::GetGlobal => {
-                    let name = self.chunk.read_constant(self.ip);
-                    let name = name.try_str()?;
-                    let Some(val) = self.globals.get(name) else {
-                        return Err(CompileError::RuntimeError(miette::miette!(
-                            "Undefined variable '{name}'"
-                        )));
-                    };
-                    self.push(val.clone());
+                    self.get_global()?;
                     self.ip += 2;
                 }
                 OpCode::GetGlobalLong => {
-                    let name = self.chunk.read_constant(self.ip);
-                    let name = name.try_str()?;
-                    let Some(val) = self.globals.get(name) else {
-                        return Err(CompileError::RuntimeError(miette::miette!(
-                            "Undefined variable '{name}'"
-                        )));
-                    };
-                    self.push(val.clone());
+                    self.get_global()?;
                     self.ip += 4;
                 }
                 OpCode::SetGlobal => {
-                    let name = self.chunk.read_constant(self.ip);
-                    let name = name.try_str()?;
-                    if !self.globals.contains_key(name) {
-                        return Err(CompileError::RuntimeError(miette::miette!(
-                            "Undefined variable '{name}'"
-                        )));
-                    };
-                    let value = self.peek(0)?;
-                    let value = value.clone();
-                    self.globals.insert(name.clone(), value);
+                    self.set_global()?;
                     self.ip += 2;
                 }
                 OpCode::SetGlobalLong => {
-                    let name = self.chunk.read_constant(self.ip);
-                    let name = name.try_str()?;
-                    if !self.globals.contains_key(name) {
-                        return Err(CompileError::RuntimeError(miette::miette!(
-                            "Undefined variable '{name}'"
-                        )));
-                    };
-                    let value = self.peek(0)?;
-                    let value = value.clone();
-                    self.globals.insert(name.clone(), value);
-                    self.ip += 2;
+                    self.set_global()?;
+                    self.ip += 4;
                 }
             }
         }
+        Ok(())
+    }
+
+    fn set_global(&mut self) -> crate::Result<()> {
+        let name = self.chunk.read_constant(self.ip);
+        let name = name.try_str()?;
+        if !self.globals.contains_key(name) {
+            return Err(CompileError::RuntimeError(miette::miette!(
+                "Undefined variable '{name}'"
+            )));
+        };
+        let value = self.peek(0)?;
+        let value = value.clone();
+        self.globals.insert(name.clone(), value);
+        Ok(())
+    }
+
+    fn get_global(&mut self) -> crate::Result<()> {
+        let name = self.chunk.read_constant(self.ip);
+        let name = name.try_str()?;
+        let Some(val) = self.globals.get(name) else {
+            return Err(CompileError::RuntimeError(miette::miette!(
+                "Undefined variable '{name}'"
+            )));
+        };
+        self.push(val.clone());
+        Ok(())
+    }
+
+    fn define_global(&mut self) -> crate::Result<()> {
+        let name = self.chunk.read_constant(self.ip);
+        let name = name.try_str()?;
+        let value = self.peek(0)?;
+        let value = value.clone();
+        self.globals.insert(name.clone(), value);
+        self.pop()?;
         Ok(())
     }
 }
