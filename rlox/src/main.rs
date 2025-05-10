@@ -104,7 +104,7 @@ fn interpret(content: String) -> miette::Result<()> {
 }
 
 fn compile(content: String) -> miette::Result<()> {
-    let mut vm = VirtualMachine::new();
+    let mut vm = VirtualMachine::new(stdout());
     vm.init();
 
     vm.interpret(&content).map_err(|err| match err {

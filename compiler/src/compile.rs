@@ -224,18 +224,14 @@ impl<'a> Parser<'a> {
     }
 
     fn advance(&mut self) -> crate::Result<()> {
-        match self.tokens.next() {
-            Some(Ok((_, t, _))) => {
+        let next = self.tokens.next().unwrap_or(Ok((0, Token::Eof, 0)));
+        match next {
+            Ok((_, t, _)) => {
                 self.previous = self.current.clone();
                 self.current = Rc::new(RefCell::new(t));
                 Ok(())
             }
-            Some(Err(r)) => Err(CompileError::CompileError(r)),
-            None => {
-                self.previous = self.current.clone();
-                self.current = Rc::new(RefCell::new(Token::Eof));
-                Ok(())
-            }
+            Err(r) => Err(CompileError::CompileError(r)),
         }
     }
 
