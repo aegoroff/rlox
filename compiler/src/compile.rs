@@ -79,7 +79,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn compile(&mut self) -> crate::Result<&mut Chunk> {
+    pub fn compile(&mut self) -> crate::Result<&mut Function<'a>> {
         self.advance()?;
         while !self.matches(&Token::Eof)? {
             self.declaration()?;
@@ -89,7 +89,7 @@ impl<'a> Parser<'a> {
         {
             self.compiler.function.chunk.disassembly("main");
         }
-        Ok(&mut self.compiler.function.chunk)
+        Ok(&mut self.compiler.function)
     }
 
     fn expression(&mut self) -> crate::Result<()> {

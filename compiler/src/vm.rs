@@ -41,8 +41,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
     pub fn interpret(&mut self, content: &str) -> crate::Result<()> {
         self.ip = 0;
         let mut parser = Parser::new(content);
-        let chunk = parser.compile()?;
-        self.run(chunk)
+        let function = parser.compile()?;
+        self.run(&mut function.chunk)
     }
 
     pub fn init(&mut self) {
