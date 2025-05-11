@@ -14,23 +14,25 @@ pub enum OpCode {
     True = 3,
     False = 4,
     Pop = 5,
-    GetGlobal = 6,
-    GetGlobalLong = 7,
-    DefineGlobal = 8,
-    DefineGlobalLong = 9,
-    SetGlobal = 10,
-    SetGlobalLong = 11,
-    Equal = 12,
-    Greater = 13,
-    Less = 14,
-    Add = 15,
-    Subtract = 16,
-    Multiply = 17,
-    Divide = 18,
-    Not = 19,
-    Negate = 20,
-    Print = 21,
-    Return = 22,
+    GetLocal = 6,
+    SetLocal = 7,
+    GetGlobal = 8,
+    GetGlobalLong = 9,
+    DefineGlobal = 10,
+    DefineGlobalLong = 11,
+    SetGlobal = 12,
+    SetGlobalLong = 13,
+    Equal = 14,
+    Greater = 15,
+    Less = 16,
+    Add = 17,
+    Subtract = 18,
+    Multiply = 19,
+    Divide = 20,
+    Not = 21,
+    Negate = 22,
+    Print = 23,
+    Return = 24,
 }
 
 impl Display for OpCode {
@@ -59,6 +61,8 @@ impl Display for OpCode {
             OpCode::GetGlobalLong => write!(f, "OP_GET_GLOBAL_LONG"),
             OpCode::SetGlobal => write!(f, "OP_SET_GLOBAL"),
             OpCode::SetGlobalLong => write!(f, "OP_SET_GLOBAL_LONG"),
+            OpCode::GetLocal => write!(f, "OP_GET_LOCAL"),
+            OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
         }
     }
 }
@@ -129,9 +133,12 @@ impl Chunk {
             print!("{:4} ", self.lines[offset]);
         }
         match code {
-            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
-                self.disassembly_constant(offset, &code)
-            }
+            OpCode::Constant
+            | OpCode::DefineGlobal
+            | OpCode::GetGlobal
+            | OpCode::SetGlobal
+            | OpCode::SetLocal
+            | OpCode::GetLocal => self.disassembly_constant(offset, &code),
             OpCode::Return
             | OpCode::Nil
             | OpCode::True
@@ -191,9 +198,12 @@ impl Chunk {
             return 0;
         };
         match code {
-            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
-                self.code[offset + 1] as usize
-            }
+            OpCode::Constant
+            | OpCode::DefineGlobal
+            | OpCode::GetGlobal
+            | OpCode::SetGlobal
+            | OpCode::GetLocal
+            | OpCode::SetLocal => self.code[offset + 1] as usize,
             OpCode::ConstantLong
             | OpCode::DefineGlobalLong
             | OpCode::GetGlobalLong

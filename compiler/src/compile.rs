@@ -338,7 +338,7 @@ impl<'a> Parser<'a> {
     fn named_variable(
         &mut self,
         chunk: &mut Chunk,
-        token: Rc<RefCell<Token>>,
+        token: Rc<RefCell<Token<'a>>>,
         can_assign: bool,
     ) -> crate::Result<()> {
         let Token::Identifier(id) = *token.borrow() else {
@@ -347,23 +347,42 @@ impl<'a> Parser<'a> {
                 self.previous.borrow()
             )));
         };
-        let arg = self.identifier_constant(chunk, id);
+        let mut set_code = OpCode::SetGlobal;
+        let mut get_code = OpCode::GetGlobal;
+        let arg = if let Some(i) = self.resolve_local(id) {
+            set_code = OpCode::SetLocal;
+            get_code = OpCode::GetLocal;
+            i
+        } else {
+            self.identifier_constant(chunk, id)
+        };
 
         if can_assign && self.matches(&Token::Equal)? {
             self.expression(chunk)?;
             if arg > 255 {
                 self.emit_opcode(chunk, OpCode::SetGlobalLong);
             } else {
-                self.emit_opcode(chunk, OpCode::SetGlobal);
+                self.emit_opcode(chunk, set_code);
             }
         } else if arg > 255 {
             self.emit_opcode(chunk, OpCode::GetGlobalLong);
         } else {
-            self.emit_opcode(chunk, OpCode::GetGlobal);
+            self.emit_opcode(chunk, get_code);
         }
         self.emit_operand(chunk, arg);
 
         Ok(())
+    }
+
+    fn resolve_local(&self, name: &'a str) -> Option<usize> {
+        let (i, _) = self
+            .compiler
+            .locals
+            .iter()
+            .rev()
+            .enumerate()
+            .find(|(_, local)| local.name == name)?;
+        Some(self.compiler.locals.len() - 1 - i)
     }
 
     fn parse_precedence(&mut self, chunk: &mut Chunk, precedence: Precedence) -> crate::Result<()> {

@@ -222,6 +222,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.set_global()?;
                     self.ip += 4;
                 }
+                OpCode::GetLocal => {
+                    let val = self.chunk.read_constant(self.ip);
+                    self.push(val.clone());
+                    self.ip += 2;
+                }
+                OpCode::SetLocal => {
+                    let val = self.chunk.read_constant(self.ip);
+                    let value = self.peek(0)?;
+                    let value = value.clone();
+                    self.ip += 2;
+                }
             }
         }
         Ok(())
@@ -314,6 +325,7 @@ mod tests {
     #[test_case("var x = 1; var y = x + 1; print x; print y;", "1\n2")]
     #[test_case("print 1; print 2;", "1\n2")]
     #[test_case("print 1; { print 3; }", "1\n3")]
+    #[test_case("var x = 1; { var x = 2; print x; }", "2")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
