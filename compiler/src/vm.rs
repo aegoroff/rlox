@@ -244,6 +244,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.ip += offset;
                     }
                 }
+                OpCode::Jump => {
+                    let offset = self.chunk.read_short(self.ip + 1);
+                    self.ip += 3;
+                    self.ip += offset;
+                }
             }
         }
         Ok(())
@@ -344,6 +349,8 @@ mod tests {
     )]
     #[test_case("var x = 1; if (x > 0) { print x; }", "1")]
     #[test_case("var x = -1; if (x > 0) { print x; } print 2;", "2")]
+    #[test_case("var x = 1; if (x > 0) { print x; } else { print 2; }", "1")]
+    #[test_case("var x = -1; if (x > 0) { print x; } else { print 2; }", "2")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

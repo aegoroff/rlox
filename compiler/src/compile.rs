@@ -211,7 +211,12 @@ impl<'a> Parser<'a> {
         self.consume(&Token::RightParen)?;
         let then_jump = self.emit_jump(chunk, OpCode::JumpIfFalse);
         self.statement(chunk)?;
+        let else_jump = self.emit_jump(chunk, OpCode::Jump);
         chunk.patch_jump(then_jump);
+        if self.matches(&Token::Else)? {
+            self.statement(chunk)?;
+        }
+        chunk.patch_jump(else_jump);
         Ok(())
     }
 

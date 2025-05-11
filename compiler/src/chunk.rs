@@ -32,8 +32,9 @@ pub enum OpCode {
     Not = 21,
     Negate = 22,
     Print = 23,
-    JumpIfFalse = 24,
-    Return = 25,
+    Jump = 24,
+    JumpIfFalse = 25,
+    Return = 26,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -67,6 +68,7 @@ impl Display for OpCode {
             OpCode::GetLocal => write!(f, "OP_GET_LOCAL"),
             OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
             OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
+            OpCode::Jump => write!(f, "OP_JUMP"),
         }
     }
 }
@@ -178,7 +180,9 @@ impl Chunk {
             | OpCode::SetGlobalLong
             | OpCode::DefineGlobalLong
             | OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
-            OpCode::JumpIfFalse => self.disassembly_two_bytes_instruction(offset, &code),
+            OpCode::JumpIfFalse | OpCode::Jump => {
+                self.disassembly_two_bytes_instruction(offset, &code)
+            }
         }
     }
 
