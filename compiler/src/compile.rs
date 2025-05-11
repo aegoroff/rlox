@@ -283,6 +283,26 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn and(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        let and_jump = self.emit_jump(chunk, OpCode::JumpIfFalse);
+        self.emit_opcode(chunk, OpCode::Pop);
+        self.parse_precedence(chunk, Precedence::And)?;
+        chunk.patch_jump(and_jump);
+        Ok(())
+    }
+
+    fn or(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        let else_jump = self.emit_jump(chunk, OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(chunk, OpCode::Jump);
+        
+        chunk.patch_jump(else_jump);
+        self.emit_opcode(chunk, OpCode::Pop);
+
+        self.parse_precedence(chunk, Precedence::Or)?;
+        chunk.patch_jump(end_jump);
+        Ok(())
+    }
+
     fn unary(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let previous = self.previous.clone();
         self.parse_precedence(chunk, Precedence::Unary)?;
@@ -457,6 +477,8 @@ impl<'a> Parser<'a> {
             Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual => {
                 Precedence::Comparison
             }
+            Token::And => Precedence::And,
+            Token::Or => Precedence::Or,
             _ => Precedence::None,
         }
     }
@@ -473,6 +495,8 @@ impl<'a> Parser<'a> {
             | Token::GreaterEqual
             | Token::Less
             | Token::LessEqual => self.binary(chunk),
+            Token::And => self.and(chunk),
+            Token::Or => self.or(chunk),
             _ => Ok(()),
         }
     }
