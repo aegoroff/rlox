@@ -34,19 +34,18 @@ enum Precedence {
 }
 
 struct Local<'a> {
-    token: Token<'a>,
+    name: &'a str,
     depth: usize,
 }
 
 impl<'a> Local<'a> {
-    fn new(token: Token<'a>, depth: usize) -> Self {
-        Self { token, depth }
+    fn new(name: &'a str, depth: usize) -> Self {
+        Self { name, depth }
     }
 }
 
 struct Compiler<'a> {
     locals: Vec<Local<'a>>,
-    local_count: usize,
     scope_depth: usize,
 }
 
@@ -54,7 +53,6 @@ impl Compiler<'_> {
     fn new() -> Self {
         Self {
             locals: vec![],
-            local_count: 0,
             scope_depth: 0,
         }
     }
@@ -116,8 +114,42 @@ impl<'a> Parser<'a> {
             )));
         };
         self.advance()?;
+
+        self.declare_variable(id)?;
+        if self.compiler.scope_depth > 0 {
+            return Ok(0);
+        }
+
         let constant = self.identifier_constant(chunk, id);
         Ok(constant)
+    }
+
+    fn declare_variable(&mut self, name: &'a str) -> crate::Result<()> {
+        if self.compiler.scope_depth == 0 {
+            return Ok(());
+        }
+
+        let existing = self
+            .compiler
+            .locals
+            .iter()
+            .rev()
+            .any(|local| local.depth == self.compiler.scope_depth && local.name == name);
+        if existing {
+            return Err(CompileError::CompileError(miette::miette!(
+                "Already a variables with this name '{name}' in the same scope"
+            )));
+        }
+        self.add_local(name);
+        Ok(())
+    }
+
+    fn add_local(&mut self, name: &'a str) {
+        if self.compiler.scope_depth == 0 {
+            return;
+        }
+        let local = Local::new(name, self.compiler.scope_depth);
+        self.compiler.locals.push(local);
     }
 
     fn identifier_constant(&mut self, chunk: &mut Chunk, id: &str) -> usize {
@@ -139,7 +171,7 @@ impl<'a> Parser<'a> {
         } else if self.matches(&Token::LeftBrace)? {
             self.begin_scope();
             let block_result = self.block(chunk);
-            self.end_scope();
+            self.end_scope(chunk);
             block_result
         } else {
             self.expression_statement(chunk)
@@ -289,8 +321,18 @@ impl<'a> Parser<'a> {
         self.compiler.scope_depth += 1;
     }
 
-    fn end_scope(&mut self) {
+    fn end_scope(&mut self, chunk: &mut Chunk) {
         self.compiler.scope_depth -= 1;
+
+        while !self.compiler.locals.is_empty() {
+            let i = self.compiler.locals.len() - 1;
+            if self.compiler.locals[i].depth > self.compiler.scope_depth {
+                self.emit_opcode(chunk, OpCode::Pop);
+                self.compiler.locals.pop();
+            } else {
+                break;
+            }
+        }
     }
 
     fn named_variable(
