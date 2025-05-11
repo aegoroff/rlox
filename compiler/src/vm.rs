@@ -329,6 +329,10 @@ mod tests {
     #[test_case("print 1; { print 3; }", "1\n3")]
     #[test_case("var y = 1; { var x = 2; print x; } print y;", "2\n1")]
     #[test_case("var x = 1; { var x = 2; print x; }", "2")]
+    #[test_case(
+        "var x = 1; { var x = 2; print x; { var x = 3; print x; } } print x;",
+        "2\n3\n1"
+    )]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
