@@ -103,6 +103,7 @@ impl<'a> Lexer<'a> {
                 // skip all char until EOL (end of line)
                 for (_, c) in self.chars.by_ref() {
                     if c == '\n' {
+                        self.line += 1;
                         break;
                     }
                 }
