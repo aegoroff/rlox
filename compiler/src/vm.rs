@@ -65,7 +65,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn peek(&mut self, distance: usize) -> crate::Result<&LoxValue> {
-        if self.stack.len() < distance {
+        if self.stack.len() < distance + 1 {
             Err(CompileError::RuntimeError(miette::miette!(
                 "Not enough stack capacity for distance {distance}. Current stack size is {}",
                 self.stack.len()
@@ -223,14 +223,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.ip += 4;
                 }
                 OpCode::GetLocal => {
-                    let val = self.chunk.read_constant(self.ip);
-                    self.push(val.clone());
+                    let val = self.chunk.read_byte(self.ip + 1);
+                    let val = &self.stack[val as usize];
+                    let val = val.clone();
+                    self.push(val);
                     self.ip += 2;
                 }
                 OpCode::SetLocal => {
-                    let val = self.chunk.read_constant(self.ip);
+                    let val = self.chunk.read_byte(self.ip + 1);
                     let value = self.peek(0)?;
-                    let value = value.clone();
+                    self.stack[val as usize] = value.clone();
                     self.ip += 2;
                 }
             }

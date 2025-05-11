@@ -35,6 +35,8 @@ pub enum OpCode {
     Return = 24,
 }
 
+pub const MAX_SHORT_VALUE: usize = 255;
+
 impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -89,7 +91,7 @@ impl Chunk {
 
     pub fn write_constant(&mut self, value: LoxValue, line: usize) {
         let constant = self.add_constant(value);
-        if constant > 255 {
+        if constant > MAX_SHORT_VALUE {
             self.write_code(OpCode::ConstantLong, line);
         } else {
             self.write_code(OpCode::Constant, line);
@@ -98,7 +100,7 @@ impl Chunk {
     }
 
     pub fn write_operand(&mut self, value: usize, line: usize) {
-        if value > 255 {
+        if value > MAX_SHORT_VALUE {
             for b in into_three_bytes(value) {
                 self.code.push(b);
             }
@@ -112,6 +114,10 @@ impl Chunk {
     pub fn read_constant(&self, offset: usize) -> LoxValue {
         let ix = self.get_constant_ix(offset);
         self.constants[ix].clone()
+    }
+
+    pub fn read_byte(&self, offset: usize) -> u8 {
+        self.code[offset]
     }
 
     pub fn disassembly(&self, name: &str) {
@@ -133,12 +139,10 @@ impl Chunk {
             print!("{:4} ", self.lines[offset]);
         }
         match code {
-            OpCode::Constant
-            | OpCode::DefineGlobal
-            | OpCode::GetGlobal
-            | OpCode::SetGlobal
-            | OpCode::SetLocal
-            | OpCode::GetLocal => self.disassembly_constant(offset, &code),
+            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
+                self.disassembly_constant(offset, &code)
+            }
+            OpCode::SetLocal | OpCode::GetLocal => self.disassembly_local(offset, &code),
             OpCode::Return
             | OpCode::Nil
             | OpCode::True
@@ -165,6 +169,12 @@ impl Chunk {
         let ix = self.get_constant_ix(offset);
         let constant = &self.constants[ix];
         println!("{:<16} {ix:4} '{constant}'", code.to_string());
+        offset + 2
+    }
+
+    fn disassembly_local(&self, offset: usize, code: &OpCode) -> usize {
+        let ix = self.code[offset + 1];
+        println!("{:<16} {ix:4}", code.to_string());
         offset + 2
     }
 
@@ -198,12 +208,9 @@ impl Chunk {
             return 0;
         };
         match code {
-            OpCode::Constant
-            | OpCode::DefineGlobal
-            | OpCode::GetGlobal
-            | OpCode::SetGlobal
-            | OpCode::GetLocal
-            | OpCode::SetLocal => self.code[offset + 1] as usize,
+            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
+                self.code[offset + 1] as usize
+            }
             OpCode::ConstantLong
             | OpCode::DefineGlobalLong
             | OpCode::GetGlobalLong

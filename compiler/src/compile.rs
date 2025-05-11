@@ -6,7 +6,7 @@ use scanner::{Lexer, Token};
 
 use crate::{
     CompileError,
-    chunk::{Chunk, OpCode},
+    chunk::{Chunk, MAX_SHORT_VALUE, OpCode},
     value::LoxValue,
 };
 
@@ -140,16 +140,22 @@ impl<'a> Parser<'a> {
                 "Already a variables with this name '{name}' in the same scope"
             )));
         }
-        self.add_local(name);
+        self.add_local(name)?;
         Ok(())
     }
 
-    fn add_local(&mut self, name: &'a str) {
+    fn add_local(&mut self, name: &'a str) -> crate::Result<()> {
         if self.compiler.scope_depth == 0 {
-            return;
+            return Ok(());
+        }
+        if self.compiler.locals.len() >= MAX_SHORT_VALUE {
+            return Err(CompileError::CompileError(miette::miette!(
+                "Too many local variables in function."
+            )));
         }
         let local = Local::new(name, self.compiler.scope_depth);
         self.compiler.locals.push(local);
+        Ok(())
     }
 
     fn identifier_constant(&mut self, chunk: &mut Chunk, id: &str) -> usize {
@@ -157,7 +163,10 @@ impl<'a> Parser<'a> {
     }
 
     fn define_variable(&mut self, chunk: &mut Chunk, global: usize) {
-        if global > 255 {
+        if self.compiler.scope_depth > 0 {
+            return;
+        }
+        if global > MAX_SHORT_VALUE {
             self.emit_opcode(chunk, OpCode::DefineGlobalLong);
         } else {
             self.emit_opcode(chunk, OpCode::DefineGlobal);
@@ -359,12 +368,12 @@ impl<'a> Parser<'a> {
 
         if can_assign && self.matches(&Token::Equal)? {
             self.expression(chunk)?;
-            if arg > 255 {
+            if arg > MAX_SHORT_VALUE {
                 self.emit_opcode(chunk, OpCode::SetGlobalLong);
             } else {
                 self.emit_opcode(chunk, set_code);
             }
-        } else if arg > 255 {
+        } else if arg > MAX_SHORT_VALUE {
             self.emit_opcode(chunk, OpCode::GetGlobalLong);
         } else {
             self.emit_opcode(chunk, get_code);
