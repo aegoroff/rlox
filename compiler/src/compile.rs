@@ -12,6 +12,7 @@ use crate::{
 
 pub struct Parser<'a> {
     tokens: Lexer<'a>,
+    compiler: Compiler<'a>,
     current: Rc<RefCell<Token<'a>>>,
     previous: Rc<RefCell<Token<'a>>>,
 }
@@ -32,6 +33,33 @@ enum Precedence {
     Primary = 10,
 }
 
+struct Local<'a> {
+    token: Token<'a>,
+    depth: usize,
+}
+
+impl<'a> Local<'a> {
+    fn new(token: Token<'a>, depth: usize) -> Self {
+        Self { token, depth }
+    }
+}
+
+struct Compiler<'a> {
+    locals: Vec<Local<'a>>,
+    local_count: usize,
+    scope_depth: usize,
+}
+
+impl Compiler<'_> {
+    fn new() -> Self {
+        Self {
+            locals: vec![],
+            local_count: 0,
+            scope_depth: 0,
+        }
+    }
+}
+
 impl<'a> Parser<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {
@@ -39,6 +67,7 @@ impl<'a> Parser<'a> {
             tokens: Lexer::new(content),
             current: Rc::new(RefCell::new(Token::Eof)),
             previous: Rc::new(RefCell::new(Token::Eof)),
+            compiler: Compiler::new(),
         }
     }
 
@@ -107,9 +136,22 @@ impl<'a> Parser<'a> {
     fn statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         if self.matches(&Token::Print)? {
             self.print_statement(chunk)
+        } else if self.matches(&Token::LeftBrace)? {
+            self.begin_scope();
+            let block_result = self.block(chunk);
+            self.end_scope();
+            block_result
         } else {
             self.expression_statement(chunk)
         }
+    }
+
+    fn block(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        while !self.check(&Token::RightBrace) && !self.check(&Token::Eof) {
+            self.declaration(chunk)?;
+        }
+        self.consume(&Token::RightBrace)?;
+        Ok(())
     }
 
     fn print_statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
@@ -241,6 +283,14 @@ impl<'a> Parser<'a> {
 
     fn variable(&mut self, chunk: &mut Chunk, can_assign: bool) -> crate::Result<()> {
         self.named_variable(chunk, self.previous.clone(), can_assign)
+    }
+
+    fn begin_scope(&mut self) {
+        self.compiler.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.compiler.scope_depth -= 1;
     }
 
     fn named_variable(
