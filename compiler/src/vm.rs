@@ -358,6 +358,7 @@ mod tests {
     #[test_case("var x = -1; if (x > 0) { print x; } else { print 2; }", "2")]
     #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
     #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
+    #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
