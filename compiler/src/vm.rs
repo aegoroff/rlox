@@ -235,6 +235,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.stack[val as usize] = value.clone();
                     self.ip += 2;
                 }
+                OpCode::JumpIfFalse => {
+                    let offset = self.chunk.read_short(self.ip + 1);
+                    let top = self.peek(0)?;
+                    let falsey = !top.is_truthy();
+                    self.ip += 3;
+                    if falsey {
+                        self.ip += offset;
+                    }
+                }
             }
         }
         Ok(())
@@ -333,6 +342,8 @@ mod tests {
         "var x = 1; { var x = 2; print x; { var x = 3; print x; } } print x;",
         "2\n3\n1"
     )]
+    #[test_case("var x = 1; if (x > 0) { print x; }", "1")]
+    #[test_case("var x = -1; if (x > 0) { print x; } print 2;", "2")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

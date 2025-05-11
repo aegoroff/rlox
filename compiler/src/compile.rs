@@ -190,6 +190,8 @@ impl<'a> Parser<'a> {
             let block_result = self.block(chunk);
             self.end_scope(chunk);
             block_result
+        } else if self.matches(&Token::If)? {
+            self.if_statement(chunk)
         } else {
             self.expression_statement(chunk)
         }
@@ -200,6 +202,16 @@ impl<'a> Parser<'a> {
             self.declaration(chunk)?;
         }
         self.consume(&Token::RightBrace)?;
+        Ok(())
+    }
+
+    fn if_statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.consume(&Token::LeftParen)?;
+        self.expression(chunk)?;
+        self.consume(&Token::RightParen)?;
+        let then_jump = self.emit_jump(chunk, OpCode::JumpIfFalse);
+        self.statement(chunk)?;
+        chunk.patch_jump(then_jump);
         Ok(())
     }
 
@@ -517,6 +529,13 @@ impl<'a> Parser<'a> {
 
     fn make_constant(&self, chunk: &mut Chunk, value: LoxValue) -> usize {
         chunk.add_constant(value)
+    }
+
+    fn emit_jump(&self, chunk: &mut Chunk, opcode: OpCode) -> usize {
+        chunk.write_code(opcode, self.tokens.line);
+        self.emit_operand(chunk, 0xFF);
+        self.emit_operand(chunk, 0xFF);
+        chunk.code.len() - 2
     }
 
     fn emit_opcode(&self, chunk: &mut Chunk, opcode: OpCode) {

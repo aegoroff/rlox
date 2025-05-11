@@ -32,7 +32,8 @@ pub enum OpCode {
     Not = 21,
     Negate = 22,
     Print = 23,
-    Return = 24,
+    JumpIfFalse = 24,
+    Return = 25,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -65,6 +66,7 @@ impl Display for OpCode {
             OpCode::SetGlobalLong => write!(f, "OP_SET_GLOBAL_LONG"),
             OpCode::GetLocal => write!(f, "OP_GET_LOCAL"),
             OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
+            OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
         }
     }
 }
@@ -120,6 +122,20 @@ impl Chunk {
         self.code[offset]
     }
 
+    pub fn read_short(&self, offset: usize) -> usize {
+        let op1 = self.code[offset];
+        let op2 = self.code[offset + 1];
+        (op2 as usize) << 8 | (op1 as usize)
+    }
+
+    pub fn patch_jump(&mut self, offset: usize) {
+        // -2 to adjust for the bytecode for the jump offset itself.
+        let jump = self.code.len() - 2 - offset;
+        let bytes = into_two_bytes(jump);
+        self.code[offset] = bytes[0];
+        self.code[offset + 1] = bytes[1];
+    }
+
     pub fn disassembly(&self, name: &str) {
         println!("=== {name} ===");
         let mut offset = 0;
@@ -162,6 +178,7 @@ impl Chunk {
             | OpCode::SetGlobalLong
             | OpCode::DefineGlobalLong
             | OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
+            OpCode::JumpIfFalse => self.disassembly_two_bytes_instruction(offset, &code),
         }
     }
 
@@ -176,6 +193,12 @@ impl Chunk {
         let ix = self.code[offset + 1];
         println!("{:<16} {ix:4}", code.to_string());
         offset + 2
+    }
+
+    fn disassembly_two_bytes_instruction(&self, offset: usize, code: &OpCode) -> usize {
+        let ix = self.read_short(offset + 1);
+        println!("{:<16} {ix:4}", code.to_string());
+        offset + 3
     }
 
     fn disassembly_constant_long(&self, offset: usize, code: &OpCode) -> usize {
@@ -231,4 +254,10 @@ fn into_three_bytes(value: usize) -> [u8; 3] {
     let op2 = ((value & 0xFF00) >> 8) as u8;
     let op3 = ((value & 0xFF0000) >> 16) as u8;
     [op1, op2, op3]
+}
+
+fn into_two_bytes(value: usize) -> [u8; 2] {
+    let op1 = (value & 0xFF) as u8;
+    let op2 = ((value & 0xFF00) >> 8) as u8;
+    [op1, op2]
 }
