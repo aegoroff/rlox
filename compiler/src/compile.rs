@@ -190,6 +190,8 @@ impl<'a> Parser<'a> {
             let block_result = self.block(chunk);
             self.end_scope(chunk);
             block_result
+        } else if self.matches(&Token::For)? {
+            self.for_statement(chunk)
         } else if self.matches(&Token::If)? {
             self.if_statement(chunk)
         } else if self.matches(&Token::While)? {
@@ -204,6 +206,51 @@ impl<'a> Parser<'a> {
             self.declaration(chunk)?;
         }
         self.consume(&Token::RightBrace)?;
+        Ok(())
+    }
+
+    fn for_statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        self.begin_scope();
+        self.consume(&Token::LeftParen)?;
+
+        // Initializer
+        if self.matches(&Token::Semicolon)? {
+        } else if self.matches(&Token::Var)? {
+            self.var_declaration(chunk)?;
+        } else {
+            self.expression_statement(chunk)?;
+        }
+
+        // Condition
+        let mut loop_start = chunk.code.len();
+        let mut exit_jump = None;
+
+        if !self.matches(&Token::Semicolon)? {
+            self.expression(chunk)?;
+            self.consume(&Token::Semicolon)?;
+            exit_jump = Some(self.emit_jump(chunk, OpCode::JumpIfFalse));
+        }
+        // Increment
+
+        if !self.matches(&Token::RightParen)? {
+            let body_jump = self.emit_jump(chunk, OpCode::Jump);
+            let increment_start = chunk.code.len();
+            self.expression(chunk)?;
+            self.emit_opcode(chunk, OpCode::Pop);
+            self.consume(&Token::RightParen)?;
+            self.emit_loop(chunk, loop_start)?;
+            loop_start = increment_start;
+            chunk.patch_jump(body_jump);
+        }
+
+        self.statement(chunk)?;
+        self.emit_loop(chunk, loop_start)?;
+
+        if let Some(jmp) = exit_jump {
+            chunk.patch_jump(jmp);
+            self.emit_opcode(chunk, OpCode::Pop);
+        }
+        self.end_scope(chunk);
         Ok(())
     }
 
