@@ -87,7 +87,7 @@ impl<'a> Parser<'a> {
         self.end_compiler();
         #[cfg(feature = "printcode")]
         {
-            chunk.disassembly("main");
+            self.compiler.function.chunk.disassembly("main");
         }
         Ok(&mut self.compiler.function.chunk)
     }
