@@ -192,6 +192,8 @@ impl<'a> Parser<'a> {
             block_result
         } else if self.matches(&Token::If)? {
             self.if_statement(chunk)
+        } else if self.matches(&Token::While)? {
+            self.while_statement(chunk)
         } else {
             self.expression_statement(chunk)
         }
@@ -202,6 +204,22 @@ impl<'a> Parser<'a> {
             self.declaration(chunk)?;
         }
         self.consume(&Token::RightBrace)?;
+        Ok(())
+    }
+
+    fn while_statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+        let loop_start = chunk.code.len();
+        self.consume(&Token::LeftParen)?;
+        self.expression(chunk)?;
+        self.consume(&Token::RightParen)?;
+
+        let exit_jump = self.emit_jump(chunk, OpCode::JumpIfFalse);
+        self.emit_opcode(chunk, OpCode::Pop);
+        self.statement(chunk)?;
+        self.emit_loop(chunk, loop_start)?;
+
+        chunk.patch_jump(exit_jump);
+        self.emit_opcode(chunk, OpCode::Pop);
         Ok(())
     }
 
@@ -294,7 +312,7 @@ impl<'a> Parser<'a> {
     fn or(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         let else_jump = self.emit_jump(chunk, OpCode::JumpIfFalse);
         let end_jump = self.emit_jump(chunk, OpCode::Jump);
-        
+
         chunk.patch_jump(else_jump);
         self.emit_opcode(chunk, OpCode::Pop);
 
@@ -567,6 +585,19 @@ impl<'a> Parser<'a> {
         self.emit_operand(chunk, 0xFF);
         self.emit_operand(chunk, 0xFF);
         chunk.code.len() - 2
+    }
+
+    fn emit_loop(&self, chunk: &mut Chunk, loop_start: usize) -> crate::Result<()> {
+        chunk.write_code(OpCode::Loop, self.tokens.line);
+
+        let offset = chunk.code.len() - loop_start + 2;
+        if offset > u16::MAX as usize {
+            return Err(CompileError::CompileError(miette::miette!(
+                "Loop body too large."
+            )));
+        }
+        chunk.write_two_bytes(offset);
+        Ok(())
     }
 
     fn emit_opcode(&self, chunk: &mut Chunk, opcode: OpCode) {

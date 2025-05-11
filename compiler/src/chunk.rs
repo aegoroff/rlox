@@ -34,7 +34,8 @@ pub enum OpCode {
     Print = 23,
     Jump = 24,
     JumpIfFalse = 25,
-    Return = 26,
+    Loop = 26,
+    Return = 27,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -69,6 +70,7 @@ impl Display for OpCode {
             OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
             OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
             OpCode::Jump => write!(f, "OP_JUMP"),
+            OpCode::Loop => write!(f, "OP_LOOP"),
         }
     }
 }
@@ -138,6 +140,12 @@ impl Chunk {
         self.code[offset + 1] = bytes[1];
     }
 
+    pub fn write_two_bytes(&mut self, value: usize) {
+        let bytes = into_two_bytes(value);
+        self.code.push(bytes[0]);
+        self.code.push(bytes[1]);
+    }
+
     pub fn disassembly(&self, name: &str) {
         println!("=== {name} ===");
         let mut offset = 0;
@@ -151,10 +159,11 @@ impl Chunk {
             return offset + 1;
         };
         print!("{offset:04} ");
-        if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
+        let line_ix = offset.min(self.lines.len() - 1);
+        if line_ix > 0 && self.lines[line_ix] == self.lines[line_ix - 1] {
             print!("   | ");
         } else {
-            print!("{:4} ", self.lines[offset]);
+            print!("{:4} ", self.lines[line_ix]);
         }
         match code {
             OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
@@ -181,8 +190,9 @@ impl Chunk {
             | OpCode::DefineGlobalLong
             | OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
             OpCode::JumpIfFalse | OpCode::Jump => {
-                self.disassembly_two_bytes_instruction(offset, &code)
+                self.disassembly_jump_instruction(offset, &code, 1)
             }
+            OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
         }
     }
 
@@ -199,9 +209,14 @@ impl Chunk {
         offset + 2
     }
 
-    fn disassembly_two_bytes_instruction(&self, offset: usize, code: &OpCode) -> usize {
-        let ix = self.read_short(offset + 1);
-        println!("{:<16} {ix:4}", code.to_string());
+    fn disassembly_jump_instruction(&self, offset: usize, code: &OpCode, sign: i32) -> usize {
+        let jump = self.read_short(offset + 1);
+
+        println!(
+            "{:<16} {offset:4} -> {}",
+            code.to_string(),
+            offset as i32 + 3 + sign * jump as i32
+        );
         offset + 3
     }
 
