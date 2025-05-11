@@ -35,11 +35,11 @@ enum Precedence {
 
 struct Local<'a> {
     name: &'a str,
-    depth: usize,
+    depth: Option<usize>,
 }
 
 impl<'a> Local<'a> {
-    fn new(name: &'a str, depth: usize) -> Self {
+    fn new(name: &'a str, depth: Option<usize>) -> Self {
         Self { name, depth }
     }
 }
@@ -129,12 +129,13 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
 
-        let existing = self
-            .compiler
-            .locals
-            .iter()
-            .rev()
-            .any(|local| local.depth == self.compiler.scope_depth && local.name == name);
+        let existing = self.compiler.locals.iter().rev().any(|local| {
+            if let Some(local_depth) = local.depth {
+                local.name == name && local_depth == self.compiler.scope_depth
+            } else {
+                local.name == name
+            }
+        });
         if existing {
             return Err(CompileError::CompileError(miette::miette!(
                 "Already a variables with this name '{name}' in the same scope"
@@ -153,7 +154,7 @@ impl<'a> Parser<'a> {
                 "Too many local variables in function."
             )));
         }
-        let local = Local::new(name, self.compiler.scope_depth);
+        let local = Local::new(name, None);
         self.compiler.locals.push(local);
         Ok(())
     }
@@ -164,6 +165,7 @@ impl<'a> Parser<'a> {
 
     fn define_variable(&mut self, chunk: &mut Chunk, global: usize) {
         if self.compiler.scope_depth > 0 {
+            self.mark_initialized();
             return;
         }
         if global > MAX_SHORT_VALUE {
@@ -172,6 +174,12 @@ impl<'a> Parser<'a> {
             self.emit_opcode(chunk, OpCode::DefineGlobal);
         }
         self.emit_operand(chunk, global);
+    }
+
+    fn mark_initialized(&mut self) {
+        if let Some(v) = self.compiler.locals.last_mut() {
+            v.depth = Some(self.compiler.scope_depth);
+        }
     }
 
     fn statement(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
@@ -335,7 +343,7 @@ impl<'a> Parser<'a> {
 
         while !self.compiler.locals.is_empty() {
             let i = self.compiler.locals.len() - 1;
-            if self.compiler.locals[i].depth > self.compiler.scope_depth {
+            if self.compiler.locals[i].depth.unwrap_or(0) > self.compiler.scope_depth {
                 self.emit_opcode(chunk, OpCode::Pop);
                 self.compiler.locals.pop();
             } else {
@@ -358,7 +366,7 @@ impl<'a> Parser<'a> {
         };
         let mut set_code = OpCode::SetGlobal;
         let mut get_code = OpCode::GetGlobal;
-        let arg = if let Some(i) = self.resolve_local(id) {
+        let arg = if let Some(i) = self.resolve_local(id)? {
             set_code = OpCode::SetLocal;
             get_code = OpCode::GetLocal;
             i
@@ -383,15 +391,24 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn resolve_local(&self, name: &'a str) -> Option<usize> {
-        let (i, _) = self
+    fn resolve_local(&self, name: &'a str) -> crate::Result<Option<usize>> {
+        let Some((i, l)) = self
             .compiler
             .locals
             .iter()
             .rev()
             .enumerate()
-            .find(|(_, local)| local.name == name)?;
-        Some(self.compiler.locals.len() - 1 - i)
+            .find(|(_, local)| local.name == name)
+        else {
+            return Ok(None);
+        };
+        if l.depth.is_none() {
+            Err(CompileError::CompileError(miette::miette!(
+                "Can't read local variable in its own initializer."
+            )))
+        } else {
+            Ok(Some(self.compiler.locals.len() - 1 - i))
+        }
     }
 
     fn parse_precedence(&mut self, chunk: &mut Chunk, precedence: Precedence) -> crate::Result<()> {

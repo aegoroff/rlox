@@ -142,7 +142,7 @@ impl Chunk {
             OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
                 self.disassembly_constant(offset, &code)
             }
-            OpCode::SetLocal | OpCode::GetLocal => self.disassembly_local(offset, &code),
+            OpCode::SetLocal | OpCode::GetLocal => self.disassembly_byte_instruction(offset, &code),
             OpCode::Return
             | OpCode::Nil
             | OpCode::True
@@ -172,7 +172,7 @@ impl Chunk {
         offset + 2
     }
 
-    fn disassembly_local(&self, offset: usize, code: &OpCode) -> usize {
+    fn disassembly_byte_instruction(&self, offset: usize, code: &OpCode) -> usize {
         let ix = self.code[offset + 1];
         println!("{:<16} {ix:4}", code.to_string());
         offset + 2
