@@ -6,7 +6,7 @@ use scanner::{Lexer, Token};
 
 use crate::{
     CompileError,
-    chunk::{Chunk, MAX_SHORT_VALUE, OpCode},
+    chunk::{MAX_SHORT_VALUE, OpCode},
     object::Function,
     value::LoxValue,
 };
@@ -45,6 +45,7 @@ impl<'a> Local<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct Compiler<'a> {
     locals: Vec<Local<'a>>,
     scope_depth: usize,
@@ -52,14 +53,17 @@ pub struct Compiler<'a> {
     function_type: FunctionType,
 }
 
+#[derive(Default)]
 enum FunctionType {
     Function,
+    #[default]
     Script,
 }
 
 impl Compiler<'_> {
     pub fn new() -> Self {
         Self {
+            // TODO: locals: vec![Local::new("", Some(0))],
             locals: vec![],
             scope_depth: 0,
             function: Function::new(),
@@ -85,9 +89,13 @@ impl<'a> Parser<'a> {
             self.declaration()?;
         }
         self.end_compiler();
+
         #[cfg(feature = "printcode")]
         {
-            self.compiler.function.chunk.disassembly("main");
+            self.compiler
+                .function
+                .chunk
+                .disassembly(self.compiler.function.name.unwrap_or("<script>"));
         }
         Ok(&mut self.compiler.function)
     }

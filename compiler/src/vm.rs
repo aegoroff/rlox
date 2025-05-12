@@ -6,14 +6,22 @@ use crate::{
     CompileError,
     chunk::{Chunk, OpCode},
     compile::Parser,
+    object::Function,
     value::LoxValue,
 };
 
-pub struct VirtualMachine<W: std::io::Write> {
+struct CallFrame<'a> {
+    function: Function<'a>,
+    ip: usize,
+    slots: Vec<LoxValue>,
+}
+
+pub struct VirtualMachine<'a, W: std::io::Write> {
     ip: usize,
     stack: Vec<LoxValue>,
     writer: W,
     globals: HashMap<String, LoxValue>,
+    frames: Vec<CallFrame<'a>>,
 }
 
 macro_rules! binary_op {
@@ -27,7 +35,7 @@ macro_rules! binary_op {
     }}
 }
 
-impl<W: std::io::Write> VirtualMachine<W> {
+impl<W: std::io::Write> VirtualMachine<'_, W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         Self {
@@ -35,6 +43,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             stack: Vec::new(),
             writer,
             globals: HashMap::new(),
+            frames: Vec::new(),
         }
     }
 

@@ -11,7 +11,7 @@ pub struct Function<'a> {
 
 impl Display for Function<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<fn {}>", self.name.unwrap_or("_"))
+        write!(f, "<fn {}>", self.name.unwrap_or("script"))
     }
 }
 
