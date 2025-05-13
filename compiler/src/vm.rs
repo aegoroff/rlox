@@ -247,7 +247,8 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                     let val = chunk.read_byte(ip + 1);
                     let value = self.peek(0)?;
                     let value = value.clone();
-                    frame.borrow_mut().slots[val as usize] = value;
+                    //TODO: frame.borrow_mut().slots[val as usize] = value;
+                    self.stack[val as usize] = value;
                     ip += 2;
                 }
                 OpCode::JumpIfFalse => {
