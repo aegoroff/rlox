@@ -23,7 +23,7 @@ pub struct VirtualMachine<'a, W: std::io::Write> {
     stack: Vec<LoxValue>,
     writer: W,
     globals: HashMap<String, LoxValue>,
-    frames: [CallFrame<'a>; FRAMES_MAX],
+    frames: [Rc<RefCell<CallFrame<'a>>>; FRAMES_MAX],
     frame_count: usize,
 }
 
@@ -34,7 +34,7 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
             stack: Vec::new(),
             writer,
             globals: HashMap::new(),
-            frames: core::array::from_fn(|_| CallFrame::default()),
+            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::default()))),
             frame_count: 0,
         }
     }
@@ -63,7 +63,7 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
             )))
     }
 
-    fn peek(&mut self, distance: usize) -> crate::Result<&LoxValue> {
+    fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
         if self.stack.len() < distance + 1 {
             Err(CompileError::RuntimeError(miette::miette!(
                 "Not enough stack capacity for distance {distance}. Current stack size is {}",
@@ -79,8 +79,8 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
         {
             println!("--- start run ---");
         }
-        let frame = &self.frames[self.frame_count - 1];
-        let mut ip = frame.ip;
+        let frame = self.frames[self.frame_count - 1].clone();
+        let mut ip = frame.borrow().ip;
         while ip < chunk.code.len() {
             let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
                 miette::miette!("Invalid instruction: {}", chunk.code[ip]),
@@ -246,7 +246,8 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
                 OpCode::SetLocal => {
                     let val = chunk.read_byte(ip + 1);
                     let value = self.peek(0)?;
-                    self.stack[val as usize] = value.clone();
+                    let value = value.clone();
+                    frame.borrow_mut().slots[val as usize] = value;
                     ip += 2;
                 }
                 OpCode::JumpIfFalse => {
