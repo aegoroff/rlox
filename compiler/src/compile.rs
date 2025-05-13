@@ -49,7 +49,7 @@ impl<'a> Local<'a> {
 pub struct Compiler<'a> {
     locals: Vec<Local<'a>>,
     scope_depth: usize,
-    pub function: Function<'a>,
+    pub function: Rc<RefCell<Function<'a>>>,
     function_type: FunctionType,
 }
 
@@ -66,7 +66,7 @@ impl Compiler<'_> {
             // TODO: locals: vec![Local::new("", Some(0))],
             locals: vec![],
             scope_depth: 0,
-            function: Function::new(),
+            function: Rc::new(RefCell::new(Function::new())),
             function_type: FunctionType::Script,
         }
     }
@@ -83,7 +83,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn compile(&mut self) -> crate::Result<&mut Function<'a>> {
+    pub fn compile(&mut self) -> crate::Result<Rc<RefCell<Function<'a>>>> {
         self.advance()?;
         while !self.matches(&Token::Eof)? {
             self.declaration()?;
@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
                 .chunk
                 .disassembly(self.compiler.function.name.unwrap_or("<script>"));
         }
-        Ok(&mut self.compiler.function)
+        Ok(self.compiler.function.clone())
     }
 
     fn expression(&mut self) -> crate::Result<()> {
@@ -632,23 +632,33 @@ impl<'a> Parser<'a> {
     }
 
     fn patch_jump(&mut self, exit_jump: usize) {
-        self.compiler.function.chunk.patch_jump(exit_jump);
+        self.compiler
+            .function
+            .borrow_mut()
+            .chunk
+            .patch_jump(exit_jump);
     }
 
     fn emit_constant(&mut self, value: LoxValue) {
         self.compiler
             .function
+            .borrow_mut()
             .chunk
             .write_constant(value, self.tokens.line);
     }
 
     fn make_constant(&mut self, value: LoxValue) -> usize {
-        self.compiler.function.chunk.add_constant(value)
+        self.compiler
+            .function
+            .borrow_mut()
+            .chunk
+            .add_constant(value)
     }
 
     fn emit_jump(&mut self, opcode: OpCode) -> usize {
         self.compiler
             .function
+            .borrow_mut()
             .chunk
             .write_code(opcode, self.tokens.line);
         self.emit_operand(0xFF);
@@ -659,6 +669,7 @@ impl<'a> Parser<'a> {
     fn emit_loop(&mut self, loop_start: usize) -> crate::Result<()> {
         self.compiler
             .function
+            .borrow_mut()
             .chunk
             .write_code(OpCode::Loop, self.tokens.line);
 
@@ -668,17 +679,22 @@ impl<'a> Parser<'a> {
                 "Loop body too large."
             )));
         }
-        self.compiler.function.chunk.write_two_bytes(offset);
+        self.compiler
+            .function
+            .borrow_mut()
+            .chunk
+            .write_two_bytes(offset);
         Ok(())
     }
 
     fn chunk_code_size(&self) -> usize {
-        self.compiler.function.chunk.code.len()
+        self.compiler.function.borrow_mut().chunk.code.len()
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) {
         self.compiler
             .function
+            .borrow_mut()
             .chunk
             .write_code(opcode, self.tokens.line);
     }
@@ -686,6 +702,7 @@ impl<'a> Parser<'a> {
     fn emit_operand(&mut self, value: usize) {
         self.compiler
             .function
+            .borrow_mut()
             .chunk
             .write_operand(value, self.tokens.line);
     }
@@ -693,6 +710,7 @@ impl<'a> Parser<'a> {
     fn emit_return(&mut self) {
         self.compiler
             .function
+            .borrow_mut()
             .chunk
             .write_code(OpCode::Return, self.tokens.line);
     }

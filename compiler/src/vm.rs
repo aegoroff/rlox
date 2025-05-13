@@ -14,7 +14,7 @@ const FRAMES_MAX: usize = 64;
 
 #[derive(Default)]
 struct CallFrame<'a> {
-    function: Option<Rc<RefCell<&'a mut Function<'a>>>>,
+    function: Option<Rc<RefCell<Function<'a>>>>,
     ip: usize,            // caller's ip
     slots: Vec<LoxValue>, // points to vm's value's stack first value it can use
 }
@@ -42,10 +42,9 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
     pub fn interpret(&mut self, content: &'a str) -> crate::Result<()> {
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
-        let f = Rc::new(RefCell::new(function));
         self.frame_count += 1;
-        self.frames[self.frame_count - 1].borrow_mut().function = Some(f.clone());
-        self.run(&mut f.borrow_mut().chunk)
+        self.frames[self.frame_count - 1].borrow_mut().function = Some(function.clone());
+        self.run(&mut function.borrow_mut().chunk)
     }
 
     pub fn init(&mut self) {
