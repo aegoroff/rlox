@@ -90,7 +90,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                 for value in &self.stack {
                     println!("[{value}]");
                 }
-                chunk.disassembly_instruction(self.ip);
+                chunk.disassembly_instruction(ip);
             }
             match code {
                 OpCode::Constant => {

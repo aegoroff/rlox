@@ -94,8 +94,9 @@ impl<'a> Parser<'a> {
         {
             self.compiler
                 .function
+                .borrow()
                 .chunk
-                .disassembly(self.compiler.function.name.unwrap_or("<script>"));
+                .disassembly(self.compiler.function.borrow().name.unwrap_or("<script>"));
         }
         Ok(self.compiler.function.clone())
     }
