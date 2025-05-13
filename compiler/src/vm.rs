@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use num_traits::FromPrimitive;
 
@@ -10,47 +10,40 @@ use crate::{
     value::LoxValue,
 };
 
+const FRAMES_MAX: usize = 64;
+
+#[derive(Default)]
 struct CallFrame<'a> {
-    function: Function<'a>,
-    ip: usize,
-    slots: Vec<LoxValue>,
+    function: Option<Rc<RefCell<Function<'a>>>>,
+    ip: usize,            // caller's ip
+    slots: Vec<LoxValue>, // points to vm's value's stack first value it can use
 }
 
 pub struct VirtualMachine<'a, W: std::io::Write> {
-    ip: usize,
     stack: Vec<LoxValue>,
     writer: W,
     globals: HashMap<String, LoxValue>,
-    frames: Vec<CallFrame<'a>>,
-}
-
-macro_rules! binary_op {
-    ($self:ident, $op:tt) => {{
-        let b = $self.pop()?;
-        let a = $self.pop()?;
-        let a = a.try_num()?;
-        let b = b.try_num()?;
-        $self.push(LoxValue::Number(a $op b));
-        $self.ip += 1;
-    }}
+    frames: [CallFrame<'a>; FRAMES_MAX],
+    frame_count: usize,
 }
 
 impl<W: std::io::Write> VirtualMachine<'_, W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         Self {
-            ip: 0,
             stack: Vec::new(),
             writer,
             globals: HashMap::new(),
-            frames: Vec::new(),
+            frames: core::array::from_fn(|_| CallFrame::default()),
+            frame_count: 0,
         }
     }
 
     pub fn interpret(&mut self, content: &str) -> crate::Result<()> {
-        self.ip = 0;
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
+        self.frame_count += 1;
+        //TODO: self.frames[self.frame_count - 1].function = Some(Rc::new(RefCell::new(function)));
         self.run(&mut function.chunk)
     }
 
@@ -86,9 +79,11 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
         {
             println!("--- start run ---");
         }
-        while self.ip < chunk.code.len() {
-            let code = OpCode::from_u8(chunk.code[self.ip]).ok_or(CompileError::CompileError(
-                miette::miette!("Invalid instruction: {}", chunk.code[self.ip]),
+        let frame = &self.frames[self.frame_count - 1];
+        let mut ip = frame.ip;
+        while ip < chunk.code.len() {
+            let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
+                miette::miette!("Invalid instruction: {}", chunk.code[ip]),
             ))?;
             #[cfg(feature = "disassembly")]
             {
@@ -99,23 +94,23 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
             }
             match code {
                 OpCode::Constant => {
-                    let constant = chunk.read_constant(self.ip);
+                    let constant = chunk.read_constant(ip);
                     self.push(constant);
-                    self.ip += 2;
+                    ip += 2;
                 }
                 OpCode::Return => {
                     return Ok(());
                 }
                 OpCode::ConstantLong => {
-                    let constant = chunk.read_constant(self.ip);
+                    let constant = chunk.read_constant(ip);
                     self.push(constant);
-                    self.ip += 4;
+                    ip += 4;
                 }
                 OpCode::Negate => {
                     let value = self.pop()?;
                     let value = value.try_num()?;
                     self.push(LoxValue::Number(-value));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Add => {
                     let b = self.pop()?;
@@ -136,10 +131,24 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
                         self.push(LoxValue::Number(l + r));
                     }
 
-                    self.ip += 1;
+                    ip += 1;
                 }
-                OpCode::Subtract => binary_op!(self, -),
-                OpCode::Multiply => binary_op!(self, *),
+                OpCode::Subtract => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let a = a.try_num()?;
+                    let b = b.try_num()?;
+                    self.push(LoxValue::Number(a - b));
+                    ip += 1;
+                }
+                OpCode::Multiply => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let a = a.try_num()?;
+                    let b = b.try_num()?;
+                    self.push(LoxValue::Number(a * b));
+                    ip += 1;
+                }
                 OpCode::Divide => {
                     let b = self.pop()?;
                     let a = self.pop()?;
@@ -151,39 +160,39 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
                         )));
                     }
                     self.push(LoxValue::Number(a / b));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Nil => {
                     self.push(LoxValue::Nil);
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::True => {
                     self.push(LoxValue::Bool(true));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::False => {
                     self.push(LoxValue::Bool(false));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Not => {
                     let value = self.pop()?;
                     let val = value.try_bool()?;
                     self.push(LoxValue::Bool(!val));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
                     let result = a.equal(&b);
                     self.push(LoxValue::Bool(result));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Less => {
                     let b = self.pop()?;
                     let a = self.pop()?;
                     let result = a.less(&b)?;
                     self.push(LoxValue::Bool(result));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Greater => {
                     let b = self.pop()?;
@@ -191,81 +200,81 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
                     let lt = a.less(&b)?;
                     let gt = !lt && !a.equal(&b);
                     self.push(LoxValue::Bool(gt));
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Print => {
                     let value = self.pop()?;
                     writeln!(self.writer, "{value}")
                         .map_err(|e| CompileError::RuntimeError(miette::miette!(e)))?;
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::Pop => {
                     self.pop()?;
-                    self.ip += 1;
+                    ip += 1;
                 }
                 OpCode::DefineGlobal => {
-                    self.define_global(chunk)?;
-                    self.ip += 2;
+                    self.define_global(chunk, ip)?;
+                    ip += 2;
                 }
                 OpCode::DefineGlobalLong => {
-                    self.define_global(chunk)?;
-                    self.ip += 4;
+                    self.define_global(chunk, ip)?;
+                    ip += 4;
                 }
                 OpCode::GetGlobal => {
-                    self.get_global(chunk)?;
-                    self.ip += 2;
+                    self.get_global(chunk, ip)?;
+                    ip += 2;
                 }
                 OpCode::GetGlobalLong => {
-                    self.get_global(chunk)?;
-                    self.ip += 4;
+                    self.get_global(chunk, ip)?;
+                    ip += 4;
                 }
                 OpCode::SetGlobal => {
-                    self.set_global(chunk)?;
-                    self.ip += 2;
+                    self.set_global(chunk, ip)?;
+                    ip += 2;
                 }
                 OpCode::SetGlobalLong => {
-                    self.set_global(chunk)?;
-                    self.ip += 4;
+                    self.set_global(chunk, ip)?;
+                    ip += 4;
                 }
                 OpCode::GetLocal => {
-                    let val = chunk.read_byte(self.ip + 1);
+                    let val = chunk.read_byte(ip + 1);
                     let val = &self.stack[val as usize];
                     let val = val.clone();
                     self.push(val);
-                    self.ip += 2;
+                    ip += 2;
                 }
                 OpCode::SetLocal => {
-                    let val = chunk.read_byte(self.ip + 1);
+                    let val = chunk.read_byte(ip + 1);
                     let value = self.peek(0)?;
                     self.stack[val as usize] = value.clone();
-                    self.ip += 2;
+                    ip += 2;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = chunk.read_short(self.ip + 1);
+                    let offset = chunk.read_short(ip + 1);
                     let top = self.peek(0)?;
                     let falsey = !top.is_truthy();
-                    self.ip += 3;
+                    ip += 3;
                     if falsey {
-                        self.ip += offset;
+                        ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = chunk.read_short(self.ip + 1);
-                    self.ip += 3;
-                    self.ip += offset;
+                    let offset = chunk.read_short(ip + 1);
+                    ip += 3;
+                    ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = chunk.read_short(self.ip + 1);
-                    self.ip += 3;
-                    self.ip -= offset;
+                    let offset = chunk.read_short(ip + 1);
+                    ip += 3;
+                    ip -= offset;
                 }
             }
         }
         Ok(())
     }
 
-    fn set_global(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        let name = chunk.read_constant(self.ip);
+    fn set_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
+        let name = chunk.read_constant(offset);
         let name = name.try_str()?;
         if !self.globals.contains_key(name) {
             return Err(CompileError::RuntimeError(miette::miette!(
@@ -278,8 +287,8 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
         Ok(())
     }
 
-    fn get_global(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        let name = chunk.read_constant(self.ip);
+    fn get_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
+        let name = chunk.read_constant(offset);
         let name = name.try_str()?;
         let Some(val) = self.globals.get(name) else {
             return Err(CompileError::RuntimeError(miette::miette!(
@@ -290,8 +299,8 @@ impl<W: std::io::Write> VirtualMachine<'_, W> {
         Ok(())
     }
 
-    fn define_global(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
-        let name = chunk.read_constant(self.ip);
+    fn define_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
+        let name = chunk.read_constant(offset);
         let name = name.try_str()?;
         let value = self.peek(0)?;
         let value = value.clone();
