@@ -12,27 +12,54 @@ use crate::{
 
 const FRAMES_MAX: usize = 64;
 
-#[derive(Default)]
 struct CallFrame<'a> {
     function: Option<Rc<RefCell<Function<'a>>>>,
-    ip: usize,            // caller's ip
-    slots: Vec<LoxValue>, // points to vm's value's stack first value it can use
+    ip: usize,                            // caller's ip
+    slots: Option<&'a mut Vec<LoxValue>>, // points to vm's value's stack first value it can use
 }
 
 impl CallFrame<'_> {
+    fn new() -> Self {
+        Self {
+            function: None,
+            ip: 0,
+            slots: None,
+        }
+    }
+
     pub fn push(&mut self, value: LoxValue) {
-        self.slots.push(value);
+        if let Some(stack) = &mut self.slots {
+            stack.push(value);
+        }
     }
 
     pub fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
-        if self.slots.len() < distance + 1 {
+        let Some(stack) = &self.slots else {
+            return Err(CompileError::RuntimeError(miette::miette!(
+                "Call frame stack not initialized"
+            )));
+        };
+        if stack.len() < distance + 1 {
             Err(CompileError::RuntimeError(miette::miette!(
                 "Not enough stack capacity for distance {distance}. Current stack size is {}",
-                self.slots.len()
+                stack.len()
             )))
         } else {
-            Ok(&self.slots[self.slots.len() - 1 - distance])
+            Ok(&stack[stack.len() - 1 - distance])
         }
+    }
+
+    pub fn pop(&mut self) -> crate::Result<LoxValue> {
+        let Some(stack) = &mut self.slots else {
+            return Err(CompileError::RuntimeError(miette::miette!(
+                "Call frame stack not initialized"
+            )));
+        };
+        stack
+            .pop()
+            .ok_or(CompileError::RuntimeError(miette::miette!(
+                "Instructions stack empty"
+            )))
     }
 }
 
@@ -51,7 +78,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
             stack: Vec::new(),
             writer,
             globals: HashMap::new(),
-            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::default()))),
+            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::new()))),
             frame_count: 0,
         }
     }
@@ -61,12 +88,6 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         let function = parser.compile()?;
         self.frame_count += 1;
         self.frames[self.frame_count - 1].borrow_mut().function = Some(function.clone());
-        for v in &self.stack {
-            self.frames[self.frame_count - 1]
-                .borrow_mut()
-                .slots
-                .push(v.clone());
-        }
         self.run(&mut function.borrow_mut().chunk)
     }
 
