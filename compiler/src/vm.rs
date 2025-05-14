@@ -19,6 +19,23 @@ struct CallFrame<'a> {
     slots: Vec<LoxValue>, // points to vm's value's stack first value it can use
 }
 
+impl CallFrame<'_> {
+    pub fn push(&mut self, value: LoxValue) {
+        self.slots.push(value);
+    }
+
+    pub fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
+        if self.slots.len() < distance + 1 {
+            Err(CompileError::RuntimeError(miette::miette!(
+                "Not enough stack capacity for distance {distance}. Current stack size is {}",
+                self.slots.len()
+            )))
+        } else {
+            Ok(&self.slots[self.slots.len() - 1 - distance])
+        }
+    }
+}
+
 pub struct VirtualMachine<'a, W: std::io::Write> {
     stack: Vec<LoxValue>,
     writer: W,
@@ -44,6 +61,12 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         let function = parser.compile()?;
         self.frame_count += 1;
         self.frames[self.frame_count - 1].borrow_mut().function = Some(function.clone());
+        for v in &self.stack {
+            self.frames[self.frame_count - 1]
+                .borrow_mut()
+                .slots
+                .push(v.clone());
+        }
         self.run(&mut function.borrow_mut().chunk)
     }
 
@@ -247,7 +270,6 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                     let val = chunk.read_byte(ip + 1);
                     let value = self.peek(0)?;
                     let value = value.clone();
-                    //TODO: frame.borrow_mut().slots[val as usize] = value;
                     self.stack[val as usize] = value;
                     ip += 2;
                 }
