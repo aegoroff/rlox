@@ -12,55 +12,11 @@ use crate::{
 
 const FRAMES_MAX: usize = 64;
 
+#[derive(Default)]
 struct CallFrame<'a> {
     function: Option<Rc<RefCell<Function<'a>>>>,
-    ip: usize,                            // caller's ip
-    slots: Option<&'a mut Vec<LoxValue>>, // points to vm's value's stack first value it can use
-}
-
-impl CallFrame<'_> {
-    fn new() -> Self {
-        Self {
-            function: None,
-            ip: 0,
-            slots: None,
-        }
-    }
-
-    pub fn push(&mut self, value: LoxValue) {
-        if let Some(stack) = &mut self.slots {
-            stack.push(value);
-        }
-    }
-
-    pub fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
-        let Some(stack) = &self.slots else {
-            return Err(CompileError::RuntimeError(miette::miette!(
-                "Call frame stack not initialized"
-            )));
-        };
-        if stack.len() < distance + 1 {
-            Err(CompileError::RuntimeError(miette::miette!(
-                "Not enough stack capacity for distance {distance}. Current stack size is {}",
-                stack.len()
-            )))
-        } else {
-            Ok(&stack[stack.len() - 1 - distance])
-        }
-    }
-
-    pub fn pop(&mut self) -> crate::Result<LoxValue> {
-        let Some(stack) = &mut self.slots else {
-            return Err(CompileError::RuntimeError(miette::miette!(
-                "Call frame stack not initialized"
-            )));
-        };
-        stack
-            .pop()
-            .ok_or(CompileError::RuntimeError(miette::miette!(
-                "Instructions stack empty"
-            )))
-    }
+    ip: usize,               // caller's ip
+    pub slots_offset: usize, // points to vm's value's stack first value it can use
 }
 
 pub struct VirtualMachine<'a, W: std::io::Write> {
@@ -78,7 +34,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
             stack: Vec::new(),
             writer,
             globals: HashMap::new(),
-            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::new()))),
+            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::default()))),
             frame_count: 0,
         }
     }
@@ -87,7 +43,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
         self.frame_count += 1;
-        self.frames[self.frame_count - 1].borrow_mut().function = Some(function.clone());
+        self.frame().borrow_mut().function = Some(function.clone());
         self.run(&mut function.borrow_mut().chunk)
     }
 
@@ -118,13 +74,16 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         }
     }
 
+    fn frame(&self) -> Rc<RefCell<CallFrame<'a>>> {
+        self.frames[self.frame_count - 1].clone()
+    }
+
     fn run(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
         }
-        let frame = self.frames[self.frame_count - 1].clone();
-        let mut ip = frame.borrow().ip;
+        let mut ip = self.frame().borrow().ip;
         while ip < chunk.code.len() {
             let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
                 miette::miette!("Invalid instruction: {}", chunk.code[ip]),
