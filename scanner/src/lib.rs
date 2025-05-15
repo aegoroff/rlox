@@ -8,6 +8,8 @@ pub struct Lexer<'a> {
     chars: std::iter::Peekable<CharIndices<'a>>,
     whole: &'a str,
     pub line: usize,
+    pub begin: usize,
+    pub end: usize,
 }
 
 pub const THIS: &str = "this";
@@ -70,6 +72,8 @@ impl<'a> Lexer<'a> {
             chars: content.char_indices().peekable(),
             whole: content,
             line: 1,
+            begin: 0,
+            end: 0,
         }
     }
 
@@ -299,6 +303,10 @@ impl<'a> Iterator for Lexer<'a> {
                     "Unexpected char"
                 ))),
             };
+            if let Some(Ok((begin, _, end))) = t {
+                self.begin = begin;
+                self.end = end;
+            }
             return t;
         }
     }

@@ -1,7 +1,8 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
+use miette::LabeledSpan;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use scanner::{Lexer, Token};
@@ -153,6 +154,7 @@ impl<'a> Parser<'a> {
     fn parse_variable(&mut self) -> crate::Result<usize> {
         let Token::Identifier(id) = *self.current.borrow() else {
             return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), "Identifier expected")],
                 "Identifier expected"
             )));
         };
@@ -181,6 +183,10 @@ impl<'a> Parser<'a> {
         });
         if existing {
             return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!("Already a variables with this name '{name}' in the same scope")
+                )],
                 "Already a variables with this name '{name}' in the same scope"
             )));
         }
@@ -194,6 +200,10 @@ impl<'a> Parser<'a> {
         }
         if self.compiler.locals.len() >= MAX_SHORT_VALUE {
             return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Too many local variables in function."
+                )],
                 "Too many local variables in function."
             )));
         }
@@ -351,9 +361,15 @@ impl<'a> Parser<'a> {
         let previous = self.previous.clone();
         let precedence = Parser::get_precedence(&previous.borrow());
         let precedence = precedence as u8 + 1;
-        let precedence = Precedence::from_u8(precedence).ok_or(CompileError::CompileError(
-            miette::miette!("Invalid precedence: {}", precedence),
-        ))?;
+        let precedence =
+            Precedence::from_u8(precedence).ok_or(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!("Invalid precedence: {}", precedence)
+                )],
+                "Invalid precedence: {}",
+                precedence
+            )))?;
         self.parse_precedence(precedence)?;
         match *previous.borrow() {
             Token::Minus => {
@@ -436,8 +452,16 @@ impl<'a> Parser<'a> {
     }
 
     fn number(&mut self) -> crate::Result<()> {
+        self.current_span();
         let Token::Number(number) = *self.previous.borrow() else {
             return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!(
+                        "Unexpected token: '{}' Expected: 'number'",
+                        self.previous.borrow()
+                    )
+                )],
                 "Unexpected token: '{}' Expected: 'number'",
                 self.previous.borrow()
             )));
@@ -446,9 +470,20 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn current_span(&self) -> Range<usize> {
+        self.tokens.begin..self.tokens.end
+    }
+
     fn string(&mut self) -> crate::Result<()> {
         let Token::String(str) = *self.previous.borrow() else {
             return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!(
+                        "Unexpected token: '{}' Expected: 'string'",
+                        self.previous.borrow()
+                    )
+                )],
                 "Unexpected token: '{}' Expected: 'string'",
                 self.previous.borrow()
             )));
@@ -474,6 +509,13 @@ impl<'a> Parser<'a> {
                 Ok(())
             }
             _ => Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!(
+                        "Unexpected token: '{}' Expected one of: 'true', 'false', 'nil'",
+                        self.previous.borrow()
+                    )
+                )],
                 "Unexpected token: '{}' Expected one of: 'true', 'false', 'nil'",
                 self.previous.borrow()
             ))),
@@ -509,6 +551,13 @@ impl<'a> Parser<'a> {
     ) -> crate::Result<()> {
         let Token::Identifier(id) = *token.borrow() else {
             return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!(
+                        "Unexpected token: '{}' Expected: 'idenitifier'",
+                        self.previous.borrow()
+                    )
+                )],
                 "Unexpected token: '{}' Expected: 'idenitifier'",
                 self.previous.borrow()
             )));
@@ -553,6 +602,10 @@ impl<'a> Parser<'a> {
         };
         if l.depth.is_none() {
             Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Can't read local variable in its own initializer."
+                )],
                 "Can't read local variable in its own initializer."
             )))
         } else {
@@ -572,6 +625,10 @@ impl<'a> Parser<'a> {
         }
         if can_assign && self.matches(&Token::Equal)? {
             Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Invalid assignment target."
+                )],
                 "Invalid assignment target."
             )))
         } else {
@@ -649,6 +706,13 @@ impl<'a> Parser<'a> {
             Ok(())
         } else {
             Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!(
+                        "Unexpected token: '{}' Expected: '{token}'",
+                        self.current.borrow()
+                    )
+                )],
                 "Unexpected token: '{}' Expected: '{token}'",
                 self.current.borrow()
             )))
@@ -704,6 +768,7 @@ impl<'a> Parser<'a> {
         let offset = self.chunk_code_size() - loop_start + 2;
         if offset > u16::MAX as usize {
             return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), "Loop body too large.")],
                 "Loop body too large."
             )));
         }
