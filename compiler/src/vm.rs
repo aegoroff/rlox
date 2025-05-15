@@ -21,7 +21,7 @@ struct CallFrame<'a> {
 impl CallFrame<'_> {
     fn new() -> Self {
         Self {
-            function: Rc::new(RefCell::new(Function::new())),
+            function: Function::pointer(),
             ip: 0,
             slots_offset: 1, // caller function itself
         }

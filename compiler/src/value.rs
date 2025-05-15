@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{CompileError, chunk::Chunk};
 
@@ -116,12 +116,16 @@ impl Display for Function<'_> {
     }
 }
 
-impl Function<'_> {
+impl<'a> Function<'a> {
     pub fn new() -> Self {
         Self {
             arity: 0,
             chunk: Chunk::new(),
             name: "script",
         }
+    }
+
+    pub fn pointer() -> Rc<RefCell<Function<'a>>> {
+        Rc::new(RefCell::new(Function::new()))
     }
 }
