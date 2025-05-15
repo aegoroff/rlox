@@ -31,9 +31,9 @@ impl CallFrame<'_> {
 }
 
 pub struct VirtualMachine<'a, W: std::io::Write> {
-    stack: Vec<LoxValue>,
+    stack: Vec<LoxValue<'a>>,
     writer: W,
-    globals: HashMap<String, LoxValue>,
+    globals: HashMap<String, LoxValue<'a>>,
     frames: [Rc<RefCell<CallFrame<'a>>>; FRAMES_MAX],
     frame_count: usize,
 }
@@ -53,7 +53,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
     pub fn interpret(&mut self, content: &'a str) -> crate::Result<()> {
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
-        self.push(LoxValue::String(String::new())); // TODO: push function obj here
+        self.push(LoxValue::Function(function.clone()));
         self.frame_count += 1;
         self.frame().borrow_mut().function = function.clone();
         self.run(&mut function.borrow_mut().chunk)
@@ -63,11 +63,11 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         self.stack.clear();
     }
 
-    fn push(&mut self, value: LoxValue) {
+    fn push(&mut self, value: LoxValue<'a>) {
         self.stack.push(value);
     }
 
-    fn pop(&mut self) -> crate::Result<LoxValue> {
+    fn pop(&mut self) -> crate::Result<LoxValue<'a>> {
         self.stack
             .pop()
             .ok_or(CompileError::RuntimeError(miette::miette!(
@@ -75,7 +75,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
             )))
     }
 
-    fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
+    fn peek(&self, distance: usize) -> crate::Result<&LoxValue<'a>> {
         if self.stack.len() < distance + 1 {
             Err(CompileError::RuntimeError(miette::miette!(
                 "Not enough stack capacity for distance {distance}. Current stack size is {}",
@@ -90,7 +90,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         self.frames[self.frame_count - 1].clone()
     }
 
-    fn run(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+    fn run(&mut self, chunk: &mut Chunk<'a>) -> crate::Result<()> {
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");

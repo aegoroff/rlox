@@ -5,16 +5,17 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 use crate::{CompileError, chunk::Chunk};
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum LoxValue {
+pub enum LoxValue<'a> {
     String(String),
     Number(f64),
     Bool(bool),
+    Function(Rc<RefCell<Function<'a>>>),
     Nil,
 }
 
 const ERROR_MARGIN: f64 = 0.00001;
 
-impl LoxValue {
+impl LoxValue<'_> {
     #[must_use]
     pub fn equal(&self, other: &LoxValue) -> bool {
         if let Ok(l) = self.try_num() {
@@ -94,21 +95,22 @@ impl LoxValue {
     }
 }
 
-impl Display for LoxValue {
+impl Display for LoxValue<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxValue::String(s) => write!(f, "{s}"),
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
+            LoxValue::Function(func) => write!(f, "<fn {}>", func.borrow().name),
         }
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct Function<'a> {
     pub arity: usize,
-    pub chunk: Chunk,
+    pub chunk: Chunk<'a>,
     pub name: &'a str,
 }
 

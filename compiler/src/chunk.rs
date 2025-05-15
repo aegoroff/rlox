@@ -75,14 +75,14 @@ impl Display for OpCode {
     }
 }
 
-#[derive(Default)]
-pub struct Chunk {
+#[derive(Default, Debug, PartialEq)]
+pub struct Chunk<'a> {
     pub code: Vec<u8>,
-    pub constants: Vec<LoxValue>,
+    pub constants: Vec<LoxValue<'a>>,
     lines: Vec<usize>,
 }
 
-impl Chunk {
+impl<'a> Chunk<'a> {
     pub fn new() -> Self {
         Self {
             code: vec![],
@@ -95,7 +95,7 @@ impl Chunk {
         self.write_operand(code as usize, line);
     }
 
-    pub fn write_constant(&mut self, value: LoxValue, line: usize) {
+    pub fn write_constant(&mut self, value: LoxValue<'a>, line: usize) {
         let constant = self.add_constant(value);
         if constant > MAX_SHORT_VALUE {
             self.write_code(OpCode::ConstantLong, line);
@@ -117,7 +117,7 @@ impl Chunk {
         }
     }
 
-    pub fn read_constant(&self, offset: usize) -> LoxValue {
+    pub fn read_constant(&self, offset: usize) -> LoxValue<'a> {
         let ix = self.get_constant_ix(offset);
         self.constants[ix].clone()
     }
@@ -232,7 +232,7 @@ impl Chunk {
         offset + 1
     }
 
-    pub fn add_constant(&mut self, value: LoxValue) -> usize {
+    pub fn add_constant(&mut self, value: LoxValue<'a>) -> usize {
         let Some((i, _)) = self
             .constants
             .iter()

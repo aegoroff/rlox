@@ -55,7 +55,7 @@ pub struct Compiler<'a> {
 }
 
 #[derive(Default)]
-enum FunctionType {
+pub enum FunctionType {
     Function,
     #[default]
     Script,
@@ -63,12 +63,12 @@ enum FunctionType {
 
 impl Compiler<'_> {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(function_type: FunctionType) -> Self {
         Self {
             locals: vec![Local::new("", Some(0))], // caller function itself
             scope_depth: 0,
             function: Rc::new(RefCell::new(Function::new())),
-            function_type: FunctionType::Script,
+            function_type,
         }
     }
 }
@@ -80,7 +80,7 @@ impl<'a> Parser<'a> {
             tokens: Lexer::new(content),
             current: Rc::new(RefCell::new(Token::Eof)),
             previous: Rc::new(RefCell::new(Token::Eof)),
-            compiler: Compiler::new(),
+            compiler: Compiler::new(FunctionType::Script),
         }
     }
 
@@ -110,9 +110,33 @@ impl<'a> Parser<'a> {
     fn declaration(&mut self) -> crate::Result<()> {
         if self.matches(&Token::Var)? {
             self.var_declaration()
+        } else if self.matches(&Token::Fun)? {
+            self.fun_declaration()
         } else {
             self.statement()
         }
+    }
+
+    fn fun_declaration(&mut self) -> crate::Result<()> {
+        let global = self.parse_variable()?;
+        self.mark_initialized();
+        self.function(FunctionType::Function)?;
+        self.define_variable(global);
+        Ok(())
+    }
+
+    fn function(&mut self, fun_type: FunctionType) -> crate::Result<()> {
+        let compiler = Compiler::new(fun_type);
+        self.compiler = compiler;
+        self.begin_scope();
+        self.consume(&Token::LeftParen)?;
+        self.consume(&Token::RightParen)?;
+        self.consume(&Token::LeftBrace)?;
+        self.block()?;
+        self.end_compiler();
+        self.emit_constant(LoxValue::Function(self.compiler.function.clone()));
+        self.end_scope();
+        Ok(())
     }
 
     fn var_declaration(&mut self) -> crate::Result<()> {
@@ -197,6 +221,9 @@ impl<'a> Parser<'a> {
     }
 
     fn mark_initialized(&mut self) {
+        if self.compiler.scope_depth == 0 {
+            return;
+        }
         if let Some(v) = self.compiler.locals.last_mut() {
             v.depth = Some(self.compiler.scope_depth);
         }
@@ -641,7 +668,7 @@ impl<'a> Parser<'a> {
             .patch_jump(exit_jump);
     }
 
-    fn emit_constant(&mut self, value: LoxValue) {
+    fn emit_constant(&mut self, value: LoxValue<'a>) {
         self.compiler
             .function
             .borrow_mut()
@@ -649,7 +676,7 @@ impl<'a> Parser<'a> {
             .write_constant(value, self.tokens.line);
     }
 
-    fn make_constant(&mut self, value: LoxValue) -> usize {
+    fn make_constant(&mut self, value: LoxValue<'a>) -> usize {
         self.compiler
             .function
             .borrow_mut()
