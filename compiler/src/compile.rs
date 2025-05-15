@@ -7,8 +7,7 @@ use scanner::{Lexer, Token};
 use crate::{
     CompileError,
     chunk::{MAX_SHORT_VALUE, OpCode},
-    object::Function,
-    value::LoxValue,
+    value::{Function, LoxValue},
 };
 
 pub struct Parser<'a> {
@@ -63,8 +62,8 @@ enum FunctionType {
 impl Compiler<'_> {
     pub fn new() -> Self {
         Self {
-            // TODO: locals: vec![Local::new("", Some(0))],
-            locals: vec![],
+            locals: vec![Local::new("", Some(0))],
+            //locals: vec![],
             scope_depth: 0,
             function: Rc::new(RefCell::new(Function::new())),
             function_type: FunctionType::Script,

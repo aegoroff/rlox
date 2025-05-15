@@ -6,8 +6,7 @@ use crate::{
     CompileError,
     chunk::{Chunk, OpCode},
     compile::Parser,
-    object::Function,
-    value::LoxValue,
+    value::{Function, LoxValue},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -17,6 +16,16 @@ struct CallFrame<'a> {
     function: Option<Rc<RefCell<Function<'a>>>>,
     ip: usize,               // caller's ip
     pub slots_offset: usize, // points to vm's value's stack first value it can use
+}
+
+impl CallFrame<'_> {
+    fn new() -> Self {
+        Self {
+            function: None,
+            ip: 0,
+            slots_offset: 1,
+        }
+    }
 }
 
 pub struct VirtualMachine<'a, W: std::io::Write> {
@@ -34,7 +43,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
             stack: Vec::new(),
             writer,
             globals: HashMap::new(),
-            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::default()))),
+            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::new()))),
             frame_count: 0,
         }
     }
@@ -42,6 +51,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
     pub fn interpret(&mut self, content: &'a str) -> crate::Result<()> {
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
+        self.push(LoxValue::String(String::new())); // TODO: push function obj here
         self.frame_count += 1;
         self.frame().borrow_mut().function = Some(function.clone());
         self.run(&mut function.borrow_mut().chunk)
@@ -241,8 +251,8 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                 }
                 OpCode::GetLocal => {
                     let slots_offset = self.frame().borrow().slots_offset;
-                    let val = chunk.read_byte(slots_offset + ip + 1);
-                    let val = &self.stack[val as usize];
+                    let val = chunk.read_byte(ip + 1);
+                    let val = &self.stack[slots_offset + val as usize];
                     let val = val.clone();
                     self.push(val);
                     ip += 2;
