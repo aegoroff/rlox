@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{chunk::Chunk, CompileError};
+use crate::{CompileError, chunk::Chunk};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoxValue {
@@ -107,12 +107,12 @@ impl Display for LoxValue {
 pub struct Function<'a> {
     pub arity: usize,
     pub chunk: Chunk,
-    pub name: Option<&'a str>,
+    pub name: &'a str,
 }
 
 impl Display for Function<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<fn {}>", self.name.unwrap_or("script"))
+        write!(f, "<fn {}>", self.name)
     }
 }
 
@@ -121,7 +121,7 @@ impl Function<'_> {
         Self {
             arity: 0,
             chunk: Chunk::new(),
-            name: None,
+            name: "script",
         }
     }
 }

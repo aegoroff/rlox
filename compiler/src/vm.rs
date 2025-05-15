@@ -13,7 +13,7 @@ const FRAMES_MAX: usize = 64;
 
 #[derive(Default)]
 struct CallFrame<'a> {
-    function: Option<Rc<RefCell<Function<'a>>>>,
+    function: Rc<RefCell<Function<'a>>>,
     ip: usize,               // caller's ip
     pub slots_offset: usize, // points to vm's value's stack first value it can use
 }
@@ -21,7 +21,7 @@ struct CallFrame<'a> {
 impl CallFrame<'_> {
     fn new() -> Self {
         Self {
-            function: None,
+            function: Rc::new(RefCell::new(Function::new())),
             ip: 0,
             slots_offset: 1,
         }
@@ -53,7 +53,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         let function = parser.compile()?;
         self.push(LoxValue::String(String::new())); // TODO: push function obj here
         self.frame_count += 1;
-        self.frame().borrow_mut().function = Some(function.clone());
+        self.frame().borrow_mut().function = function.clone();
         self.run(&mut function.borrow_mut().chunk)
     }
 
@@ -252,7 +252,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                 OpCode::GetLocal => {
                     let slots_offset = self.frame().borrow().slots_offset;
                     let val = chunk.read_byte(ip + 1);
-                    let val = &self.stack[slots_offset + val as usize];
+                    let val = &self.stack[slots_offset + val as usize - 1];
                     let val = val.clone();
                     self.push(val);
                     ip += 2;
@@ -262,7 +262,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                     let val = chunk.read_byte(ip + 1);
                     let value = self.peek(0)?;
                     let value = value.clone();
-                    self.stack[slots_offset + val as usize] = value;
+                    self.stack[slots_offset + val as usize - 1] = value;
                     ip += 2;
                 }
                 OpCode::JumpIfFalse => {
