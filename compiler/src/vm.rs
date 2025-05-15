@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use num_traits::FromPrimitive;

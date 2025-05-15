@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use std::{cell::RefCell, rc::Rc};
 
 use num_derive::FromPrimitive;
@@ -60,6 +62,7 @@ enum FunctionType {
 }
 
 impl Compiler<'_> {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             locals: vec![Local::new("", Some(0))], // caller function itself

@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{CompileError, chunk::Chunk};
@@ -117,6 +119,7 @@ impl Display for Function<'_> {
 }
 
 impl<'a> Function<'a> {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             arity: 0,
@@ -125,6 +128,7 @@ impl<'a> Function<'a> {
         }
     }
 
+    #[must_use]
     pub fn pointer() -> Rc<RefCell<Function<'a>>> {
         Rc::new(RefCell::new(Function::new()))
     }
