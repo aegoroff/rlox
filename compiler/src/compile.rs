@@ -62,8 +62,7 @@ enum FunctionType {
 impl Compiler<'_> {
     pub fn new() -> Self {
         Self {
-            locals: vec![Local::new("", Some(0))],
-            //locals: vec![],
+            locals: vec![Local::new("", Some(0))], // caller function itself
             scope_depth: 0,
             function: Rc::new(RefCell::new(Function::new())),
             function_type: FunctionType::Script,

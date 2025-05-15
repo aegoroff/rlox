@@ -23,7 +23,7 @@ impl CallFrame<'_> {
         Self {
             function: Rc::new(RefCell::new(Function::new())),
             ip: 0,
-            slots_offset: 1,
+            slots_offset: 1, // caller function itself
         }
     }
 }
