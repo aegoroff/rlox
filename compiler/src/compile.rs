@@ -135,7 +135,6 @@ impl<'a> Parser<'a> {
         self.block()?;
         self.end_compiler();
         self.emit_constant(LoxValue::Function(self.compiler.function.clone()));
-        self.end_scope();
         Ok(())
     }
 

@@ -391,6 +391,7 @@ mod tests {
     #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
     #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
+    #[test_case("fun x() { print 10; } print x();", "10" ; "simple call no args")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
@@ -401,6 +402,9 @@ mod tests {
         let actual = vm.interpret(input);
 
         // Assert
+        if actual.is_err() {
+            println!("{actual:?}");
+        }
         assert!(actual.is_ok());
         let actual = String::from_utf8(stdout).unwrap();
         assert_eq!(actual.trim_end(), expected);
