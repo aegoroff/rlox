@@ -155,7 +155,7 @@ impl<'a> Parser<'a> {
         let Token::Identifier(id) = *self.current.borrow() else {
             return Err(CompileError::CompileError(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Identifier expected")],
-                "Identifier expected"
+                "Identifier error"
             )));
         };
         self.advance()?;
@@ -187,7 +187,7 @@ impl<'a> Parser<'a> {
                     self.current_span(),
                     format!("Already a variables with this name '{name}' in the same scope")
                 )],
-                "Already a variables with this name '{name}' in the same scope"
+                "Variable declaration error"
             )));
         }
         self.add_local(name)?;
@@ -204,7 +204,7 @@ impl<'a> Parser<'a> {
                     self.current_span(),
                     "Too many local variables in function."
                 )],
-                "Too many local variables in function."
+                "Local variables error"
             )));
         }
         let local = Local::new(name, None);
@@ -367,8 +367,7 @@ impl<'a> Parser<'a> {
                     self.current_span(),
                     format!("Invalid precedence: {}", precedence)
                 )],
-                "Invalid precedence: {}",
-                precedence
+                "Precedence error"
             )))?;
         self.parse_precedence(precedence)?;
         match *previous.borrow() {
@@ -462,8 +461,7 @@ impl<'a> Parser<'a> {
                         self.previous.borrow()
                     )
                 )],
-                "Unexpected token: '{}' Expected: 'number'",
-                self.previous.borrow()
+                "Number error"
             )));
         };
         self.emit_constant(LoxValue::Number(number));
@@ -484,8 +482,7 @@ impl<'a> Parser<'a> {
                         self.previous.borrow()
                     )
                 )],
-                "Unexpected token: '{}' Expected: 'string'",
-                self.previous.borrow()
+                "String error"
             )));
         };
         let s = str.to_owned();
@@ -516,8 +513,7 @@ impl<'a> Parser<'a> {
                         self.previous.borrow()
                     )
                 )],
-                "Unexpected token: '{}' Expected one of: 'true', 'false', 'nil'",
-                self.previous.borrow()
+                "Literal error"
             ))),
         }
     }
@@ -558,8 +554,7 @@ impl<'a> Parser<'a> {
                         self.previous.borrow()
                     )
                 )],
-                "Unexpected token: '{}' Expected: 'idenitifier'",
-                self.previous.borrow()
+                "Variable error"
             )));
         };
         let mut set_code = OpCode::SetGlobal;
@@ -606,7 +601,7 @@ impl<'a> Parser<'a> {
                     self.current_span(),
                     "Can't read local variable in its own initializer."
                 )],
-                "Can't read local variable in its own initializer."
+                "Local variable resolving error"
             )))
         } else {
             Ok(Some(self.compiler.locals.len() - 1 - i))
@@ -629,7 +624,7 @@ impl<'a> Parser<'a> {
                     self.current_span(),
                     "Invalid assignment target."
                 )],
-                "Invalid assignment target."
+                "Assignment failed"
             )))
         } else {
             Ok(())
@@ -713,8 +708,7 @@ impl<'a> Parser<'a> {
                         self.current.borrow()
                     )
                 )],
-                "Unexpected token: '{}' Expected: '{token}'",
-                self.current.borrow()
+                "Unexpected token error"
             )))
         }
     }
@@ -769,7 +763,7 @@ impl<'a> Parser<'a> {
         if offset > u16::MAX as usize {
             return Err(CompileError::CompileError(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Loop body too large.")],
-                "Loop body too large."
+                "Loop body error."
             )));
         }
         self.compiler
