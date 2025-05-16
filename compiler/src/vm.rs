@@ -34,7 +34,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     stack: Vec<LoxValue>,
     writer: W,
     globals: HashMap<String, LoxValue>,
-    frames: [Rc<RefCell<CallFrame>>; FRAMES_MAX],
+    frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
 }
 
@@ -45,7 +45,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             stack: Vec::new(),
             writer,
             globals: HashMap::new(),
-            frames: core::array::from_fn(|_| Rc::new(RefCell::new(CallFrame::new()))),
+            frames: core::array::from_fn(|_| CallFrame::new()),
             frame_count: 0,
         }
     }
@@ -55,7 +55,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
         self.frame_count += 1;
-        self.frame().borrow_mut().function = function.clone();
+        self.frame().function = function.clone();
         self.run(function.chunk.clone())
     }
 
@@ -86,8 +86,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
     }
 
-    fn frame(&self) -> Rc<RefCell<CallFrame>> {
-        self.frames[self.frame_count - 1].clone()
+    fn frame(&mut self) -> &mut CallFrame {
+        &mut self.frames[self.frame_count - 1]
     }
 
     fn run(&mut self, chunk: Rc<RefCell<Chunk>>) -> crate::Result<()> {
@@ -96,7 +96,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             println!("--- start run ---");
         }
         let mut chunk = chunk.borrow_mut();
-        let mut ip = self.frame().borrow().ip;
+        let mut ip = self.frame().ip;
         while ip < chunk.code.len() {
             let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
                 miette::miette!("Invalid instruction: {}", chunk.code[ip]),
@@ -253,7 +253,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 4;
                 }
                 OpCode::GetLocal => {
-                    let slots_offset = self.frame().borrow().slots_offset;
+                    let slots_offset = self.frame().slots_offset;
                     let val = chunk.read_byte(ip + 1);
                     let val = &self.stack[slots_offset + val as usize - 1];
                     let val = val.clone();
@@ -261,7 +261,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::SetLocal => {
-                    let slots_offset = self.frame().borrow().slots_offset;
+                    let slots_offset = self.frame().slots_offset;
                     let val = chunk.read_byte(ip + 1);
                     let value = self.peek(0)?;
                     let value = value.clone();
@@ -305,8 +305,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
             )));
         };
         self.frame_count += 1;
-        self.frame().borrow_mut().slots_offset = self.stack.len() - args_count;
-        self.frame().borrow_mut().function = func.clone();
+        self.frame().slots_offset = self.stack.len() - args_count;
+        self.frame().function = func.clone();
         self.run(func.chunk.clone())
     }
 
