@@ -71,7 +71,7 @@ impl<'a> Compiler<'a> {
         name: &'a str,
     ) -> Self {
         Self {
-            locals: vec![Local::new("", Some(0))], // caller function itself
+            locals: vec![Local::new(name, Some(0))], // caller function itself
             scope_depth: 0,
             function: Function::new(name),
             function_type,
@@ -138,14 +138,14 @@ impl<'a> Parser<'a> {
     }
 
     fn function(&mut self, fun_type: FunctionType) -> crate::Result<()> {
-        let Token::Identifier(id) = *self.previous.borrow() else {
+        let Token::Identifier(name) = *self.previous.borrow() else {
             return Err(CompileError::CompileError(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Identifier expected")],
                 "Identifier error"
             )));
         };
 
-        let compiler = Compiler::new(fun_type, Some(self.compiler.clone()), id);
+        let compiler = Compiler::new(fun_type, Some(self.compiler.clone()), name);
         self.compiler = Rc::new(RefCell::new(compiler));
         self.begin_scope();
         self.consume(&Token::LeftParen)?;
