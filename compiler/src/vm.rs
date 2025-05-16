@@ -286,6 +286,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                     ip += 3;
                     ip -= offset;
                 }
+                OpCode::Call => todo!(),
             }
         }
         Ok(())

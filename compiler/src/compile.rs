@@ -440,6 +440,13 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn call(&mut self) -> crate::Result<()> {
+        let args_count = self.argument_list()?;
+        self.emit_opcode(OpCode::Call);
+        self.emit_operand(args_count);
+        Ok(())
+    }
+
     fn and(&mut self) -> crate::Result<()> {
         let and_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_opcode(OpCode::Pop);
@@ -641,6 +648,20 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn argument_list(&mut self) -> crate::Result<usize> {
+        let mut result = 0;
+        while !self.check(&Token::RightParen) {
+            result += 1;
+            self.expression()?;
+            if self.check(&Token::RightParen) {
+                break;
+            }
+            self.consume(&Token::Comma)?;
+        }
+        self.consume(&Token::RightParen)?;
+        Ok(result)
+    }
+
     fn parse_precedence(&mut self, precedence: Precedence) -> crate::Result<()> {
         self.advance()?;
         let previous = self.previous.clone();
@@ -674,6 +695,7 @@ impl<'a> Parser<'a> {
             }
             Token::And => Precedence::And,
             Token::Or => Precedence::Or,
+            Token::LeftParen => Precedence::Call,
             _ => Precedence::None,
         }
     }
@@ -692,6 +714,7 @@ impl<'a> Parser<'a> {
             | Token::LessEqual => self.binary(),
             Token::And => self.and(),
             Token::Or => self.or(),
+            Token::LeftParen => self.call(),
             _ => Ok(()),
         }
     }
