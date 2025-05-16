@@ -5,17 +5,17 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 use crate::{CompileError, chunk::Chunk};
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum LoxValue<'a> {
+pub enum LoxValue {
     String(String),
     Number(f64),
     Bool(bool),
-    Function(Rc<RefCell<Function<'a>>>),
+    Function(Function),
     Nil,
 }
 
 const ERROR_MARGIN: f64 = 0.00001;
 
-impl LoxValue<'_> {
+impl LoxValue {
     #[must_use]
     pub fn equal(&self, other: &LoxValue) -> bool {
         if let Ok(l) = self.try_num() {
@@ -95,43 +95,43 @@ impl LoxValue<'_> {
     }
 }
 
-impl Display for LoxValue<'_> {
+impl Display for LoxValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxValue::String(s) => write!(f, "{s}"),
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
-            LoxValue::Function(func) => write!(f, "func_call"),
+            LoxValue::Function(func) => write!(f, "{func}"),
         }
     }
 }
 
-#[derive(Default, Debug, PartialEq)]
-pub struct Function<'a> {
+#[derive(Default, Debug, PartialEq, Clone)]
+pub struct Function {
     pub arity: usize,
-    pub chunk: Chunk<'a>,
-    pub name: &'a str,
+    pub chunk: Rc<RefCell<Chunk>>,
+    pub name: String,
 }
 
-impl Display for Function<'_> {
+impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<fn {}>", self.name)
     }
 }
 
-impl<'a> Function<'a> {
+impl Function {
     #[must_use]
-    pub fn new(name: &'a str) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
             arity: 0,
-            chunk: Chunk::new(),
-            name,
+            chunk: Rc::new(RefCell::new(Chunk::new())),
+            name: name.to_owned(),
         }
     }
 
     #[must_use]
-    pub fn pointer(name: &'a str) -> Rc<RefCell<Function<'a>>> {
+    pub fn pointer(name: &str) -> Rc<RefCell<Function>> {
         Rc::new(RefCell::new(Function::new(name)))
     }
 }

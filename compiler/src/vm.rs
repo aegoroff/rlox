@@ -14,13 +14,13 @@ use crate::{
 const FRAMES_MAX: usize = 64;
 
 #[derive(Default)]
-struct CallFrame<'a> {
-    function: Rc<RefCell<Function<'a>>>,
+struct CallFrame {
+    function: Rc<RefCell<Function>>,
     ip: usize,               // caller's ip
     pub slots_offset: usize, // points to vm's value's stack first value it can use
 }
 
-impl CallFrame<'_> {
+impl CallFrame {
     fn new() -> Self {
         Self {
             function: Function::pointer(""),
@@ -30,15 +30,15 @@ impl CallFrame<'_> {
     }
 }
 
-pub struct VirtualMachine<'a, W: std::io::Write> {
-    stack: Vec<LoxValue<'a>>,
+pub struct VirtualMachine<W: std::io::Write> {
+    stack: Vec<LoxValue>,
     writer: W,
-    globals: HashMap<String, LoxValue<'a>>,
-    frames: [Rc<RefCell<CallFrame<'a>>>; FRAMES_MAX],
+    globals: HashMap<String, LoxValue>,
+    frames: [Rc<RefCell<CallFrame>>; FRAMES_MAX],
     frame_count: usize,
 }
 
-impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
+impl<W: std::io::Write> VirtualMachine<W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         Self {
@@ -50,24 +50,24 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         }
     }
 
-    pub fn interpret(&mut self, content: &'a str) -> crate::Result<()> {
+    pub fn interpret(&mut self, content: &str) -> crate::Result<()> {
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
         self.frame_count += 1;
-        self.frame().borrow_mut().function = function.clone();
-        self.run(&mut function.borrow_mut().chunk)
+        self.frame().borrow_mut().function = Rc::new(RefCell::new(function.clone()));
+        self.run(&mut function.chunk.borrow_mut())
     }
 
     pub fn init(&mut self) {
         self.stack.clear();
     }
 
-    fn push(&mut self, value: LoxValue<'a>) {
+    fn push(&mut self, value: LoxValue) {
         self.stack.push(value);
     }
 
-    fn pop(&mut self) -> crate::Result<LoxValue<'a>> {
+    fn pop(&mut self) -> crate::Result<LoxValue> {
         self.stack
             .pop()
             .ok_or(CompileError::RuntimeError(miette::miette!(
@@ -75,7 +75,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
             )))
     }
 
-    fn peek(&self, distance: usize) -> crate::Result<&LoxValue<'a>> {
+    fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
         if self.stack.len() < distance + 1 {
             Err(CompileError::RuntimeError(miette::miette!(
                 "Not enough stack capacity for distance {distance}. Current stack size is {}",
@@ -86,11 +86,11 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         }
     }
 
-    fn frame(&self) -> Rc<RefCell<CallFrame<'a>>> {
+    fn frame(&self) -> Rc<RefCell<CallFrame>> {
         self.frames[self.frame_count - 1].clone()
     }
 
-    fn run(&mut self, chunk: &mut Chunk<'a>) -> crate::Result<()> {
+    fn run(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
@@ -297,7 +297,7 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         Ok(())
     }
 
-    fn call_value(&mut self, callee: LoxValue<'a>, args_count: usize) -> crate::Result<()> {
+    fn call_value(&mut self, callee: LoxValue, args_count: usize) -> crate::Result<()> {
         let LoxValue::Function(func) = callee else {
             return Err(CompileError::RuntimeError(miette::miette!(
                 "Can only call functions and classes."
@@ -305,8 +305,8 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
         };
         self.frame_count += 1;
         self.frame().borrow_mut().slots_offset = self.stack.len() - args_count;
-        self.frame().borrow_mut().function = func.clone();
-        self.run(&mut func.borrow_mut().chunk)
+        self.frame().borrow_mut().function = Rc::new(RefCell::new(func.clone()));
+        self.run(&mut func.chunk.borrow_mut())
     }
 
     fn set_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
