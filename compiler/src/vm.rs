@@ -1,6 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use num_traits::FromPrimitive;
 
@@ -55,8 +55,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
         self.frame_count += 1;
-        self.frame().function = function.clone();
-        self.run(function.chunk.clone())
+        self.frame().function = function;
+        self.run()
     }
 
     pub fn init(&mut self) {
@@ -90,12 +90,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
         &mut self.frames[self.frame_count - 1]
     }
 
-    fn run(&mut self, chunk: Rc<RefCell<Chunk>>) -> crate::Result<()> {
+    fn run(&mut self) -> crate::Result<()> {
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
         }
-        let mut chunk = chunk.borrow_mut();
+        let function = self.frame().function.clone();
+        let mut chunk = function.chunk.borrow_mut();
         let mut ip = self.frame().ip;
         while ip < chunk.code.len() {
             let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
@@ -306,8 +307,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         };
         self.frame_count += 1;
         self.frame().slots_offset = self.stack.len() - args_count;
-        self.frame().function = func.clone();
-        self.run(func.chunk.clone())
+        self.frame().function = func;
+        self.run()
     }
 
     fn set_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
