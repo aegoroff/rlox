@@ -101,7 +101,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             println!("--- start run ---");
         }
         let function = self.frame().function.clone();
-        let mut chunk = function.chunk.borrow_mut();
+        let chunk = function.chunk.borrow();
         let mut ip = self.frame().ip;
         while ip < chunk.code.len() {
             let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
@@ -245,27 +245,27 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 1;
                 }
                 OpCode::DefineGlobal => {
-                    self.define_global(&mut chunk, ip)?;
+                    self.define_global(&chunk, ip)?;
                     ip += 2;
                 }
                 OpCode::DefineGlobalLong => {
-                    self.define_global(&mut chunk, ip)?;
+                    self.define_global(&chunk, ip)?;
                     ip += 4;
                 }
                 OpCode::GetGlobal => {
-                    self.get_global(&mut chunk, ip)?;
+                    self.get_global(&chunk, ip)?;
                     ip += 2;
                 }
                 OpCode::GetGlobalLong => {
-                    self.get_global(&mut chunk, ip)?;
+                    self.get_global(&chunk, ip)?;
                     ip += 4;
                 }
                 OpCode::SetGlobal => {
-                    self.set_global(&mut chunk, ip)?;
+                    self.set_global(&chunk, ip)?;
                     ip += 2;
                 }
                 OpCode::SetGlobalLong => {
-                    self.set_global(&mut chunk, ip)?;
+                    self.set_global(&chunk, ip)?;
                     ip += 4;
                 }
                 OpCode::GetLocal => {
@@ -330,7 +330,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.run()
     }
 
-    fn set_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
+    fn set_global(&mut self, chunk: &Chunk, offset: usize) -> crate::Result<()> {
         let name = chunk.read_constant(offset);
         let name = name.try_str()?;
         if !self.globals.contains_key(name) {
@@ -344,7 +344,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    fn get_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
+    fn get_global(&mut self, chunk: &Chunk, offset: usize) -> crate::Result<()> {
         let name = chunk.read_constant(offset);
         let name = name.try_str()?;
         let Some(val) = self.globals.get(name) else {
@@ -356,7 +356,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    fn define_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
+    fn define_global(&mut self, chunk: &Chunk, offset: usize) -> crate::Result<()> {
         let name = chunk.read_constant(offset);
         let name = name.try_str()?;
         let value = self.peek(0)?;
