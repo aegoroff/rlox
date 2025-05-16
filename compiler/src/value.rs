@@ -122,16 +122,16 @@ impl Display for Function<'_> {
 
 impl<'a> Function<'a> {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(name: &'a str) -> Self {
         Self {
             arity: 0,
             chunk: Chunk::new(),
-            name: "script",
+            name,
         }
     }
 
     #[must_use]
-    pub fn pointer() -> Rc<RefCell<Function<'a>>> {
-        Rc::new(RefCell::new(Function::new()))
+    pub fn pointer(name: &'a str) -> Rc<RefCell<Function<'a>>> {
+        Rc::new(RefCell::new(Function::new(name)))
     }
 }

@@ -65,11 +65,15 @@ pub enum FunctionType {
 
 impl<'a> Compiler<'a> {
     #[must_use]
-    pub fn new(function_type: FunctionType, enclosing: Option<Rc<RefCell<Compiler<'a>>>>) -> Self {
+    pub fn new(
+        function_type: FunctionType,
+        enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
+        name: &'a str,
+    ) -> Self {
         Self {
             locals: vec![Local::new("", Some(0))], // caller function itself
             scope_depth: 0,
-            function: Rc::new(RefCell::new(Function::new())),
+            function: Rc::new(RefCell::new(Function::new(name))),
             function_type,
             enclosing,
         }
@@ -83,7 +87,11 @@ impl<'a> Parser<'a> {
             tokens: Lexer::new(content),
             current: Rc::new(RefCell::new(Token::Eof)),
             previous: Rc::new(RefCell::new(Token::Eof)),
-            compiler: Rc::new(RefCell::new(Compiler::new(FunctionType::Script, None))),
+            compiler: Rc::new(RefCell::new(Compiler::new(
+                FunctionType::Script,
+                None,
+                "script",
+            ))),
         }
     }
 
@@ -130,7 +138,14 @@ impl<'a> Parser<'a> {
     }
 
     fn function(&mut self, fun_type: FunctionType) -> crate::Result<()> {
-        let compiler = Compiler::new(fun_type, Some(self.compiler.clone()));
+        let Token::Identifier(id) = *self.previous.borrow() else {
+            return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), "Identifier expected")],
+                "Identifier error"
+            )));
+        };
+
+        let compiler = Compiler::new(fun_type, Some(self.compiler.clone()), id);
         self.compiler = Rc::new(RefCell::new(compiler));
         self.begin_scope();
         self.consume(&Token::LeftParen)?;

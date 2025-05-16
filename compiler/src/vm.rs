@@ -23,7 +23,7 @@ struct CallFrame<'a> {
 impl CallFrame<'_> {
     fn new() -> Self {
         Self {
-            function: Function::pointer(),
+            function: Function::pointer(""),
             ip: 0,
             slots_offset: 1, // caller function itself
         }
