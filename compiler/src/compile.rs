@@ -273,6 +273,8 @@ impl<'a> Parser<'a> {
             self.if_statement()
         } else if self.matches(&Token::While)? {
             self.while_statement()
+        } else if self.matches(&Token::Return)? {
+            self.return_statement()
         } else {
             self.expression_statement()
         }
@@ -283,6 +285,22 @@ impl<'a> Parser<'a> {
             self.declaration()?;
         }
         self.consume(&Token::RightBrace)?;
+        Ok(())
+    }
+
+    fn return_statement(&mut self) -> crate::Result<()> {
+        if self.matches(&Token::Semicolon)? {
+            self.emit_return();
+        } else {
+            self.expression()?;
+            self.consume(&Token::Semicolon)?;
+            self.compiler
+                .borrow_mut()
+                .function
+                .chunk
+                .borrow_mut()
+                .write_code(OpCode::Return, self.tokens.line);
+        }
         Ok(())
     }
 
