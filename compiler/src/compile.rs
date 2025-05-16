@@ -289,6 +289,15 @@ impl<'a> Parser<'a> {
     }
 
     fn return_statement(&mut self) -> crate::Result<()> {
+        if let FunctionType::Script = self.compiler.borrow().function_type {
+            return Err(CompileError::CompileError(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Can't return from top-level code."
+                )],
+                "Return usage error"
+            )));
+        }
         if self.matches(&Token::Semicolon)? {
             self.emit_return();
         } else {
