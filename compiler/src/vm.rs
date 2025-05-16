@@ -56,7 +56,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.push(LoxValue::Function(function.clone()));
         self.frame_count += 1;
         self.frame().borrow_mut().function = Rc::new(RefCell::new(function.clone()));
-        self.run(&mut function.chunk.borrow_mut())
+        self.run(function.chunk.clone())
     }
 
     pub fn init(&mut self) {
@@ -90,11 +90,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.frames[self.frame_count - 1].clone()
     }
 
-    fn run(&mut self, chunk: &mut Chunk) -> crate::Result<()> {
+    fn run(&mut self, chunk: Rc<RefCell<Chunk>>) -> crate::Result<()> {
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
         }
+        let mut chunk = chunk.borrow_mut();
         let mut ip = self.frame().borrow().ip;
         while ip < chunk.code.len() {
             let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
@@ -228,27 +229,27 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 1;
                 }
                 OpCode::DefineGlobal => {
-                    self.define_global(chunk, ip)?;
+                    self.define_global(&mut chunk, ip)?;
                     ip += 2;
                 }
                 OpCode::DefineGlobalLong => {
-                    self.define_global(chunk, ip)?;
+                    self.define_global(&mut chunk, ip)?;
                     ip += 4;
                 }
                 OpCode::GetGlobal => {
-                    self.get_global(chunk, ip)?;
+                    self.get_global(&mut chunk, ip)?;
                     ip += 2;
                 }
                 OpCode::GetGlobalLong => {
-                    self.get_global(chunk, ip)?;
+                    self.get_global(&mut chunk, ip)?;
                     ip += 4;
                 }
                 OpCode::SetGlobal => {
-                    self.set_global(chunk, ip)?;
+                    self.set_global(&mut chunk, ip)?;
                     ip += 2;
                 }
                 OpCode::SetGlobalLong => {
-                    self.set_global(chunk, ip)?;
+                    self.set_global(&mut chunk, ip)?;
                     ip += 4;
                 }
                 OpCode::GetLocal => {
@@ -306,7 +307,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.frame_count += 1;
         self.frame().borrow_mut().slots_offset = self.stack.len() - args_count;
         self.frame().borrow_mut().function = Rc::new(RefCell::new(func.clone()));
-        self.run(&mut func.chunk.borrow_mut())
+        self.run(func.chunk.clone())
     }
 
     fn set_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
