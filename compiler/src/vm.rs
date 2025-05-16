@@ -286,10 +286,27 @@ impl<'a, W: std::io::Write> VirtualMachine<'a, W> {
                     ip += 3;
                     ip -= offset;
                 }
-                OpCode::Call => todo!(),
+                OpCode::Call => {
+                    let args_count = chunk.read_byte(ip + 1);
+                    let func = self.peek(args_count as usize)?;
+                    self.call_value(func.clone(), args_count as usize)?;
+                    ip += 2;
+                }
             }
         }
         Ok(())
+    }
+
+    fn call_value(&mut self, callee: LoxValue<'a>, args_count: usize) -> crate::Result<()> {
+        let LoxValue::Function(func) = callee else {
+            return Err(CompileError::RuntimeError(miette::miette!(
+                "Can only call functions and classes."
+            )));
+        };
+        self.frame_count += 1;
+        self.frame().borrow_mut().slots_offset = self.stack.len() - args_count;
+        self.frame().borrow_mut().function = func.clone();
+        self.run(&mut func.borrow_mut().chunk)
     }
 
     fn set_global(&mut self, chunk: &mut Chunk, offset: usize) -> crate::Result<()> {
@@ -392,7 +409,9 @@ mod tests {
     #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
     #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
-    #[test_case("fun x() { print 10; } print x();", "10" ; "simple call no args")]
+    #[test_case("fun foo() { print 10; } print foo();", "10" ; "simple call no args")]
+    #[test_case("fun foo(v) { print v; } print foo(10);", "10" ; "simple call one arg")]
+    #[test_case("fun sum(a1, a2) { print a1 + a2; } sum(1, 2);", "3" ; "simple call two args")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

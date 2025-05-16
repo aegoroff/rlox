@@ -102,7 +102,7 @@ impl Display for LoxValue<'_> {
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
-            LoxValue::Function(func) => write!(f, "{}", func.borrow()),
+            LoxValue::Function(func) => write!(f, "func_call"),
         }
     }
 }
