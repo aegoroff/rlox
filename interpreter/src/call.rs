@@ -65,7 +65,7 @@ impl<'a> LoxCallable<'a> for Clock {
     }
 
     fn name(&self) -> &'a str {
-        "clock"
+        CLOCK
     }
 
     fn parent(&self) -> Option<&'a str> {
