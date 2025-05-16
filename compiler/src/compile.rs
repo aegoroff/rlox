@@ -134,6 +134,17 @@ impl<'a> Parser<'a> {
         self.compiler = Rc::new(RefCell::new(compiler));
         self.begin_scope();
         self.consume(&Token::LeftParen)?;
+
+        while !self.check(&Token::RightParen) {
+            self.compiler.borrow_mut().function.borrow_mut().arity += 1;
+            let constant = self.parse_variable()?;
+            self.define_variable(constant);
+            if self.check(&Token::RightParen) {
+                break;
+            }
+            self.consume(&Token::Comma)?;
+        }
+
         self.consume(&Token::RightParen)?;
         self.consume(&Token::LeftBrace)?;
         self.block()?;
