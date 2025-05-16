@@ -64,7 +64,7 @@ impl LoxValue {
             Ok(*n)
         } else {
             Err(CompileError::CompileError(miette::miette!(
-                "Expected number"
+                "Expected number. But was {self}"
             )))
         }
     }
@@ -74,7 +74,7 @@ impl LoxValue {
             Ok(s)
         } else {
             Err(CompileError::CompileError(miette::miette!(
-                "Expected string"
+                "Expected string. But was {self}"
             )))
         }
     }
@@ -84,7 +84,7 @@ impl LoxValue {
             LoxValue::Bool(b) => Ok(*b),
             LoxValue::Nil => Ok(false),
             _ => Err(CompileError::CompileError(miette::miette!(
-                "Expected boolean"
+                "Expected boolean. But was {self}"
             ))),
         }
     }

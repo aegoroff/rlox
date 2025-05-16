@@ -71,7 +71,7 @@ impl<'a> Compiler<'a> {
         name: &'a str,
     ) -> Self {
         Self {
-            locals: vec![Local::new(name, Some(0))], // caller function itself
+            locals: vec![Local::new("", Some(0))], // caller function itself
             scope_depth: 0,
             function: Function::new(name),
             function_type,
