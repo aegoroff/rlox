@@ -854,6 +854,12 @@ impl<'a> Parser<'a> {
             .function
             .chunk
             .borrow_mut()
+            .write_code(OpCode::Nil, self.tokens.line);
+        self.compiler
+            .borrow_mut()
+            .function
+            .chunk
+            .borrow_mut()
             .write_code(OpCode::Return, self.tokens.line);
     }
 

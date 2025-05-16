@@ -54,9 +54,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
-        self.frame_count += 1;
-        self.frame().function = function;
-        self.run()
+        self.call(function, 0)
     }
 
     pub fn init(&mut self) {
@@ -73,6 +71,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
             .ok_or(CompileError::RuntimeError(miette::miette!(
                 "Instructions stack empty"
             )))
+    }
+
+    fn pop_stack_n_times(&mut self, num_to_pop: usize) -> crate::Result<()> {
+        for _ in 0..num_to_pop {
+            self.pop()?;
+        }
+        Ok(())
     }
 
     fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
@@ -116,6 +121,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::Return => {
+                    let value = self.pop()?;
+                    self.frame_count -= 1;
+                    if self.frame_count == 0 {
+                        return Ok(());
+                    }
+
+                    let num_to_pop =
+                        self.stack.len() - self.frame().slots_offset + self.frame().function.arity;
+                    self.pop_stack_n_times(num_to_pop)?;
+                    self.push(value);
                     return Ok(());
                 }
                 OpCode::ConstantLong => {
@@ -305,6 +320,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 "Can only call functions and classes."
             )));
         };
+        self.call(func, args_count)
+    }
+
+    fn call(&mut self, func: Function, args_count: usize) -> crate::Result<()> {
         self.frame_count += 1;
         self.frame().slots_offset = self.stack.len() - args_count;
         self.frame().function = func;
