@@ -101,16 +101,6 @@ impl<'a> Parser<'a> {
             self.declaration()?;
         }
         self.end_compiler();
-
-        #[cfg(feature = "printcode")]
-        {
-            self.compiler
-                .borrow()
-                .function
-                .chunk
-                .borrow()
-                .disassembly(self.compiler.borrow().function.name.as_str());
-        }
         Ok(self.compiler.borrow().function.clone())
     }
 
@@ -163,8 +153,8 @@ impl<'a> Parser<'a> {
         self.consume(&Token::RightParen)?;
         self.consume(&Token::LeftBrace)?;
         self.block()?;
-        self.end_compiler();
         let function = self.compiler.borrow_mut().function.clone();
+        self.end_compiler();
         self.emit_constant(LoxValue::Function(function));
         Ok(())
     }
@@ -869,6 +859,16 @@ impl<'a> Parser<'a> {
 
     fn end_compiler(&mut self) {
         self.emit_return();
+
+        #[cfg(feature = "printcode")]
+        {
+            self.compiler
+                .borrow()
+                .function
+                .chunk
+                .borrow()
+                .disassembly(self.compiler.borrow().function.name.as_str());
+        }
         let Some(enclosing) = self.compiler.borrow().enclosing.clone() else {
             return;
         };
