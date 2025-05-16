@@ -15,7 +15,7 @@ use crate::{
 
 pub struct Parser<'a> {
     tokens: Lexer<'a>,
-    compiler: Compiler<'a>,
+    compiler: Rc<RefCell<Compiler<'a>>>,
     current: Rc<RefCell<Token<'a>>>,
     previous: Rc<RefCell<Token<'a>>>,
 }
@@ -49,6 +49,7 @@ impl<'a> Local<'a> {
 
 #[derive(Default)]
 pub struct Compiler<'a> {
+    enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
     locals: Vec<Local<'a>>,
     scope_depth: usize,
     pub function: Rc<RefCell<Function<'a>>>,
@@ -62,14 +63,15 @@ pub enum FunctionType {
     Script,
 }
 
-impl Compiler<'_> {
+impl<'a> Compiler<'a> {
     #[must_use]
-    pub fn new(function_type: FunctionType) -> Self {
+    pub fn new(function_type: FunctionType, enclosing: Option<Rc<RefCell<Compiler<'a>>>>) -> Self {
         Self {
             locals: vec![Local::new("", Some(0))], // caller function itself
             scope_depth: 0,
             function: Rc::new(RefCell::new(Function::new())),
             function_type,
+            enclosing,
         }
     }
 }
@@ -81,7 +83,7 @@ impl<'a> Parser<'a> {
             tokens: Lexer::new(content),
             current: Rc::new(RefCell::new(Token::Eof)),
             previous: Rc::new(RefCell::new(Token::Eof)),
-            compiler: Compiler::new(FunctionType::Script),
+            compiler: Rc::new(RefCell::new(Compiler::new(FunctionType::Script, None))),
         }
     }
 
@@ -95,12 +97,13 @@ impl<'a> Parser<'a> {
         #[cfg(feature = "printcode")]
         {
             self.compiler
+                .borrow()
                 .function
                 .borrow()
                 .chunk
-                .disassembly(self.compiler.function.borrow().name);
+                .disassembly(self.compiler.borrow().function.borrow().name);
         }
-        Ok(self.compiler.function.clone())
+        Ok(self.compiler.borrow().function.clone())
     }
 
     fn expression(&mut self) -> crate::Result<()> {
@@ -127,15 +130,16 @@ impl<'a> Parser<'a> {
     }
 
     fn function(&mut self, fun_type: FunctionType) -> crate::Result<()> {
-        let compiler = Compiler::new(fun_type);
-        self.compiler = compiler;
+        let compiler = Compiler::new(fun_type, Some(self.compiler.clone()));
+        self.compiler = Rc::new(RefCell::new(compiler));
         self.begin_scope();
         self.consume(&Token::LeftParen)?;
         self.consume(&Token::RightParen)?;
         self.consume(&Token::LeftBrace)?;
         self.block()?;
         self.end_compiler();
-        self.emit_constant(LoxValue::Function(self.compiler.function.clone()));
+        let function = self.compiler.borrow_mut().function.clone();
+        self.emit_constant(LoxValue::Function(function));
         Ok(())
     }
 
@@ -161,7 +165,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
 
         self.declare_variable(id)?;
-        if self.compiler.scope_depth > 0 {
+        if self.compiler.borrow().scope_depth > 0 {
             return Ok(0);
         }
 
@@ -170,13 +174,13 @@ impl<'a> Parser<'a> {
     }
 
     fn declare_variable(&mut self, name: &'a str) -> crate::Result<()> {
-        if self.compiler.scope_depth == 0 {
+        if self.compiler.borrow().scope_depth == 0 {
             return Ok(());
         }
 
-        let existing = self.compiler.locals.iter().rev().any(|local| {
+        let existing = self.compiler.borrow().locals.iter().rev().any(|local| {
             if let Some(local_depth) = local.depth {
-                local.name == name && local_depth == self.compiler.scope_depth
+                local.name == name && local_depth == self.compiler.borrow().scope_depth
             } else {
                 local.name == name
             }
@@ -195,10 +199,10 @@ impl<'a> Parser<'a> {
     }
 
     fn add_local(&mut self, name: &'a str) -> crate::Result<()> {
-        if self.compiler.scope_depth == 0 {
+        if self.compiler.borrow().scope_depth == 0 {
             return Ok(());
         }
-        if self.compiler.locals.len() >= MAX_SHORT_VALUE {
+        if self.compiler.borrow().locals.len() >= MAX_SHORT_VALUE {
             return Err(CompileError::CompileError(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
@@ -208,7 +212,7 @@ impl<'a> Parser<'a> {
             )));
         }
         let local = Local::new(name, None);
-        self.compiler.locals.push(local);
+        self.compiler.borrow_mut().locals.push(local);
         Ok(())
     }
 
@@ -217,7 +221,7 @@ impl<'a> Parser<'a> {
     }
 
     fn define_variable(&mut self, global: usize) {
-        if self.compiler.scope_depth > 0 {
+        if self.compiler.borrow().scope_depth > 0 {
             self.mark_initialized();
             return;
         }
@@ -230,11 +234,12 @@ impl<'a> Parser<'a> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.compiler.scope_depth == 0 {
+        let scope_depth = self.compiler.borrow().scope_depth;
+        if scope_depth == 0 {
             return;
         }
-        if let Some(v) = self.compiler.locals.last_mut() {
-            v.depth = Some(self.compiler.scope_depth);
+        if let Some(v) = self.compiler.borrow_mut().locals.last_mut() {
+            v.depth = Some(scope_depth);
         }
     }
 
@@ -523,17 +528,19 @@ impl<'a> Parser<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.compiler.scope_depth += 1;
+        self.compiler.borrow_mut().scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.compiler.scope_depth -= 1;
+        self.compiler.borrow_mut().scope_depth -= 1;
 
-        while !self.compiler.locals.is_empty() {
-            let i = self.compiler.locals.len() - 1;
-            if self.compiler.locals[i].depth.unwrap_or(0) > self.compiler.scope_depth {
+        while !self.compiler.borrow().locals.is_empty() {
+            let i = self.compiler.borrow().locals.len() - 1;
+            if self.compiler.borrow().locals[i].depth.unwrap_or(0)
+                > self.compiler.borrow().scope_depth
+            {
                 self.emit_opcode(OpCode::Pop);
-                self.compiler.locals.pop();
+                self.compiler.borrow_mut().locals.pop();
             } else {
                 break;
             }
@@ -585,8 +592,8 @@ impl<'a> Parser<'a> {
     }
 
     fn resolve_local(&self, name: &'a str) -> crate::Result<Option<usize>> {
-        let Some((i, l)) = self
-            .compiler
+        let compiler = self.compiler.borrow();
+        let Some((i, l)) = compiler
             .locals
             .iter()
             .rev()
@@ -604,7 +611,7 @@ impl<'a> Parser<'a> {
                 "Local variable resolving error"
             )))
         } else {
-            Ok(Some(self.compiler.locals.len() - 1 - i))
+            Ok(Some(self.compiler.borrow().locals.len() - 1 - i))
         }
     }
 
@@ -719,6 +726,7 @@ impl<'a> Parser<'a> {
 
     fn patch_jump(&mut self, exit_jump: usize) {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -727,6 +735,7 @@ impl<'a> Parser<'a> {
 
     fn emit_constant(&mut self, value: LoxValue<'a>) {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -735,6 +744,7 @@ impl<'a> Parser<'a> {
 
     fn make_constant(&mut self, value: LoxValue<'a>) -> usize {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -743,6 +753,7 @@ impl<'a> Parser<'a> {
 
     fn emit_jump(&mut self, opcode: OpCode) -> usize {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -754,6 +765,7 @@ impl<'a> Parser<'a> {
 
     fn emit_loop(&mut self, loop_start: usize) -> crate::Result<()> {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -767,6 +779,7 @@ impl<'a> Parser<'a> {
             )));
         }
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -775,11 +788,12 @@ impl<'a> Parser<'a> {
     }
 
     fn chunk_code_size(&self) -> usize {
-        self.compiler.function.borrow_mut().chunk.code.len()
+        self.compiler.borrow().function.borrow().chunk.code.len()
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -788,6 +802,7 @@ impl<'a> Parser<'a> {
 
     fn emit_operand(&mut self, value: usize) {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -796,6 +811,7 @@ impl<'a> Parser<'a> {
 
     fn emit_return(&mut self) {
         self.compiler
+            .borrow_mut()
             .function
             .borrow_mut()
             .chunk
@@ -804,5 +820,9 @@ impl<'a> Parser<'a> {
 
     fn end_compiler(&mut self) {
         self.emit_return();
+        let Some(enclosing) = self.compiler.borrow().enclosing.clone() else {
+            return;
+        };
+        self.compiler = enclosing;
     }
 }
