@@ -8,7 +8,7 @@ use crate::{
     CompileError,
     chunk::{Chunk, OpCode},
     compile::Parser,
-    value::{Function, LoxValue},
+    value::{Function, LoxValue, NativeFunction},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -315,12 +315,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> crate::Result<()> {
-        let LoxValue::Function(func) = callee else {
-            return Err(CompileError::RuntimeError(miette::miette!(
+        match callee {
+            LoxValue::Function(func) => self.call(func, args_count),
+            LoxValue::Native(func) => self.call_native(func, args_count),
+            _ => Err(CompileError::RuntimeError(miette::miette!(
                 "Can only call functions and classes."
-            )));
-        };
-        self.call(func, args_count)
+            ))),
+        }
     }
 
     fn call(&mut self, func: Function, args_count: usize) -> crate::Result<()> {
@@ -328,6 +329,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.frame().slots_offset = self.stack.len() - args_count;
         self.frame().function = func;
         self.run()
+    }
+
+    fn call_native(&mut self, func: NativeFunction, args_count: usize) -> crate::Result<()> {
+        self.frame_count += 1;
+        self.frame().slots_offset = self.stack.len() - args_count;
+        //self.frame().function = func;
+        Ok(())
     }
 
     fn set_global(&mut self, chunk: &Chunk, offset: usize) -> crate::Result<()> {

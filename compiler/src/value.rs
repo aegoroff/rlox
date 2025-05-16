@@ -10,6 +10,7 @@ pub enum LoxValue {
     Number(f64),
     Bool(bool),
     Function(Function),
+    Native(NativeFunction),
     Nil,
 }
 
@@ -103,6 +104,7 @@ impl Display for LoxValue {
             LoxValue::Bool(b) => write!(f, "{b}"),
             LoxValue::Nil => write!(f, ""),
             LoxValue::Function(func) => write!(f, "{func}"),
+            LoxValue::Native(native) => write!(f, "{native}"),
         }
     }
 }
@@ -126,6 +128,28 @@ impl Function {
         Self {
             arity: 0,
             chunk: Rc::new(RefCell::new(Chunk::new())),
+            name: name.to_owned(),
+        }
+    }
+}
+
+#[derive(Default, Debug, PartialEq, Clone)]
+pub struct NativeFunction {
+    pub arity: usize,
+    pub name: String,
+}
+
+impl Display for NativeFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<native fn {}>", self.name)
+    }
+}
+
+impl NativeFunction {
+    #[must_use]
+    pub fn new(name: &str, arity: usize) -> Self {
+        Self {
+            arity,
             name: name.to_owned(),
         }
     }
