@@ -433,6 +433,7 @@ mod tests {
     #[test_case("fun foo() { print 10; } print foo();", "10" ; "simple call no args")]
     #[test_case("fun foo(v) { print v; } print foo(10);", "10" ; "simple call one arg")]
     #[test_case("fun sum(a1, a2) { print a1 + a2; } sum(1, 2);", "3" ; "simple call two args")]
+    #[test_case("fun foo(x) { return x + 1; } print foo(1);", "2" ; "function with return")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
