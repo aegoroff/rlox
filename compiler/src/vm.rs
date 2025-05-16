@@ -434,6 +434,9 @@ mod tests {
     #[test_case("fun foo(v) { print v; } print foo(10);", "10" ; "simple call one arg")]
     #[test_case("fun sum(a1, a2) { print a1 + a2; } sum(1, 2);", "3" ; "simple call two args")]
     #[test_case("fun foo(x) { return x + 1; } print foo(1);", "2" ; "function with return")]
+    #[test_case("fun fib(n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); } print fib(8);", "21" ; "fibonacci")]
+    #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(1);", "1" ; "conditional return success")]
+    #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
