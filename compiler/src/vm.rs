@@ -15,7 +15,7 @@ const FRAMES_MAX: usize = 64;
 
 #[derive(Default)]
 struct CallFrame {
-    function: Rc<RefCell<Function>>,
+    function: Function,
     ip: usize,               // caller's ip
     pub slots_offset: usize, // points to vm's value's stack first value it can use
 }
@@ -23,7 +23,7 @@ struct CallFrame {
 impl CallFrame {
     fn new() -> Self {
         Self {
-            function: Function::pointer(""),
+            function: Function::new(""),
             ip: 0,
             slots_offset: 1, // caller function itself
         }
@@ -55,7 +55,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
         self.frame_count += 1;
-        self.frame().borrow_mut().function = Rc::new(RefCell::new(function.clone()));
+        self.frame().borrow_mut().function = function.clone();
         self.run(function.chunk.clone())
     }
 
@@ -306,7 +306,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         };
         self.frame_count += 1;
         self.frame().borrow_mut().slots_offset = self.stack.len() - args_count;
-        self.frame().borrow_mut().function = Rc::new(RefCell::new(func.clone()));
+        self.frame().borrow_mut().function = func.clone();
         self.run(func.chunk.clone())
     }
 

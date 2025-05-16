@@ -129,9 +129,4 @@ impl Function {
             name: name.to_owned(),
         }
     }
-
-    #[must_use]
-    pub fn pointer(name: &str) -> Rc<RefCell<Function>> {
-        Rc::new(RefCell::new(Function::new(name)))
-    }
 }
