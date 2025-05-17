@@ -127,8 +127,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         break;
                     }
 
-                    let num_to_pop =
-                        self.stack.len() - self.frame().slots_offset + self.frame().function.arity;
+                    let offset = self.frame().slots_offset;
+                    let num_to_pop = self.stack.len() - offset + self.frame().function.arity;
+                    println!(
+                        "stack len: {} slots offset: {} arity: {} num to pop: {}",
+                        self.stack.len(),
+                        offset,
+                        self.frame().function.arity,
+                        num_to_pop
+                    );
                     self.pop_stack_n_times(num_to_pop)?;
                     self.push(value);
                     break;
