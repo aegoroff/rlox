@@ -131,7 +131,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.stack.len() - self.frame().slots_offset + self.frame().function.arity;
                     self.pop_stack_n_times(num_to_pop)?;
                     self.push(value);
-                    return Ok(());
+                    break;
                 }
                 OpCode::ConstantLong => {
                     let constant = chunk.read_constant(ip);
