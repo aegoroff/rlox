@@ -100,8 +100,7 @@ impl<'a> Parser<'a> {
         while !self.matches(&Token::Eof)? {
             self.declaration()?;
         }
-        self.end_compiler();
-        Ok(self.compiler.borrow().function.clone())
+        Ok(self.end_compiler())
     }
 
     fn expression(&mut self) -> crate::Result<()> {
@@ -153,8 +152,7 @@ impl<'a> Parser<'a> {
         self.consume(&Token::RightParen)?;
         self.consume(&Token::LeftBrace)?;
         self.block()?;
-        let function = self.compiler.borrow_mut().function.clone();
-        self.end_compiler();
+        let function = self.end_compiler();
         self.emit_constant(LoxValue::Function(function));
         Ok(())
     }
@@ -890,21 +888,18 @@ impl<'a> Parser<'a> {
             .write_code(OpCode::Return, self.tokens.line);
     }
 
-    fn end_compiler(&mut self) {
+    fn end_compiler(&mut self) -> Function {
         self.emit_return();
-
+        let function = self.compiler.borrow().function.clone();
         #[cfg(feature = "printcode")]
         {
-            self.compiler
-                .borrow()
-                .function
-                .chunk
-                .borrow()
-                .disassembly(self.compiler.borrow().function.name.as_str());
+            function.disassembly();
         }
         let Some(enclosing) = self.compiler.borrow().enclosing.clone() else {
-            return;
+            return function;
         };
+
         self.compiler = enclosing;
+        function
     }
 }

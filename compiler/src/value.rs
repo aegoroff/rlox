@@ -131,6 +131,10 @@ impl Function {
             name: name.to_owned(),
         }
     }
+
+    pub fn disassembly(&self) {
+        self.chunk.borrow().disassembly(self.name.as_str());
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]

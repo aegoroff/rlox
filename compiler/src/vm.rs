@@ -96,12 +96,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn run(&mut self) -> crate::Result<()> {
+        let function = self.frame().function.clone();
+        let chunk = function.chunk.borrow();
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
         }
-        let function = self.frame().function.clone();
-        let chunk = function.chunk.borrow();
         let mut ip = self.frame().ip;
         while ip < chunk.code.len() {
             let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
