@@ -124,7 +124,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let value = self.pop()?;
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
-                        return Ok(());
+                        break;
                     }
 
                     let num_to_pop =
