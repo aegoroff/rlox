@@ -8,6 +8,7 @@ scanner = { path = "../scanner" }
 miette = { workspace = true, features = ["fancy"] }
 num-derive = "0.4.2"
 num-traits = "0.2.19"
+fnv = "1.0.7"
 
 [dev-dependencies]
 test-case = "3.3.1"

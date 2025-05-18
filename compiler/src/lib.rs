@@ -13,6 +13,10 @@ pub enum ProgramError {
     Compile(String),
     Runtime(String),
     InvalidInstruction(usize),
+    InstructionsStackEmpty,
+    NotEnoughStackCapacity(usize, usize),
+    DivizionByZero,
+    InvalidCallable,
 }
 
 impl Display for ProgramError {
@@ -21,6 +25,13 @@ impl Display for ProgramError {
             ProgramError::Compile(s) => write!(f, "{s}"),
             ProgramError::Runtime(s) => write!(f, "{s}"),
             ProgramError::InvalidInstruction(code) => write!(f, "Invalid instruction: {code}"),
+            ProgramError::InstructionsStackEmpty => write!(f, "Instructions stack empty"),
+            ProgramError::NotEnoughStackCapacity(distance, size) => write!(
+                f,
+                "Not enough stack capacity for distance {distance}. Current stack size is {size}"
+            ),
+            ProgramError::DivizionByZero => write!(f, "Division by zero"),
+            ProgramError::InvalidCallable => write!(f, "Can only call functions and classes."),
         }
     }
 }

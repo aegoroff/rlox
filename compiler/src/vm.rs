@@ -1,9 +1,5 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::cell::Ref;
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::ProgramError;
 use crate::chunk::Chunk;
 use crate::{
@@ -11,6 +7,9 @@ use crate::{
     compile::Parser,
     value::{Function, LoxValue, NativeFunction},
 };
+use fnv::FnvHashMap;
+use std::cell::Ref;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const FRAMES_MAX: usize = 64;
 
@@ -34,7 +33,7 @@ impl CallFrame {
 pub struct VirtualMachine<W: std::io::Write> {
     stack: Vec<LoxValue>,
     writer: W,
-    globals: HashMap<String, LoxValue>,
+    globals: FnvHashMap<String, LoxValue>,
     frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
 }
@@ -45,7 +44,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Self {
             stack: Vec::new(),
             writer,
-            globals: HashMap::new(),
+            globals: FnvHashMap::default(),
             frames: core::array::from_fn(|_| CallFrame::new()),
             frame_count: 0,
         }
@@ -76,9 +75,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline(always)]
     fn pop(&mut self) -> Result<LoxValue, ProgramError> {
-        self.stack
-            .pop()
-            .ok_or(ProgramError::Runtime("Instructions stack empty".to_owned()))
+        self.stack.pop().ok_or(ProgramError::InstructionsStackEmpty)
     }
 
     #[inline(always)]
@@ -92,10 +89,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline(always)]
     fn peek(&self, distance: usize) -> Result<&LoxValue, ProgramError> {
         if self.stack.len() < distance + 1 {
-            Err(ProgramError::Runtime(format!(
-                "Not enough stack capacity for distance {distance}. Current stack size is {}",
-                self.stack.len()
-            )))
+            Err(ProgramError::NotEnoughStackCapacity(
+                distance,
+                self.stack.len(),
+            ))
         } else {
             Ok(&self.stack[self.stack.len() - 1 - distance])
         }
@@ -199,7 +196,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let a = a.try_num()?;
                     let b = b.try_num()?;
                     if b == 0.0 {
-                        return Err(ProgramError::Runtime("Division by zero".to_owned()));
+                        return Err(ProgramError::DivizionByZero);
                     }
                     self.push(LoxValue::Number(a / b));
                     ip += 1;
@@ -329,9 +326,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         match callee {
             LoxValue::Function(func) => self.call(func, args_count),
             LoxValue::Native(func) => self.call_native(func, args_count),
-            _ => Err(ProgramError::Runtime(
-                "Can only call functions and classes.".to_string(),
-            )),
+            _ => Err(ProgramError::InvalidCallable),
         }
     }
 
