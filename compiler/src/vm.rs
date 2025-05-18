@@ -67,10 +67,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.globals.insert(clock_name, clock);
     }
 
+    #[inline(always)]
     fn push(&mut self, value: LoxValue) {
         self.stack.push(value);
     }
 
+    #[inline(always)]
     fn pop(&mut self) -> crate::Result<LoxValue> {
         self.stack
             .pop()
@@ -79,6 +81,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             )))
     }
 
+    #[inline(always)]
     fn pop_stack_n_times(&mut self, num_to_pop: usize) -> crate::Result<()> {
         for _ in 0..num_to_pop {
             self.pop()?;
@@ -86,6 +89,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline(always)]
     fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
         if self.stack.len() < distance + 1 {
             Err(CompileError::RuntimeError(miette::miette!(
@@ -97,10 +101,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
     }
 
+    #[inline(always)]
     fn frame(&mut self) -> &mut CallFrame {
         &mut self.frames[self.frame_count - 1]
     }
 
+    #[inline(always)]
     fn chunk(&self) -> &Chunk {
         &self.frames[self.frame_count - 1].function.chunk
     }
@@ -320,6 +326,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> crate::Result<()> {
         match callee {
             LoxValue::Function(func) => self.call(func, args_count),
@@ -330,6 +337,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
     }
 
+    #[inline]
     fn call(&mut self, func: Function, args_count: usize) -> crate::Result<()> {
         self.frame_count += 1;
         self.frame().slots_offset = self.stack.len() - args_count;
@@ -337,6 +345,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.run()
     }
 
+    #[inline]
     fn call_native(&mut self, func: NativeFunction, args_count: usize) -> crate::Result<()> {
         let slots_offset = self.stack.len() - args_count;
         let result = match func.name.as_str() {
@@ -354,6 +363,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn set_global(&mut self, offset: usize) -> crate::Result<()> {
         let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
@@ -368,6 +378,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn get_global(&mut self, offset: usize) -> crate::Result<()> {
         let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
@@ -380,6 +391,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn define_global(&mut self, offset: usize) -> crate::Result<()> {
         let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
@@ -390,6 +402,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn clock_native(&self, _: usize, _: usize) -> LoxValue {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
