@@ -1,6 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use num_traits::FromPrimitive;
 
@@ -59,6 +60,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     pub fn init(&mut self) {
         self.stack.clear();
+        let clock_name = "clock".to_string();
+        let clock = LoxValue::Native(NativeFunction {
+            arity: 0,
+            name: clock_name.clone(),
+        });
+        self.globals.insert(clock_name, clock);
     }
 
     fn push(&mut self, value: LoxValue) {
@@ -331,9 +338,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn call_native(&mut self, func: NativeFunction, args_count: usize) -> crate::Result<()> {
-        self.frame_count += 1;
-        self.frame().slots_offset = self.stack.len() - args_count;
-        //self.frame().function = func;
+        let slots_offset = self.stack.len() - args_count;
+        let result = match func.name.as_str() {
+            "clock" => self.clock_native(slots_offset, args_count),
+            _ => {
+                return Err(CompileError::RuntimeError(miette::miette!(
+                    "Undefined native function '{}'",
+                    func.name
+                )));
+            }
+        };
+        let num_to_pop = func.arity + 1;
+        self.pop_stack_n_times(num_to_pop)?;
+        self.push(result);
         Ok(())
     }
 
@@ -371,6 +388,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.globals.insert(name.clone(), value);
         self.pop()?;
         Ok(())
+    }
+
+    fn clock_native(&self, _: usize, _: usize) -> LoxValue {
+        let start = SystemTime::now();
+        let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
+        let seconds = since_the_epoch.as_secs();
+        LoxValue::Number(seconds as f64)
     }
 }
 
@@ -444,6 +468,7 @@ mod tests {
     #[test_case("fun fib(n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); } print fib(8);", "21" ; "fibonacci")]
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(1);", "1" ; "conditional return success")]
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
+    #[test_case("print clock() - clock();", "0" ; "simple clock call")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
