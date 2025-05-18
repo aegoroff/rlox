@@ -120,10 +120,7 @@ impl Chunk {
     }
 
     pub fn read_opcode(&self, offset: usize) -> Result<OpCode, ProgramError> {
-        OpCode::from_u8(self.code[offset]).ok_or(ProgramError::Compile(format!(
-            "Invalid instruction: {}",
-            self.code[offset]
-        )))
+        OpCode::from_u8(self.code[offset]).ok_or(ProgramError::InvalidInstruction(offset))
     }
 
     pub fn read_constant(&self, offset: usize) -> LoxValue {
