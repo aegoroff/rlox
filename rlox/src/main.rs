@@ -107,11 +107,8 @@ fn compile(content: String) -> miette::Result<()> {
     let mut vm = VirtualMachine::new(stdout());
     vm.init();
 
-    vm.interpret(&content).map_err(|err| match err {
-        compiler::CompileError::CompileError(e) | compiler::CompileError::RuntimeError(e) => {
-            e.with_source_code(content)
-        }
-    })
+    vm.interpret(&content)
+        .map_err(|err| err.with_source_code(content))
 }
 
 fn print_bugreport(_matches: &ArgMatches) {

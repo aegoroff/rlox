@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use crate::{CompileError, chunk::Chunk};
+use crate::{ProgramError, chunk::Chunk};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoxValue {
@@ -43,7 +43,7 @@ impl LoxValue {
         }
     }
 
-    pub fn less(&self, other: &LoxValue) -> crate::Result<bool> {
+    pub fn less(&self, other: &LoxValue) -> Result<bool, ProgramError> {
         if let Ok(l) = self.try_num() {
             let r = other.try_num()?;
             Ok(l < r)
@@ -54,37 +54,37 @@ impl LoxValue {
             let r = other.try_str()?;
             Ok(l < r)
         } else {
-            Err(CompileError::CompileError(miette::miette!(
-                "Operands must be numbers"
-            )))
+            Err(ProgramError::Compile(
+                "Operands must be numbers".to_string(),
+            ))
         }
     }
 
-    pub fn try_num(&self) -> crate::Result<f64> {
+    pub fn try_num(&self) -> Result<f64, ProgramError> {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(CompileError::CompileError(miette::miette!(
+            Err(ProgramError::Compile(format!(
                 "Expected number. But was {self}"
             )))
         }
     }
 
-    pub fn try_str(&self) -> crate::Result<&String> {
+    pub fn try_str(&self) -> Result<&String, ProgramError> {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(CompileError::CompileError(miette::miette!(
+            Err(ProgramError::Compile(format!(
                 "Expected string. But was {self}"
             )))
         }
     }
 
-    pub fn try_bool(&self) -> crate::Result<bool> {
+    pub fn try_bool(&self) -> Result<bool, ProgramError> {
         match self {
             LoxValue::Bool(b) => Ok(*b),
             LoxValue::Nil => Ok(false),
-            _ => Err(CompileError::CompileError(miette::miette!(
+            _ => Err(ProgramError::Compile(format!(
                 "Expected boolean. But was {self}"
             ))),
         }

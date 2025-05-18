@@ -1,19 +1,24 @@
+use std::fmt::Display;
+
 mod chunk;
 pub mod compile;
 pub mod value;
 pub mod vm;
 
-use miette::Diagnostic;
-use thiserror::Error;
-
 extern crate num_derive;
 
-pub type Result<T, E = CompileError> = core::result::Result<T, E>;
+pub type Result<T, E = miette::Report> = core::result::Result<T, E>;
 
-#[derive(Debug, Error, Diagnostic)]
-#[error("Program error")]
-#[diagnostic()]
-pub enum CompileError {
-    CompileError(miette::Report),
-    RuntimeError(miette::Report),
+pub enum ProgramError {
+    Compile(String),
+    Runtime(String),
+}
+
+impl Display for ProgramError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProgramError::Compile(s) => write!(f, "{s}"),
+            ProgramError::Runtime(s) => write!(f, "{s}"),
+        }
+    }
 }

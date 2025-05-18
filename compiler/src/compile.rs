@@ -8,7 +8,6 @@ use num_traits::FromPrimitive;
 use scanner::{Lexer, Token};
 
 use crate::{
-    CompileError,
     chunk::{MAX_SHORT_VALUE, OpCode},
     value::{Function, LoxValue},
 };
@@ -128,10 +127,10 @@ impl<'a> Parser<'a> {
 
     fn function(&mut self, fun_type: FunctionType) -> crate::Result<()> {
         let Token::Identifier(name) = *self.previous.borrow() else {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Identifier expected")],
                 "Identifier error"
-            )));
+            ));
         };
 
         let compiler = Compiler::new(fun_type, Some(self.compiler.clone()), name);
@@ -171,10 +170,10 @@ impl<'a> Parser<'a> {
 
     fn parse_variable(&mut self) -> crate::Result<usize> {
         let Token::Identifier(id) = *self.current.borrow() else {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Identifier expected")],
                 "Identifier error"
-            )));
+            ));
         };
         self.advance()?;
 
@@ -200,13 +199,13 @@ impl<'a> Parser<'a> {
             }
         });
         if existing {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     format!("Already a variables with this name '{name}' in the same scope")
                 )],
                 "Variable declaration error"
-            )));
+            ));
         }
         self.add_local(name)?;
         Ok(())
@@ -217,13 +216,13 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         if self.compiler.borrow().locals.len() >= MAX_SHORT_VALUE {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     "Too many local variables in function."
                 )],
                 "Local variables error"
-            )));
+            ));
         }
         let local = Local::new(name, None);
         self.compiler.borrow_mut().locals.push(local);
@@ -288,13 +287,13 @@ impl<'a> Parser<'a> {
 
     fn return_statement(&mut self) -> crate::Result<()> {
         if let FunctionType::Script = self.compiler.borrow().function_type {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     "Can't return from top-level code."
                 )],
                 "Return usage error"
-            )));
+            ));
         }
         if self.matches(&Token::Semicolon)? {
             self.emit_return();
@@ -406,14 +405,13 @@ impl<'a> Parser<'a> {
         let previous = self.previous.clone();
         let precedence = Parser::get_precedence(&previous.borrow());
         let precedence = precedence as u8 + 1;
-        let precedence =
-            Precedence::from_u8(precedence).ok_or(CompileError::CompileError(miette::miette!(
-                labels = vec![LabeledSpan::at(
-                    self.current_span(),
-                    format!("Invalid precedence: {}", precedence)
-                )],
-                "Precedence error"
-            )))?;
+        let precedence = Precedence::from_u8(precedence).ok_or(miette::miette!(
+            labels = vec![LabeledSpan::at(
+                self.current_span(),
+                format!("Invalid precedence: {}", precedence)
+            )],
+            "Precedence error"
+        ))?;
         self.parse_precedence(precedence)?;
         match *previous.borrow() {
             Token::Minus => {
@@ -505,7 +503,7 @@ impl<'a> Parser<'a> {
     fn number(&mut self) -> crate::Result<()> {
         self.current_span();
         let Token::Number(number) = *self.previous.borrow() else {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     format!(
@@ -514,7 +512,7 @@ impl<'a> Parser<'a> {
                     )
                 )],
                 "Number error"
-            )));
+            ));
         };
         self.emit_constant(LoxValue::Number(number));
         Ok(())
@@ -526,7 +524,7 @@ impl<'a> Parser<'a> {
 
     fn string(&mut self) -> crate::Result<()> {
         let Token::String(str) = *self.previous.borrow() else {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     format!(
@@ -535,7 +533,7 @@ impl<'a> Parser<'a> {
                     )
                 )],
                 "String error"
-            )));
+            ));
         };
         let s = str.to_owned();
         let value = LoxValue::String(s);
@@ -557,7 +555,7 @@ impl<'a> Parser<'a> {
                 self.emit_opcode(OpCode::Nil);
                 Ok(())
             }
-            _ => Err(CompileError::CompileError(miette::miette!(
+            _ => Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     format!(
@@ -566,7 +564,7 @@ impl<'a> Parser<'a> {
                     )
                 )],
                 "Literal error"
-            ))),
+            )),
         }
     }
 
@@ -600,7 +598,7 @@ impl<'a> Parser<'a> {
         can_assign: bool,
     ) -> crate::Result<()> {
         let Token::Identifier(id) = *token.borrow() else {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     format!(
@@ -609,7 +607,7 @@ impl<'a> Parser<'a> {
                     )
                 )],
                 "Variable error"
-            )));
+            ));
         };
         let mut set_code = OpCode::SetGlobal;
         let mut get_code = OpCode::GetGlobal;
@@ -650,13 +648,13 @@ impl<'a> Parser<'a> {
             return Ok(None);
         };
         if l.depth.is_none() {
-            Err(CompileError::CompileError(miette::miette!(
+            Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     "Can't read local variable in its own initializer."
                 )],
                 "Local variable resolving error"
-            )))
+            ))
         } else {
             Ok(Some(self.compiler.borrow().locals.len() - 1 - i))
         }
@@ -687,13 +685,13 @@ impl<'a> Parser<'a> {
             self.call_infix(&previous.borrow())?;
         }
         if can_assign && self.matches(&Token::Equal)? {
-            Err(CompileError::CompileError(miette::miette!(
+            Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     "Invalid assignment target."
                 )],
                 "Assignment failed"
-            )))
+            ))
         } else {
             Ok(())
         }
@@ -753,7 +751,7 @@ impl<'a> Parser<'a> {
                 self.current = Rc::new(RefCell::new(t));
                 Ok(())
             }
-            Err(r) => Err(CompileError::CompileError(r)),
+            Err(r) => Err(r),
         }
     }
 
@@ -770,7 +768,7 @@ impl<'a> Parser<'a> {
         if self.matches(token)? {
             Ok(())
         } else {
-            Err(CompileError::CompileError(miette::miette!(
+            Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     format!(
@@ -779,7 +777,7 @@ impl<'a> Parser<'a> {
                     )
                 )],
                 "Unexpected token error"
-            )))
+            ))
         }
     }
 
@@ -831,10 +829,10 @@ impl<'a> Parser<'a> {
 
         let offset = self.chunk_code_size() - loop_start + 2;
         if offset > u16::MAX as usize {
-            return Err(CompileError::CompileError(miette::miette!(
+            return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Loop body too large.")],
                 "Loop body error."
-            )));
+            ));
         }
         self.compiler
             .borrow_mut()

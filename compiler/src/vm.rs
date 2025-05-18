@@ -3,9 +3,9 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::ProgramError;
 use crate::chunk::Chunk;
 use crate::{
-    CompileError,
     chunk::OpCode,
     compile::Parser,
     value::{Function, LoxValue, NativeFunction},
@@ -55,6 +55,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
         self.call(function, 0)
+            .map_err(|e| miette::miette!(e.to_string()))
     }
 
     pub fn init(&mut self) {
@@ -73,16 +74,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline(always)]
-    fn pop(&mut self) -> crate::Result<LoxValue> {
+    fn pop(&mut self) -> Result<LoxValue, ProgramError> {
         self.stack
             .pop()
-            .ok_or(CompileError::RuntimeError(miette::miette!(
-                "Instructions stack empty"
-            )))
+            .ok_or(ProgramError::Runtime("Instructions stack empty".to_owned()))
     }
 
     #[inline(always)]
-    fn pop_stack_n_times(&mut self, num_to_pop: usize) -> crate::Result<()> {
+    fn pop_stack_n_times(&mut self, num_to_pop: usize) -> Result<(), ProgramError> {
         for _ in 0..num_to_pop {
             self.pop()?;
         }
@@ -90,9 +89,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline(always)]
-    fn peek(&self, distance: usize) -> crate::Result<&LoxValue> {
+    fn peek(&self, distance: usize) -> Result<&LoxValue, ProgramError> {
         if self.stack.len() < distance + 1 {
-            Err(CompileError::RuntimeError(miette::miette!(
+            Err(ProgramError::Runtime(format!(
                 "Not enough stack capacity for distance {distance}. Current stack size is {}",
                 self.stack.len()
             )))
@@ -111,7 +110,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         &self.frames[self.frame_count - 1].function.chunk
     }
 
-    fn run(&mut self) -> crate::Result<()> {
+    fn run(&mut self) -> Result<(), ProgramError> {
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
@@ -199,9 +198,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let a = a.try_num()?;
                     let b = b.try_num()?;
                     if b == 0.0 {
-                        return Err(CompileError::RuntimeError(miette::miette!(
-                            "Division by zero"
-                        )));
+                        return Err(ProgramError::Runtime("Division by zero".to_owned()));
                     }
                     self.push(LoxValue::Number(a / b));
                     ip += 1;
@@ -249,7 +246,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Print => {
                     let value = self.pop()?;
                     writeln!(self.writer, "{value}")
-                        .map_err(|e| CompileError::RuntimeError(miette::miette!(e)))?;
+                        .map_err(|e| ProgramError::Runtime(e.to_string()))?;
                     ip += 1;
                 }
                 OpCode::Pop => {
@@ -327,18 +324,18 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_value(&mut self, callee: LoxValue, args_count: usize) -> crate::Result<()> {
+    fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), ProgramError> {
         match callee {
             LoxValue::Function(func) => self.call(func, args_count),
             LoxValue::Native(func) => self.call_native(func, args_count),
-            _ => Err(CompileError::RuntimeError(miette::miette!(
-                "Can only call functions and classes."
-            ))),
+            _ => Err(ProgramError::Runtime(
+                "Can only call functions and classes.".to_string(),
+            )),
         }
     }
 
     #[inline]
-    fn call(&mut self, func: Function, args_count: usize) -> crate::Result<()> {
+    fn call(&mut self, func: Function, args_count: usize) -> Result<(), ProgramError> {
         self.frame_count += 1;
         self.frame().slots_offset = self.stack.len() - args_count;
         self.frame().function = func;
@@ -346,12 +343,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_native(&mut self, func: NativeFunction, args_count: usize) -> crate::Result<()> {
+    fn call_native(&mut self, func: NativeFunction, args_count: usize) -> Result<(), ProgramError> {
         let slots_offset = self.stack.len() - args_count;
         let result = match func.name.as_str() {
             "clock" => self.clock_native(slots_offset, args_count),
             _ => {
-                return Err(CompileError::RuntimeError(miette::miette!(
+                return Err(ProgramError::Runtime(format!(
                     "Undefined native function '{}'",
                     func.name
                 )));
@@ -364,11 +361,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn set_global(&mut self, offset: usize) -> crate::Result<()> {
+    fn set_global(&mut self, offset: usize) -> Result<(), ProgramError> {
         let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
         if !self.globals.contains_key(name) {
-            return Err(CompileError::RuntimeError(miette::miette!(
+            return Err(ProgramError::Runtime(format!(
                 "Undefined variable '{name}'"
             )));
         }
@@ -379,11 +376,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn get_global(&mut self, offset: usize) -> crate::Result<()> {
+    fn get_global(&mut self, offset: usize) -> Result<(), ProgramError> {
         let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
         let Some(val) = self.globals.get(name) else {
-            return Err(CompileError::RuntimeError(miette::miette!(
+            return Err(ProgramError::Runtime(format!(
                 "Undefined variable '{name}'"
             )));
         };
@@ -392,7 +389,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn define_global(&mut self, offset: usize) -> crate::Result<()> {
+    fn define_global(&mut self, offset: usize) -> Result<(), ProgramError> {
         let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
         let value = self.peek(0)?;
