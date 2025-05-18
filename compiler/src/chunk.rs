@@ -1,12 +1,8 @@
 use std::fmt::Display;
 
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-
 use crate::{ProgramError, value::LoxValue};
 
 #[repr(u8)]
-#[derive(FromPrimitive)]
 pub enum OpCode {
     Constant = 0,
     ConstantLong = 1,
@@ -37,6 +33,45 @@ pub enum OpCode {
     Loop = 26,
     Call = 27,
     Return = 28,
+}
+
+impl TryFrom<u8> for OpCode {
+    type Error = ProgramError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(OpCode::Constant),
+            1 => Ok(OpCode::ConstantLong),
+            2 => Ok(OpCode::Nil),
+            3 => Ok(OpCode::True),
+            4 => Ok(OpCode::False),
+            5 => Ok(OpCode::Pop),
+            6 => Ok(OpCode::GetLocal),
+            7 => Ok(OpCode::SetLocal),
+            8 => Ok(OpCode::GetGlobal),
+            9 => Ok(OpCode::GetGlobalLong),
+            10 => Ok(OpCode::DefineGlobal),
+            11 => Ok(OpCode::DefineGlobalLong),
+            12 => Ok(OpCode::SetGlobal),
+            13 => Ok(OpCode::SetGlobalLong),
+            14 => Ok(OpCode::Equal),
+            15 => Ok(OpCode::Greater),
+            16 => Ok(OpCode::Less),
+            17 => Ok(OpCode::Add),
+            18 => Ok(OpCode::Subtract),
+            19 => Ok(OpCode::Multiply),
+            20 => Ok(OpCode::Divide),
+            21 => Ok(OpCode::Not),
+            22 => Ok(OpCode::Negate),
+            23 => Ok(OpCode::Print),
+            24 => Ok(OpCode::Jump),
+            25 => Ok(OpCode::JumpIfFalse),
+            26 => Ok(OpCode::Loop),
+            27 => Ok(OpCode::Call),
+            28 => Ok(OpCode::Return),
+            _ => Err(ProgramError::InvalidInstruction(value as usize)),
+        }
+    }
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -120,7 +155,7 @@ impl Chunk {
     }
 
     pub fn read_opcode(&self, offset: usize) -> Result<OpCode, ProgramError> {
-        OpCode::from_u8(self.code[offset]).ok_or(ProgramError::InvalidInstruction(offset))
+        OpCode::try_from(self.code[offset])
     }
 
     pub fn read_constant(&self, offset: usize) -> LoxValue {
@@ -161,7 +196,7 @@ impl Chunk {
     }
 
     pub fn disassembly_instruction(&self, offset: usize) -> usize {
-        let Some(code) = OpCode::from_u8(self.code[offset]) else {
+        let Ok(code) = OpCode::try_from(self.code[offset]) else {
             return offset + 1;
         };
         print!("{offset:04} ");
@@ -254,7 +289,7 @@ impl Chunk {
     }
 
     fn get_constant_ix(&self, offset: usize) -> usize {
-        let Some(code) = OpCode::from_u8(self.code[offset]) else {
+        let Ok(code) = OpCode::try_from(self.code[offset]) else {
             return 0;
         };
         match code {
