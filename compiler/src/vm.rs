@@ -104,7 +104,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     fn run(&mut self) -> crate::Result<()> {
         let function = self.frame().function.clone();
-        let chunk = function.chunk.borrow();
+        let chunk = function.chunk;
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");

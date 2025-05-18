@@ -305,7 +305,6 @@ impl<'a> Parser<'a> {
                 .borrow_mut()
                 .function
                 .chunk
-                .borrow_mut()
                 .write_code(OpCode::Return, self.tokens.line);
         }
         Ok(())
@@ -793,7 +792,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .patch_jump(exit_jump);
     }
 
@@ -802,7 +800,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_constant(value, self.tokens.line);
     }
 
@@ -811,7 +808,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .add_constant(value)
     }
 
@@ -820,7 +816,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_code(opcode, self.tokens.line);
         self.emit_operand(0xFF);
         self.emit_operand(0xFF);
@@ -832,7 +827,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_code(OpCode::Loop, self.tokens.line);
 
         let offset = self.chunk_code_size() - loop_start + 2;
@@ -846,13 +840,12 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_two_bytes(offset);
         Ok(())
     }
 
     fn chunk_code_size(&self) -> usize {
-        self.compiler.borrow().function.chunk.borrow().code.len()
+        self.compiler.borrow().function.chunk.code.len()
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) {
@@ -860,7 +853,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_code(opcode, self.tokens.line);
     }
 
@@ -869,7 +861,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_operand(value, self.tokens.line);
     }
 
@@ -878,13 +869,11 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_code(OpCode::Nil, self.tokens.line);
         self.compiler
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_code(OpCode::Return, self.tokens.line);
     }
 
