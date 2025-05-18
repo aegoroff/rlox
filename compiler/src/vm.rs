@@ -3,11 +3,10 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use num_traits::FromPrimitive;
-
+use crate::chunk::Chunk;
 use crate::{
     CompileError,
-    chunk::{Chunk, OpCode},
+    chunk::OpCode,
     compile::Parser,
     value::{Function, LoxValue, NativeFunction},
 };
@@ -102,18 +101,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
         &mut self.frames[self.frame_count - 1]
     }
 
+    fn chunk(&self) -> &Chunk {
+        &self.frames[self.frame_count - 1].function.chunk
+    }
+
     fn run(&mut self) -> crate::Result<()> {
-        let function = self.frame().function.clone();
-        let chunk = function.chunk;
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
         }
         let mut ip = self.frame().ip;
-        while ip < chunk.code.len() {
-            let code = OpCode::from_u8(chunk.code[ip]).ok_or(CompileError::CompileError(
-                miette::miette!("Invalid instruction: {}", chunk.code[ip]),
-            ))?;
+        let code_size = self.chunk().code.len();
+        while ip < code_size {
+            let code = self.chunk().read_opcode(ip)?;
             #[cfg(feature = "disassembly")]
             {
                 for value in &self.stack {
@@ -123,7 +123,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             }
             match code {
                 OpCode::Constant => {
-                    let constant = chunk.read_constant(ip);
+                    let constant = self.chunk().read_constant(ip);
                     self.push(constant);
                     ip += 2;
                 }
@@ -140,7 +140,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     break;
                 }
                 OpCode::ConstantLong => {
-                    let constant = chunk.read_constant(ip);
+                    let constant = self.chunk().read_constant(ip);
                     self.push(constant);
                     ip += 4;
                 }
@@ -251,32 +251,32 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 1;
                 }
                 OpCode::DefineGlobal => {
-                    self.define_global(&chunk, ip)?;
+                    self.define_global(ip)?;
                     ip += 2;
                 }
                 OpCode::DefineGlobalLong => {
-                    self.define_global(&chunk, ip)?;
+                    self.define_global(ip)?;
                     ip += 4;
                 }
                 OpCode::GetGlobal => {
-                    self.get_global(&chunk, ip)?;
+                    self.get_global(ip)?;
                     ip += 2;
                 }
                 OpCode::GetGlobalLong => {
-                    self.get_global(&chunk, ip)?;
+                    self.get_global(ip)?;
                     ip += 4;
                 }
                 OpCode::SetGlobal => {
-                    self.set_global(&chunk, ip)?;
+                    self.set_global(ip)?;
                     ip += 2;
                 }
                 OpCode::SetGlobalLong => {
-                    self.set_global(&chunk, ip)?;
+                    self.set_global(ip)?;
                     ip += 4;
                 }
                 OpCode::GetLocal => {
                     let slots_offset = self.frame().slots_offset;
-                    let val = chunk.read_byte(ip + 1);
+                    let val = self.chunk().read_byte(ip + 1);
                     let val = &self.stack[slots_offset + val as usize - 1];
                     let val = val.clone();
                     self.push(val);
@@ -284,14 +284,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::SetLocal => {
                     let slots_offset = self.frame().slots_offset;
-                    let val = chunk.read_byte(ip + 1);
+                    let val = self.chunk().read_byte(ip + 1);
                     let value = self.peek(0)?;
                     let value = value.clone();
                     self.stack[slots_offset + val as usize - 1] = value;
                     ip += 2;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = chunk.read_short(ip + 1);
+                    let offset = self.chunk().read_short(ip + 1);
                     let top = self.peek(0)?;
                     let falsey = !top.is_truthy();
                     ip += 3;
@@ -300,17 +300,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                 }
                 OpCode::Jump => {
-                    let offset = chunk.read_short(ip + 1);
+                    let offset = self.chunk().read_short(ip + 1);
                     ip += 3;
                     ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = chunk.read_short(ip + 1);
+                    let offset = self.chunk().read_short(ip + 1);
                     ip += 3;
                     ip -= offset;
                 }
                 OpCode::Call => {
-                    let args_count = chunk.read_byte(ip + 1);
+                    let args_count = self.chunk().read_byte(ip + 1);
                     let func = self.peek(args_count as usize)?;
                     self.call_value(func.clone(), args_count as usize)?;
                     ip += 2;
@@ -354,8 +354,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    fn set_global(&mut self, chunk: &Chunk, offset: usize) -> crate::Result<()> {
-        let name = chunk.read_constant(offset);
+    fn set_global(&mut self, offset: usize) -> crate::Result<()> {
+        let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
         if !self.globals.contains_key(name) {
             return Err(CompileError::RuntimeError(miette::miette!(
@@ -368,8 +368,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    fn get_global(&mut self, chunk: &Chunk, offset: usize) -> crate::Result<()> {
-        let name = chunk.read_constant(offset);
+    fn get_global(&mut self, offset: usize) -> crate::Result<()> {
+        let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
         let Some(val) = self.globals.get(name) else {
             return Err(CompileError::RuntimeError(miette::miette!(
@@ -380,8 +380,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    fn define_global(&mut self, chunk: &Chunk, offset: usize) -> crate::Result<()> {
-        let name = chunk.read_constant(offset);
+    fn define_global(&mut self, offset: usize) -> crate::Result<()> {
+        let name = self.chunk().read_constant(offset);
         let name = name.try_str()?;
         let value = self.peek(0)?;
         let value = value.clone();
