@@ -54,9 +54,7 @@ impl LoxValue {
             let r = other.try_str()?;
             Ok(l < r)
         } else {
-            Err(ProgramError::Compile(
-                "Operands must be numbers".to_string(),
-            ))
+            Err(ProgramError::OperandsMustBeNumbers)
         }
     }
 
@@ -64,9 +62,7 @@ impl LoxValue {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(ProgramError::Compile(format!(
-                "Expected number. But was {self}"
-            )))
+            Err(ProgramError::ExpectedNumber)
         }
     }
 
@@ -74,9 +70,7 @@ impl LoxValue {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(ProgramError::Compile(format!(
-                "Expected string. But was {self}"
-            )))
+            Err(ProgramError::ExpectedString)
         }
     }
 
@@ -84,9 +78,7 @@ impl LoxValue {
         match self {
             LoxValue::Bool(b) => Ok(*b),
             LoxValue::Nil => Ok(false),
-            _ => Err(ProgramError::Compile(format!(
-                "Expected boolean. But was {self}"
-            ))),
+            _ => Err(ProgramError::ExpectedBool),
         }
     }
 

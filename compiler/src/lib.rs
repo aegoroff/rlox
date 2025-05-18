@@ -17,6 +17,10 @@ pub enum ProgramError {
     NotEnoughStackCapacity(usize, usize),
     DivizionByZero,
     InvalidCallable,
+    OperandsMustBeNumbers,
+    ExpectedNumber,
+    ExpectedString,
+    ExpectedBool,
 }
 
 impl Display for ProgramError {
@@ -32,6 +36,10 @@ impl Display for ProgramError {
             ),
             ProgramError::DivizionByZero => write!(f, "Division by zero"),
             ProgramError::InvalidCallable => write!(f, "Can only call functions and classes."),
+            ProgramError::OperandsMustBeNumbers => write!(f, "Operands must be numbers"),
+            ProgramError::ExpectedNumber => write!(f, "Expected number"),
+            ProgramError::ExpectedString => write!(f, "Expected string"),
+            ProgramError::ExpectedBool => write!(f, "Expected boolean"),
         }
     }
 }
