@@ -406,8 +406,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn clock_native(&self, _: usize, _: usize) -> LoxValue {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let seconds = since_the_epoch.as_secs();
-        LoxValue::Number(seconds as f64)
+        let millis = since_the_epoch.as_millis();
+        LoxValue::Number(millis as f64 * 0.001)
     }
 }
 
