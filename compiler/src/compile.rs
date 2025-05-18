@@ -3,10 +3,11 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use miette::LabeledSpan;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use scanner::{Lexer, Token};
 
 use crate::{
-    ProgramError,
     chunk::{MAX_SHORT_VALUE, OpCode},
     value::{Function, LoxValue},
 };
@@ -19,7 +20,7 @@ pub struct Parser<'a> {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(FromPrimitive, Clone, Copy)]
 enum Precedence {
     None = 0,
     Assignment = 1,
@@ -32,27 +33,6 @@ enum Precedence {
     Unary = 8,
     Call = 9,
     Primary = 10,
-}
-
-impl TryFrom<u8> for Precedence {
-    type Error = ProgramError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Precedence::None),
-            1 => Ok(Precedence::Assignment),
-            2 => Ok(Precedence::Or),
-            3 => Ok(Precedence::And),
-            4 => Ok(Precedence::Equality),
-            5 => Ok(Precedence::Comparison),
-            6 => Ok(Precedence::Term),
-            7 => Ok(Precedence::Factor),
-            8 => Ok(Precedence::Unary),
-            9 => Ok(Precedence::Call),
-            10 => Ok(Precedence::Primary),
-            _ => Err(ProgramError::InvalidInstruction(value as usize)),
-        }
-    }
 }
 
 struct Local<'a> {
@@ -426,12 +406,13 @@ impl<'a> Parser<'a> {
         let previous = self.previous.clone();
         let precedence = Parser::get_precedence(&previous.borrow());
         let precedence = precedence as u8 + 1;
-        let precedence = Precedence::try_from(precedence).map_err(|e| {
-            miette::miette!(
-                labels = vec![LabeledSpan::at(self.current_span(), e.to_string())],
-                "Precedence error"
-            )
-        })?;
+        let precedence = Precedence::from_u8(precedence).ok_or(miette::miette!(
+            labels = vec![LabeledSpan::at(
+                self.current_span(),
+                format!("Invalid precedence: {}", precedence)
+            )],
+            "Precedence error"
+        ))?;
         self.parse_precedence(precedence)?;
         match *previous.borrow() {
             Token::Minus => {
