@@ -1,6 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{ProgramError, chunk::Chunk};
 
@@ -112,7 +112,7 @@ impl Display for LoxValue {
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Function {
     pub arity: usize,
-    pub chunk: Chunk,
+    pub chunk: Rc<RefCell<Chunk>>,
     pub name: String,
 }
 
@@ -127,13 +127,13 @@ impl Function {
     pub fn new(name: &str) -> Self {
         Self {
             arity: 0,
-            chunk: Chunk::new(),
+            chunk: Rc::new(RefCell::new(Chunk::new())),
             name: name.to_owned(),
         }
     }
 
     pub fn disassembly(&self) {
-        self.chunk.disassembly(self.name.as_str());
+        self.chunk.borrow().disassembly(self.name.as_str());
     }
 }
 

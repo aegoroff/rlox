@@ -1,5 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
+use std::cell::Ref;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -106,8 +107,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline(always)]
-    fn chunk(&self) -> &Chunk {
-        &self.frames[self.frame_count - 1].function.chunk
+    fn chunk(&self) -> Ref<Chunk> {
+        self.frames[self.frame_count - 1].function.chunk.borrow()
     }
 
     fn run(&mut self) -> Result<(), ProgramError> {

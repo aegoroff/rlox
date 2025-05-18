@@ -77,7 +77,7 @@ impl Display for OpCode {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<LoxValue>,
