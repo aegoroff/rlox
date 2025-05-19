@@ -714,7 +714,7 @@ impl<'a> Parser<'a> {
                 "Local variable resolving error"
             ))
         } else {
-            Ok(Some(self.compiler.borrow().locals.len() - 1 - i))
+            Ok(Some(compiler.locals.len() - 1 - i))
         }
     }
 
