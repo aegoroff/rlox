@@ -628,11 +628,11 @@ impl<'a> Parser<'a> {
         };
         let mut set_code = OpCode::SetGlobal;
         let mut get_code = OpCode::GetGlobal;
-        let arg = if let Some(i) = self.resolve_local(id)? {
+        let arg = if let Some(i) = self.resolve_local(&self.compiler, id)? {
             set_code = OpCode::SetLocal;
             get_code = OpCode::GetLocal;
             i
-        } else if let Some(i) = self.resolve_upvalue(id)? {
+        } else if let Some(i) = self.resolve_upvalue(&self.compiler, id)? {
             set_code = OpCode::SetUpvalue;
             get_code = OpCode::GetUpvalue;
             i
@@ -657,21 +657,25 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn resolve_upvalue(&mut self, name: &'a str) -> crate::Result<Option<usize>> {
-        let Some(enclosing) = &self.compiler.borrow().enclosing else {
+    fn resolve_upvalue(
+        &self,
+        compiler: &Rc<RefCell<Compiler<'a>>>,
+        name: &'a str,
+    ) -> crate::Result<Option<usize>> {
+        let Some(ref enclosing) = compiler.borrow().enclosing else {
             return Ok(None);
         };
-        let Some(local) = self.resolve_local_from(enclosing, name)? else {
+        let Some(local) = self.resolve_local(enclosing, name)? else {
             return Ok(None);
         };
-        let value = self.add_upvalue(local, true)?;
+        let value = Parser::add_upvalue(compiler, local, true);
 
         Ok(Some(value))
     }
 
-    fn add_upvalue(&self, index: usize, is_local: bool) -> crate::Result<usize> {
-        let mut compiler = self.compiler.borrow_mut();
+    fn add_upvalue(compiler: &Rc<RefCell<Compiler<'a>>>, index: usize, is_local: bool) -> usize {
         let existing = compiler
+            .borrow()
             .function
             .upvalues
             .iter()
@@ -679,18 +683,18 @@ impl<'a> Parser<'a> {
             .find(|(_, upval)| upval.index == index && upval.is_local == is_local)
             .map(|(i, _)| i);
         if let Some(upvalue_ix) = existing {
-            Ok(upvalue_ix)
+            upvalue_ix
         } else {
-            compiler.function.upvalues.push(Upvalue { index, is_local });
-            Ok(compiler.function.upvalues.len() - 1)
+            compiler
+                .borrow_mut()
+                .function
+                .upvalues
+                .push(Upvalue { index, is_local });
+            compiler.borrow().function.upvalues.len() - 1
         }
     }
 
-    fn resolve_local(&self, name: &'a str) -> crate::Result<Option<usize>> {
-        self.resolve_local_from(&self.compiler, name)
-    }
-
-    fn resolve_local_from(
+    fn resolve_local(
         &self,
         compiler: &Rc<RefCell<Compiler<'a>>>,
         name: &'a str,
