@@ -1,6 +1,10 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    ops::Range,
+    rc::Rc,
+};
 
 use miette::LabeledSpan;
 use num_derive::FromPrimitive;
@@ -628,11 +632,11 @@ impl<'a> Parser<'a> {
         };
         let mut set_code = OpCode::SetGlobal;
         let mut get_code = OpCode::GetGlobal;
-        let arg = if let Some(i) = self.resolve_local(&self.compiler, id)? {
+        let arg = if let Some(i) = self.resolve_local(self.compiler.borrow(), id)? {
             set_code = OpCode::SetLocal;
             get_code = OpCode::GetLocal;
             i
-        } else if let Some(i) = self.resolve_upvalue(&self.compiler, id)? {
+        } else if let Some(i) = self.resolve_upvalue(self.compiler.borrow_mut(), id)? {
             set_code = OpCode::SetUpvalue;
             get_code = OpCode::GetUpvalue;
             i
@@ -659,13 +663,13 @@ impl<'a> Parser<'a> {
 
     fn resolve_upvalue(
         &self,
-        compiler: &Rc<RefCell<Compiler<'a>>>,
+        compiler: RefMut<Compiler<'a>>,
         name: &'a str,
     ) -> crate::Result<Option<usize>> {
-        let Some(ref enclosing) = compiler.borrow().enclosing else {
+        let Some(ref enclosing) = compiler.enclosing else {
             return Ok(None);
         };
-        let Some(local) = self.resolve_local(enclosing, name)? else {
+        let Some(local) = self.resolve_local(enclosing.borrow(), name)? else {
             return Ok(None);
         };
         let value = Parser::add_upvalue(compiler, local, true);
@@ -673,9 +677,8 @@ impl<'a> Parser<'a> {
         Ok(Some(value))
     }
 
-    fn add_upvalue(compiler: &Rc<RefCell<Compiler<'a>>>, index: usize, is_local: bool) -> usize {
+    fn add_upvalue(mut compiler: RefMut<Compiler<'a>>, index: usize, is_local: bool) -> usize {
         let existing = compiler
-            .borrow()
             .function
             .upvalues
             .iter()
@@ -685,21 +688,16 @@ impl<'a> Parser<'a> {
         if let Some(upvalue_ix) = existing {
             upvalue_ix
         } else {
-            compiler
-                .borrow_mut()
-                .function
-                .upvalues
-                .push(Upvalue { index, is_local });
-            compiler.borrow().function.upvalues.len() - 1
+            compiler.function.upvalues.push(Upvalue { index, is_local });
+            compiler.function.upvalues.len() - 1
         }
     }
 
     fn resolve_local(
         &self,
-        compiler: &Rc<RefCell<Compiler<'a>>>,
+        compiler: Ref<Compiler<'a>>,
         name: &'a str,
     ) -> crate::Result<Option<usize>> {
-        let compiler = compiler.borrow();
         let Some((i, l)) = compiler
             .locals
             .iter()
