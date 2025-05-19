@@ -291,6 +291,8 @@ impl Chunk {
             | OpCode::DefineGlobal
             | OpCode::GetGlobal
             | OpCode::SetGlobal
+            | OpCode::SetUpvalue
+            | OpCode::GetUpvalue
             | OpCode::Closure => self.code[offset + 1] as usize,
             OpCode::ConstantLong
             | OpCode::DefineGlobalLong
