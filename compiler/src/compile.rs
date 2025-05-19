@@ -661,46 +661,38 @@ impl<'a> Parser<'a> {
         let Some(enclosing) = &self.compiler.borrow().enclosing else {
             return Ok(None);
         };
-        let Some(local) = self.resolve_local_from(enclosing.clone(), name)? else {
+        let Some(local) = self.resolve_local_from(enclosing, name)? else {
             return Ok(None);
         };
-        let value = self.add_upvalue(self.compiler.clone(), local, true)?;
+        let value = self.add_upvalue(local, true)?;
 
         Ok(Some(value))
     }
 
-    fn add_upvalue(
-        &self,
-        compiler: Rc<RefCell<Compiler<'a>>>,
-        index: usize,
-        is_local: bool,
-    ) -> crate::Result<usize> {
-        let Some((upvalue_ix, _)) = compiler
-            .borrow()
+    fn add_upvalue(&self, index: usize, is_local: bool) -> crate::Result<usize> {
+        let mut compiler = self.compiler.borrow_mut();
+        let existing = compiler
             .function
             .upvalues
             .iter()
             .enumerate()
             .find(|(_, upval)| upval.index == index && upval.is_local == is_local)
-        else {
-            compiler
-                .borrow_mut()
-                .function
-                .upvalues
-                .push(Upvalue { index, is_local });
-            return Ok(compiler.borrow().function.upvalues.len() - 1);
-        };
-
-        Ok(upvalue_ix)
+            .map(|(i, _)| i);
+        if let Some(upvalue_ix) = existing {
+            Ok(upvalue_ix)
+        } else {
+            compiler.function.upvalues.push(Upvalue { index, is_local });
+            Ok(compiler.function.upvalues.len() - 1)
+        }
     }
 
     fn resolve_local(&self, name: &'a str) -> crate::Result<Option<usize>> {
-        self.resolve_local_from(self.compiler.clone(), name)
+        self.resolve_local_from(&self.compiler, name)
     }
 
     fn resolve_local_from(
         &self,
-        compiler: Rc<RefCell<Compiler<'a>>>,
+        compiler: &Rc<RefCell<Compiler<'a>>>,
         name: &'a str,
     ) -> crate::Result<Option<usize>> {
         let compiler = compiler.borrow();
