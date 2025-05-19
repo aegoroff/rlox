@@ -335,8 +335,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(val);
                     ip += 2;
                 }
-                OpCode::GetUpvalue => todo!(),
-                OpCode::SetUpvalue => todo!(),
+                OpCode::GetUpvalue => {
+                    let slot = self.chunk().read_byte(ip + 1);
+                    // TODO:
+                    ip += 2;
+                }
+                OpCode::SetUpvalue => {
+                    let slot = self.chunk().read_byte(ip + 1);
+                    // TODO:
+                    ip += 2;
+                }
             }
         }
         Ok(())
