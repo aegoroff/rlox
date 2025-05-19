@@ -425,7 +425,7 @@ impl<'a> Parser<'a> {
         let precedence = Precedence::from_u8(precedence).ok_or(miette::miette!(
             labels = vec![LabeledSpan::at(
                 self.current_span(),
-                format!("Invalid precedence: {}", precedence)
+                format!("Invalid precedence: {precedence}")
             )],
             "Precedence error"
         ))?;

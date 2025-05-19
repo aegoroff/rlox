@@ -74,17 +74,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.globals.insert(clock_name, clock);
     }
 
-    #[inline(always)]
+    #[inline]
     fn push(&mut self, value: LoxValue) {
         self.stack.push(value);
     }
 
-    #[inline(always)]
+    #[inline]
     fn pop(&mut self) -> Result<LoxValue, ProgramError> {
         self.stack.pop().ok_or(ProgramError::InstructionsStackEmpty)
     }
 
-    #[inline(always)]
+    #[inline]
     fn pop_stack_n_times(&mut self, num_to_pop: usize) -> Result<(), ProgramError> {
         for _ in 0..num_to_pop {
             self.pop()?;
@@ -92,7 +92,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    #[inline(always)]
+    #[inline]
     fn peek(&self, distance: usize) -> Result<&LoxValue, ProgramError> {
         if self.stack.len() < distance + 1 {
             Err(ProgramError::NotEnoughStackCapacity(
@@ -104,12 +104,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn frame(&mut self) -> &mut CallFrame {
         &mut self.frames[self.frame_count - 1]
     }
 
-    #[inline(always)]
+    #[inline]
     fn chunk(&self) -> Ref<Chunk> {
         self.frames[self.frame_count - 1]
             .closure
