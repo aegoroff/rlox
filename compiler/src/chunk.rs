@@ -22,22 +22,24 @@ pub enum OpCode {
     DefineGlobalLong = 11,
     SetGlobal = 12,
     SetGlobalLong = 13,
-    Equal = 14,
-    Greater = 15,
-    Less = 16,
-    Add = 17,
-    Subtract = 18,
-    Multiply = 19,
-    Divide = 20,
-    Not = 21,
-    Negate = 22,
-    Print = 23,
-    Jump = 24,
-    JumpIfFalse = 25,
-    Loop = 26,
-    Call = 27,
-    Closure = 28,
-    Return = 29,
+    GetUpvalue = 14,
+    SetUpvalue = 15,
+    Equal = 16,
+    Greater = 17,
+    Less = 18,
+    Add = 19,
+    Subtract = 20,
+    Multiply = 21,
+    Divide = 22,
+    Not = 23,
+    Negate = 24,
+    Print = 25,
+    Jump = 26,
+    JumpIfFalse = 27,
+    Loop = 28,
+    Call = 29,
+    Closure = 30,
+    Return = 31,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -75,6 +77,8 @@ impl Display for OpCode {
             OpCode::Loop => write!(f, "OP_LOOP"),
             OpCode::Call => write!(f, "OP_CALL"),
             OpCode::Closure => write!(f, "OP_CLOSURE"),
+            OpCode::GetUpvalue => write!(f, "OP_GET_UPVALUE"),
+            OpCode::SetUpvalue => write!(f, "OP_SET_UPVALUE"),
         }
     }
 }
@@ -177,9 +181,11 @@ impl Chunk {
             OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
                 self.disassembly_constant(offset, &code)
             }
-            OpCode::SetLocal | OpCode::GetLocal | OpCode::Closure | OpCode::Call => {
-                self.disassembly_byte_instruction(offset, &code)
-            }
+            OpCode::SetLocal
+            | OpCode::GetLocal
+            | OpCode::Call
+            | OpCode::GetUpvalue
+            | OpCode::SetUpvalue => self.disassembly_byte_instruction(offset, &code),
             OpCode::Return
             | OpCode::Nil
             | OpCode::True
@@ -203,6 +209,7 @@ impl Chunk {
                 self.disassembly_jump_instruction(offset, &code, 1)
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
+            OpCode::Closure => self.disassembly_closure_instruction(offset),
         }
     }
 
@@ -217,6 +224,23 @@ impl Chunk {
         let ix = self.code[offset + 1];
         println!("{:<16} {ix:4}", code.to_string());
         offset + 2
+    }
+
+    fn disassembly_closure_instruction(&self, offset: usize) -> usize {
+        let ix = self.code[offset + 1];
+        println!("{:<16} {ix:4}", OpCode::Closure.to_string());
+        let mut offset = offset + 2;
+        let val = &self.constants[ix as usize];
+        if let LoxValue::Function(func) = val {
+            for _ in &func.upvalues {
+                let is_local = self.code[offset];
+                let is_local = if is_local == 1 { "local" } else { "upvalue" };
+                let index = self.code[offset + 1];
+                println!("{:<16} {is_local} {index}", "");
+                offset += 2;
+            }
+        }
+        offset
     }
 
     fn disassembly_jump_instruction(&self, offset: usize, code: &OpCode, sign: i32) -> usize {
@@ -260,9 +284,11 @@ impl Chunk {
             return 0;
         };
         match code {
-            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal | OpCode::Closure => {
-                self.code[offset + 1] as usize
-            }
+            OpCode::Constant
+            | OpCode::DefineGlobal
+            | OpCode::GetGlobal
+            | OpCode::SetGlobal
+            | OpCode::Closure => self.code[offset + 1] as usize,
             OpCode::ConstantLong
             | OpCode::DefineGlobalLong
             | OpCode::GetGlobalLong

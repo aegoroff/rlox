@@ -104,10 +104,17 @@ impl Display for LoxValue {
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
+pub struct Upvalue {
+    pub index: usize,
+    pub is_local: bool,
+}
+
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Function {
     pub arity: usize,
     pub chunk: Rc<RefCell<Chunk>>,
     pub name: String,
+    pub upvalues: Vec<Upvalue>,
 }
 
 impl Display for Function {
@@ -123,6 +130,7 @@ impl Function {
             arity: 0,
             chunk: Rc::new(RefCell::new(Chunk::new())),
             name: name.to_owned(),
+            upvalues: vec![],
         }
     }
 
@@ -160,7 +168,7 @@ pub struct Closure {
 
 impl Display for Closure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<closure {}>", self.function.name)
+        write!(f, "<fn {}>", self.function.name)
     }
 }
 

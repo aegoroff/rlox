@@ -335,6 +335,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(val);
                     ip += 2;
                 }
+                OpCode::GetUpvalue => todo!(),
+                OpCode::SetUpvalue => todo!(),
             }
         }
         Ok(())

@@ -9,7 +9,7 @@ use scanner::{Lexer, Token};
 
 use crate::{
     chunk::{MAX_SHORT_VALUE, OpCode},
-    value::{Function, LoxValue},
+    value::{Function, LoxValue, Upvalue},
 };
 
 pub struct Parser<'a> {
@@ -153,8 +153,22 @@ impl<'a> Parser<'a> {
         self.block()?;
         let function = self.end_compiler();
         self.emit_opcode(OpCode::Closure);
+
+        let uvals: Vec<(usize, usize)> = function
+            .upvalues
+            .iter()
+            .map(|upval| {
+                let is_local = if upval.is_local { 1 } else { 0 };
+                (is_local, upval.index)
+            })
+            .collect();
         let constant = self.make_constant(LoxValue::Function(function));
         self.emit_operand(constant);
+        for (is_local, index) in uvals {
+            self.emit_operand(is_local);
+            self.emit_operand(index);
+        }
+
         Ok(())
     }
 
@@ -618,6 +632,10 @@ impl<'a> Parser<'a> {
             set_code = OpCode::SetLocal;
             get_code = OpCode::GetLocal;
             i
+        } else if let Some(i) = self.resolve_upvalue(id)? {
+            set_code = OpCode::SetUpvalue;
+            get_code = OpCode::GetUpvalue;
+            i
         } else {
             self.identifier_constant(id)
         };
@@ -639,8 +657,53 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn resolve_upvalue(&mut self, name: &'a str) -> crate::Result<Option<usize>> {
+        let Some(enclosing) = &self.compiler.borrow().enclosing else {
+            return Ok(None);
+        };
+        let Some(local) = self.resolve_local_from(enclosing.clone(), name)? else {
+            return Ok(None);
+        };
+        let value = self.add_upvalue(self.compiler.clone(), local, true)?;
+
+        Ok(Some(value))
+    }
+
+    fn add_upvalue(
+        &self,
+        compiler: Rc<RefCell<Compiler<'a>>>,
+        index: usize,
+        is_local: bool,
+    ) -> crate::Result<usize> {
+        let Some((upvalue_ix, _)) = compiler
+            .borrow()
+            .function
+            .upvalues
+            .iter()
+            .enumerate()
+            .find(|(_, upval)| upval.index == index && upval.is_local == is_local)
+        else {
+            compiler
+                .borrow_mut()
+                .function
+                .upvalues
+                .push(Upvalue { index, is_local });
+            return Ok(compiler.borrow().function.upvalues.len() - 1);
+        };
+
+        Ok(upvalue_ix)
+    }
+
     fn resolve_local(&self, name: &'a str) -> crate::Result<Option<usize>> {
-        let compiler = self.compiler.borrow();
+        self.resolve_local_from(self.compiler.clone(), name)
+    }
+
+    fn resolve_local_from(
+        &self,
+        compiler: Rc<RefCell<Compiler<'a>>>,
+        name: &'a str,
+    ) -> crate::Result<Option<usize>> {
+        let compiler = compiler.borrow();
         let Some((i, l)) = compiler
             .locals
             .iter()
