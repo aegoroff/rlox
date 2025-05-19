@@ -20,6 +20,7 @@ pub enum ProgramError {
     ExpectedNumber,
     ExpectedString,
     ExpectedBool,
+    ExpectedFunction,
 }
 
 impl Display for ProgramError {
@@ -38,6 +39,7 @@ impl Display for ProgramError {
             ProgramError::ExpectedNumber => write!(f, "Expected number"),
             ProgramError::ExpectedString => write!(f, "Expected string"),
             ProgramError::ExpectedBool => write!(f, "Expected boolean"),
+            ProgramError::ExpectedFunction => write!(f, "Expected function"),
         }
     }
 }

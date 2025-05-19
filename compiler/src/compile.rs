@@ -152,7 +152,9 @@ impl<'a> Parser<'a> {
         self.consume(&Token::LeftBrace)?;
         self.block()?;
         let function = self.end_compiler();
-        self.emit_constant(LoxValue::Function(function));
+        self.emit_opcode(OpCode::Closure);
+        let constant = self.make_constant(LoxValue::Function(function));
+        self.emit_operand(constant);
         Ok(())
     }
 

@@ -11,6 +11,7 @@ pub enum LoxValue {
     Bool(bool),
     Function(Function),
     Native(NativeFunction),
+    Closure(Closure),
     Nil,
 }
 
@@ -97,6 +98,7 @@ impl Display for LoxValue {
             LoxValue::Nil => write!(f, ""),
             LoxValue::Function(func) => write!(f, "{func}"),
             LoxValue::Native(native) => write!(f, "{native}"),
+            LoxValue::Closure(closure) => write!(f, "{closure}"),
         }
     }
 }
@@ -148,5 +150,22 @@ impl NativeFunction {
             arity,
             name: name.to_owned(),
         }
+    }
+}
+
+#[derive(Default, Debug, PartialEq, Clone)]
+pub struct Closure {
+    pub function: Function,
+}
+
+impl Display for Closure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<closure {}>", self.function.name)
+    }
+}
+
+impl Closure {
+    pub fn new(function: Function) -> Self {
+        Self { function }
     }
 }

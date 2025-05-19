@@ -2,6 +2,7 @@
 
 use crate::ProgramError;
 use crate::chunk::Chunk;
+use crate::value::Closure;
 use crate::{
     chunk::OpCode,
     compile::Parser,
@@ -15,7 +16,7 @@ const FRAMES_MAX: usize = 64;
 
 #[derive(Default)]
 struct CallFrame {
-    function: Function,
+    closure: Closure,
     ip: usize,               // caller's ip
     pub slots_offset: usize, // points to vm's value's stack first value it can use
 }
@@ -23,7 +24,9 @@ struct CallFrame {
 impl CallFrame {
     fn new() -> Self {
         Self {
-            function: Function::new(""),
+            closure: Closure {
+                function: Function::new(""),
+            },
             ip: 0,
             slots_offset: 1, // caller function itself
         }
@@ -54,7 +57,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let mut parser = Parser::new(content);
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
-        self.call(function, 0)
+        let closure = Closure::new(function);
+        self.pop().map_err(|e| miette::miette!(e.to_string()))?;
+        self.push(LoxValue::Closure(closure.clone()));
+        self.call(closure, 0)
             .map_err(|e| miette::miette!(e.to_string()))
     }
 
@@ -105,7 +111,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline(always)]
     fn chunk(&self) -> Ref<Chunk> {
-        self.frames[self.frame_count - 1].function.chunk.borrow()
+        self.frames[self.frame_count - 1]
+            .closure
+            .function
+            .chunk
+            .borrow()
     }
 
     fn run(&mut self) -> Result<(), ProgramError> {
@@ -122,7 +132,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 for value in &self.stack {
                     println!("[{value}]");
                 }
-                chunk.disassembly_instruction(ip);
+                self.chunk().disassembly_instruction(ip);
             }
             match code {
                 OpCode::Constant => {
@@ -137,7 +147,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         break;
                     }
 
-                    let num_to_pop = self.frame().function.arity + 1;
+                    let num_to_pop = self.frame().closure.function.arity + 1;
                     self.pop_stack_n_times(num_to_pop)?;
                     self.push(value);
                     break;
@@ -316,6 +326,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.call_value(func.clone(), args_count as usize)?;
                     ip += 2;
                 }
+                OpCode::Closure => {
+                    let constant = self.chunk().read_constant(ip);
+                    let LoxValue::Function(f) = constant else {
+                        return Err(ProgramError::ExpectedFunction);
+                    };
+                    let val = LoxValue::Closure(Closure::new(f));
+                    self.push(val);
+                    ip += 2;
+                }
             }
         }
         Ok(())
@@ -324,17 +343,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), ProgramError> {
         match callee {
-            LoxValue::Function(func) => self.call(func, args_count),
+            LoxValue::Closure(closure) => self.call(closure, args_count),
             LoxValue::Native(func) => self.call_native(func, args_count),
             _ => Err(ProgramError::InvalidCallable),
         }
     }
 
     #[inline]
-    fn call(&mut self, func: Function, args_count: usize) -> Result<(), ProgramError> {
+    fn call(&mut self, closure: Closure, args_count: usize) -> Result<(), ProgramError> {
         self.frame_count += 1;
         self.frame().slots_offset = self.stack.len() - args_count;
-        self.frame().function = func;
+        self.frame().closure = closure;
         self.run()
     }
 

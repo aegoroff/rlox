@@ -36,7 +36,8 @@ pub enum OpCode {
     JumpIfFalse = 25,
     Loop = 26,
     Call = 27,
-    Return = 28,
+    Closure = 28,
+    Return = 29,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -73,6 +74,7 @@ impl Display for OpCode {
             OpCode::Jump => write!(f, "OP_JUMP"),
             OpCode::Loop => write!(f, "OP_LOOP"),
             OpCode::Call => write!(f, "OP_CALL"),
+            OpCode::Closure => write!(f, "OP_CLOSURE"),
         }
     }
 }
@@ -175,7 +177,7 @@ impl Chunk {
             OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
                 self.disassembly_constant(offset, &code)
             }
-            OpCode::SetLocal | OpCode::GetLocal | OpCode::Call => {
+            OpCode::SetLocal | OpCode::GetLocal | OpCode::Closure | OpCode::Call => {
                 self.disassembly_byte_instruction(offset, &code)
             }
             OpCode::Return
@@ -258,7 +260,7 @@ impl Chunk {
             return 0;
         };
         match code {
-            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
+            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal | OpCode::Closure => {
                 self.code[offset + 1] as usize
             }
             OpCode::ConstantLong
