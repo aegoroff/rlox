@@ -163,9 +163,7 @@ impl<'a> Parser<'a> {
         self.consume(&Token::RightParen)?;
         self.consume(&Token::LeftBrace)?;
         self.block()?;
-        let function = self.end_compiler();
-        self.emit_opcode(OpCode::Closure);
-
+        // IMPORTANT: upvalues collecting MUST be before self.end_compiler() call because it changes current compiler.
         let uvals: Vec<(usize, usize)> = self
             .compiler
             .borrow()
@@ -176,6 +174,9 @@ impl<'a> Parser<'a> {
                 (is_local, upval.index)
             })
             .collect();
+        let function = self.end_compiler();
+        self.emit_opcode(OpCode::Closure);
+
         let constant = self.make_constant(LoxValue::Function(function));
         self.emit_operand(constant);
         for (is_local, index) in uvals {
