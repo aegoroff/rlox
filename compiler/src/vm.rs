@@ -352,12 +352,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.chunk().read_byte(ip + 1);
-                    // TODO:
+                    let upvalue = self.frame().closure.upvalues[slot as usize].clone();
+                    self.push(upvalue.location);
                     ip += 2;
                 }
                 OpCode::SetUpvalue => {
                     let slot = self.chunk().read_byte(ip + 1);
-                    // TODO:
+                    let val = self.peek(0)?;
+                    self.frame().closure.upvalues[slot as usize].location = val.clone();
                     ip += 2;
                 }
             }
@@ -521,6 +523,21 @@ mod tests {
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
     #[test_case("fun foo() { var i = 1; fun bar(x) { return i + x; } return bar; } print foo()(2);", "3" ; "closure")]
     #[test_case("var f; { var local = \"local\"; fun f_() { print local; } f = f_; } f();", "local" ; "closure1")]
+    #[test_case(r#"fun outer() {
+  var a = 1;
+  var b = 2;
+  fun middle() {
+    var c = 3;
+    var d = 4;
+    fun inner() {
+      print a + c + b + d;
+    }
+    inner();
+  }
+  middle();
+}
+
+outer();"#, "10" ; "closure2")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
