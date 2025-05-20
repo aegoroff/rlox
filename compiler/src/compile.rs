@@ -60,7 +60,7 @@ pub struct Compiler<'a> {
     upvalues: Vec<Upvalue>,
 }
 
-pub struct Upvalue {
+struct Upvalue {
     pub index: usize,
     pub is_local: bool,
 }
