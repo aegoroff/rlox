@@ -233,7 +233,7 @@ impl Chunk {
         let val = &self.constants[ix as usize];
         if let LoxValue::Function(func) = val {
             println!("{:<16} {ix:4} {func}", OpCode::Closure.to_string());
-            for _ in &func.upvalues {
+            for _ in 0..func.upvalue_count {
                 let is_local = self.code[offset];
                 let is_local = if is_local == 1 { "local" } else { "upvalue" };
                 let index = self.code[offset + 1];

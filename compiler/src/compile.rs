@@ -13,7 +13,7 @@ use scanner::{Lexer, Token};
 
 use crate::{
     chunk::{MAX_SHORT_VALUE, OpCode},
-    value::{Function, LoxValue, Upvalue},
+    value::{Function, LoxValue},
 };
 
 pub struct Parser<'a> {
@@ -57,6 +57,12 @@ pub struct Compiler<'a> {
     scope_depth: usize,
     pub function: Function,
     function_type: FunctionType,
+    upvalues: Vec<Upvalue>,
+}
+
+pub struct Upvalue {
+    pub index: usize,
+    pub is_local: bool,
 }
 
 #[derive(Default)]
@@ -79,6 +85,7 @@ impl<'a> Compiler<'a> {
             function: Function::new(name),
             function_type,
             enclosing,
+            upvalues: vec![],
         }
     }
 }
@@ -158,7 +165,9 @@ impl<'a> Parser<'a> {
         let function = self.end_compiler();
         self.emit_opcode(OpCode::Closure);
 
-        let uvals: Vec<(usize, usize)> = function
+        let uvals: Vec<(usize, usize)> = self
+            .compiler
+            .borrow()
             .upvalues
             .iter()
             .map(|upval| {
@@ -679,7 +688,6 @@ impl<'a> Parser<'a> {
 
     fn add_upvalue(mut compiler: RefMut<Compiler<'a>>, index: usize, is_local: bool) -> usize {
         let existing = compiler
-            .function
             .upvalues
             .iter()
             .enumerate()
@@ -688,8 +696,9 @@ impl<'a> Parser<'a> {
         if let Some(upvalue_ix) = existing {
             upvalue_ix
         } else {
-            compiler.function.upvalues.push(Upvalue { index, is_local });
-            compiler.function.upvalues.len() - 1
+            compiler.upvalues.push(Upvalue { index, is_local });
+            compiler.function.upvalue_count = compiler.upvalues.len() - 1;
+            compiler.function.upvalue_count
         }
     }
 

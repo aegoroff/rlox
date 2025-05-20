@@ -104,17 +104,11 @@ impl Display for LoxValue {
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
-pub struct Upvalue {
-    pub index: usize,
-    pub is_local: bool,
-}
-
-#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Function {
     pub arity: usize,
     pub chunk: Rc<RefCell<Chunk>>,
     pub name: String,
-    pub upvalues: Vec<Upvalue>,
+    pub upvalue_count: usize,
 }
 
 impl Display for Function {
@@ -130,7 +124,7 @@ impl Function {
             arity: 0,
             chunk: Rc::new(RefCell::new(Chunk::new())),
             name: name.to_owned(),
-            upvalues: vec![],
+            upvalue_count: 0,
         }
     }
 
