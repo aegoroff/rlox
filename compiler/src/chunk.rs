@@ -39,7 +39,8 @@ pub enum OpCode {
     Loop = 28,
     Call = 29,
     Closure = 30,
-    Return = 31,
+    CloseUpvalue = 31,
+    Return = 32,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -79,6 +80,7 @@ impl Display for OpCode {
             OpCode::Closure => write!(f, "OP_CLOSURE"),
             OpCode::GetUpvalue => write!(f, "OP_GET_UPVALUE"),
             OpCode::SetUpvalue => write!(f, "OP_SET_UPVALUE"),
+            OpCode::CloseUpvalue => write!(f, "OP_CLOSE_UPVALUE"),
         }
     }
 }
@@ -200,6 +202,7 @@ impl Chunk {
             | OpCode::Greater
             | OpCode::Less
             | OpCode::Print
+            | OpCode::CloseUpvalue
             | OpCode::Pop => self.disassembly_simple_instruction(offset, &code),
             OpCode::GetGlobalLong
             | OpCode::SetGlobalLong

@@ -42,11 +42,16 @@ enum Precedence {
 struct Local<'a> {
     name: &'a str,
     depth: Option<usize>,
+    pub is_captured: bool,
 }
 
 impl<'a> Local<'a> {
     fn new(name: &'a str, depth: Option<usize>) -> Self {
-        Self { name, depth }
+        Self {
+            name,
+            depth,
+            is_captured: false,
+        }
     }
 }
 
@@ -616,7 +621,14 @@ impl<'a> Parser<'a> {
             if self.compiler.borrow().locals[i].depth.unwrap_or(0)
                 > self.compiler.borrow().scope_depth
             {
-                self.emit_opcode(OpCode::Pop);
+                if self.compiler.borrow().locals[self.compiler.borrow().locals.len() - 1]
+                    .is_captured
+                {
+                    self.emit_opcode(OpCode::CloseUpvalue);
+                } else {
+                    self.emit_opcode(OpCode::Pop);
+                }
+
                 self.compiler.borrow_mut().locals.pop();
             } else {
                 break;
@@ -681,6 +693,7 @@ impl<'a> Parser<'a> {
             return Ok(None);
         };
         let result = if let Some(local) = self.resolve_local(enclosing.borrow(), name)? {
+            enclosing.borrow_mut().locals[local].is_captured = true;
             let value = Parser::add_upvalue(compiler, local, true);
             Some(value)
         } else if let Some(upvalue) = self.resolve_upvalue(enclosing.borrow_mut(), name)? {

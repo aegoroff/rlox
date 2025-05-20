@@ -339,8 +339,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         ip += 2;
                         if is_local == 1 {
                             let slots_offset = self.frame().slots_offset;
-                            let val = &self.stack[slots_offset + index as usize - 1];
-                            closure.upvalues.push(Upvalue::new(val.clone()));
+                            closure
+                                .upvalues
+                                .push(Upvalue::new(slots_offset + index as usize - 1));
                         } else {
                             let upvalue = &self.frame().closure.upvalues[index as usize];
                             closure.upvalues.push(upvalue.clone());
@@ -353,14 +354,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::GetUpvalue => {
                     let slot = self.chunk().read_byte(ip + 1);
                     let upvalue = self.frame().closure.upvalues[slot as usize].clone();
-                    self.push(upvalue.location);
+                    self.push(self.stack[upvalue.location].clone());
                     ip += 2;
                 }
                 OpCode::SetUpvalue => {
                     let slot = self.chunk().read_byte(ip + 1);
                     let val = self.peek(0)?;
-                    self.frame().closure.upvalues[slot as usize].location = val.clone();
+                    let val = val.clone();
+                    let location = self.frame().closure.upvalues[slot as usize].location;
+                    self.stack[location] = val;
                     ip += 2;
+                }
+                OpCode::CloseUpvalue => {
+                    self.pop()?;
+                    ip += 1;
                 }
             }
         }
@@ -538,6 +545,7 @@ mod tests {
 }
 
 outer();"#, "10" ; "closure2")]
+    #[test_case("fun outer() { var x = 10; fun inner() { x = 20; } inner(); print x; } outer();", "20" ; "assign in closure")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

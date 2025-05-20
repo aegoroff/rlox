@@ -180,7 +180,7 @@ impl Closure {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Upvalue {
-    pub location: LoxValue,
+    pub location: usize,
 }
 
 impl Display for Upvalue {
@@ -191,7 +191,7 @@ impl Display for Upvalue {
 
 impl Upvalue {
     #[must_use]
-    pub fn new(location: LoxValue) -> Self {
+    pub fn new(location: usize) -> Self {
         Self { location }
     }
 }
