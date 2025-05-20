@@ -2,7 +2,7 @@
 
 use crate::ProgramError;
 use crate::chunk::Chunk;
-use crate::value::Closure;
+use crate::value::{Closure, Upvalue};
 use crate::{
     chunk::OpCode,
     compile::Parser,
@@ -24,9 +24,7 @@ struct CallFrame {
 impl CallFrame {
     fn new() -> Self {
         Self {
-            closure: Closure {
-                function: Function::new(""),
-            },
+            closure: Closure::new(Function::new("")),
             ip: 0,
             slots_offset: 1, // caller function itself
         }
@@ -327,13 +325,30 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::Closure => {
-                    let constant = self.chunk().read_constant(ip);
-                    let LoxValue::Function(f) = constant else {
+                    let function_ix = self.chunk().read_constant(ip);
+                    let LoxValue::Function(f) = function_ix else {
                         return Err(ProgramError::ExpectedFunction);
                     };
-                    let val = LoxValue::Closure(Closure::new(f));
-                    self.push(val);
+                    let upvalues_count = f.upvalue_count;
                     ip += 2;
+
+                    let mut closure = Closure::new(f);
+                    for _ in 0..upvalues_count {
+                        let is_local = self.chunk().read_byte(ip);
+                        let index = self.chunk().read_byte(ip + 1);
+                        ip += 2;
+                        if is_local == 1 {
+                            let slots_offset = self.frame().slots_offset;
+                            let val = &self.stack[slots_offset + index as usize - 1];
+                            closure.upvalues.push(Upvalue::new(val.clone()));
+                        } else {
+                            let upvalue = &self.frame().closure.upvalues[index as usize];
+                            closure.upvalues.push(upvalue.clone());
+                        }
+                    }
+
+                    let val = LoxValue::Closure(closure);
+                    self.push(val);
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.chunk().read_byte(ip + 1);

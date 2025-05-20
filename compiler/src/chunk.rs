@@ -227,12 +227,12 @@ impl Chunk {
     }
 
     fn disassembly_closure_instruction(&self, offset: usize) -> usize {
-        let ix = self.code[offset + 1];
+        let function_ix = self.code[offset + 1];
 
         let mut offset = offset + 2;
-        let val = &self.constants[ix as usize];
+        let val = &self.constants[function_ix as usize];
         if let LoxValue::Function(func) = val {
-            println!("{:<16} {ix:4} {func}", OpCode::Closure.to_string());
+            println!("{:<16} {function_ix:4} {func}", OpCode::Closure.to_string());
             for _ in 0..func.upvalue_count {
                 let is_local = self.code[offset];
                 let is_local = if is_local == 1 { "local" } else { "upvalue" };
@@ -241,7 +241,7 @@ impl Chunk {
                 offset += 2;
             }
         } else {
-            println!("{:<16} {ix:4}", OpCode::Closure.to_string());
+            println!("{:<16} {function_ix:4}", OpCode::Closure.to_string());
         }
         offset
     }

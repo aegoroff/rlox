@@ -60,6 +60,7 @@ pub struct Compiler<'a> {
     upvalues: Vec<Upvalue>,
 }
 
+#[derive(Debug)]
 struct Upvalue {
     pub index: usize,
     pub is_local: bool,
@@ -706,8 +707,8 @@ impl<'a> Parser<'a> {
             upvalue_ix
         } else {
             compiler.upvalues.push(Upvalue { index, is_local });
-            compiler.function.upvalue_count = compiler.upvalues.len() - 1;
-            compiler.function.upvalue_count
+            compiler.function.upvalue_count = compiler.upvalues.len();
+            compiler.function.upvalue_count - 1
         }
     }
 

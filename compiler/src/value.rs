@@ -158,6 +158,7 @@ impl NativeFunction {
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Closure {
     pub function: Function,
+    pub upvalues: Vec<Upvalue>,
 }
 
 impl Display for Closure {
@@ -168,6 +169,27 @@ impl Display for Closure {
 
 impl Closure {
     pub fn new(function: Function) -> Self {
-        Self { function }
+        let upvalues_count = function.upvalue_count;
+        Self {
+            function,
+            upvalues: Vec::with_capacity(upvalues_count),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Upvalue {
+    pub location: LoxValue,
+}
+
+impl Display for Upvalue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "upvalue")
+    }
+}
+
+impl Upvalue {
+    pub fn new(location: LoxValue) -> Self {
+        Self { location }
     }
 }
