@@ -679,21 +679,16 @@ impl<'a> Parser<'a> {
         let Some(ref enclosing) = compiler.enclosing else {
             return Ok(None);
         };
-        if let Some(local) = self.resolve_local(enclosing.borrow(), name)? {
+        let result = if let Some(local) = self.resolve_local(enclosing.borrow(), name)? {
             let value = Parser::add_upvalue(compiler, local, true);
-            Ok(Some(value))
+            Some(value)
+        } else if let Some(upvalue) = self.resolve_upvalue(enclosing.borrow_mut(), name)? {
+            let value = Parser::add_upvalue(compiler, upvalue, false);
+            Some(value)
         } else {
-            let Some(ref enclosing) = compiler.enclosing else {
-                return Ok(None);
-            };
-            let upvalue = self.resolve_upvalue(enclosing.borrow_mut(), name)?;
-            if let Some(upvalue) = upvalue {
-                let value = Parser::add_upvalue(compiler, upvalue, false);
-                Ok(Some(value))
-            } else {
-                Ok(None)
-            }
-        }
+            None
+        };
+        Ok(result)
     }
 
     fn add_upvalue(mut compiler: RefMut<Compiler<'a>>, index: usize, is_local: bool) -> usize {
