@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
             .upvalues
             .iter()
             .map(|upval| {
-                let is_local = if upval.is_local { 1 } else { 0 };
+                let is_local = usize::from(upval.is_local);
                 (is_local, upval.index)
             })
             .collect();

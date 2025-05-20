@@ -168,6 +168,7 @@ impl Display for Closure {
 }
 
 impl Closure {
+    #[must_use]
     pub fn new(function: Function) -> Self {
         let upvalues_count = function.upvalue_count;
         Self {
@@ -189,6 +190,7 @@ impl Display for Upvalue {
 }
 
 impl Upvalue {
+    #[must_use]
     pub fn new(location: LoxValue) -> Self {
         Self { location }
     }
