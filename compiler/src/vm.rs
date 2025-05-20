@@ -37,6 +37,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     globals: FnvHashMap<String, LoxValue>,
     frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
+    open_upvalues: Option<Box<Upvalue>>,
 }
 
 impl<W: std::io::Write> VirtualMachine<W> {
@@ -48,6 +49,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             globals: FnvHashMap::default(),
             frames: core::array::from_fn(|_| CallFrame::new()),
             frame_count: 0,
+            open_upvalues: None,
         }
     }
 
@@ -341,7 +343,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             let slots_offset = self.frame().slots_offset;
                             closure
                                 .upvalues
-                                .push(Upvalue::new(slots_offset + index as usize - 1));
+                                .push(self.capture_upvalue(slots_offset + index as usize - 1));
                         } else {
                             let upvalue = &self.frame().closure.upvalues[index as usize];
                             closure.upvalues.push(upvalue.clone());
@@ -366,12 +368,39 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::CloseUpvalue => {
+                    // TODO: implement CloseUpvalue opcode handler
                     self.pop()?;
                     ip += 1;
                 }
             }
         }
         Ok(())
+    }
+
+    fn capture_upvalue(&mut self, location: usize) -> Upvalue {
+        let mut prev_upvalue: Option<Box<Upvalue>> = None;
+        let mut upvalue = &self.open_upvalues;
+        while let Some(upval) = upvalue {
+            if upval.location <= location {
+                break;
+            }
+            prev_upvalue = upvalue.clone();
+            upvalue = &upval.next;
+        }
+        if let Some(upvalue) = upvalue {
+            if upvalue.location == location {
+                return *upvalue.clone();
+            }
+        }
+        let mut created_upvalue = Upvalue::new(location);
+        created_upvalue.next = upvalue.clone();
+        if let Some(ref mut prev) = prev_upvalue {
+            prev.next = Some(Box::new(created_upvalue.clone()));
+        } else {
+            self.open_upvalues = Some(Box::new(created_upvalue.clone()));
+        }
+
+        created_upvalue
     }
 
     #[inline]

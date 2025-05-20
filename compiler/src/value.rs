@@ -181,6 +181,7 @@ impl Closure {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Upvalue {
     pub location: usize,
+    pub next: Option<Box<Upvalue>>,
 }
 
 impl Display for Upvalue {
@@ -192,6 +193,9 @@ impl Display for Upvalue {
 impl Upvalue {
     #[must_use]
     pub fn new(location: usize) -> Self {
-        Self { location }
+        Self {
+            location,
+            next: None,
+        }
     }
 }
