@@ -9,7 +9,8 @@ use crate::{
     value::{Function, LoxValue, NativeFunction},
 };
 use fnv::FnvHashMap;
-use std::cell::Ref;
+use std::cell::{Ref, RefCell};
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const FRAMES_MAX: usize = 64;
@@ -141,6 +142,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::Return => {
+                    self.close_upvalues(self.stack.len());
                     let value = self.pop()?;
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
@@ -356,7 +358,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::GetUpvalue => {
                     let slot = self.chunk().read_byte(ip + 1);
                     let upvalue = self.frame().closure.upvalues[slot as usize].clone();
-                    self.push(self.stack[upvalue.location].clone());
+                    if let Some(val) = upvalue.closed {
+                        self.push(val.borrow().clone());
+                    } else {
+                        self.push(self.stack[upvalue.location].clone());
+                    }
+
                     ip += 2;
                 }
                 OpCode::SetUpvalue => {
@@ -368,13 +375,26 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::CloseUpvalue => {
-                    // TODO: implement CloseUpvalue opcode handler
+                    let location = self.stack.len() - 1; // old location upvalues point to
+                    self.close_upvalues(location);
                     self.pop()?;
-                    ip += 1;
+                    ip += 1
                 }
             }
         }
         Ok(())
+    }
+
+    fn close_upvalues(&mut self, last: usize) {
+        while let Some(ref mut open) = self.open_upvalues {
+            if open.location >= last {
+                let val = self.stack[open.location].clone();
+                open.closed = Some(Rc::new(RefCell::new(val)));
+                self.open_upvalues = open.next.clone();
+            } else {
+                break;
+            }
+        }
     }
 
     fn capture_upvalue(&mut self, location: usize) -> Upvalue {

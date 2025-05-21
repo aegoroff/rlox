@@ -182,6 +182,7 @@ impl Closure {
 pub struct Upvalue {
     pub location: usize,
     pub next: Option<Box<Upvalue>>,
+    pub closed: Option<Rc<RefCell<LoxValue>>>,
 }
 
 impl Display for Upvalue {
@@ -196,6 +197,7 @@ impl Upvalue {
         Self {
             location,
             next: None,
+            closed: None,
         }
     }
 }
