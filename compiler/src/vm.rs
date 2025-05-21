@@ -208,7 +208,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let a = a.try_num()?;
                     let b = b.try_num()?;
                     if b == 0.0 {
-                        return Err(ProgramError::DivizionByZero);
+                        return Err(ProgramError::DivisionByZero);
                     }
                     self.push(LoxValue::Number(a / b));
                     ip += 1;
