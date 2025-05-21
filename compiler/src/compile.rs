@@ -157,6 +157,16 @@ impl<'a> Parser<'a> {
 
         while !self.check(&Token::RightParen) {
             self.compiler.borrow_mut().function.arity += 1;
+            if self.compiler.borrow_mut().function.arity > 255 {
+                return Err(miette::miette!(
+                    labels = vec![LabeledSpan::at(
+                        self.current_span(),
+                        "Can't have more than 255 arguments."
+                    )],
+                    "Arguments error"
+                ));
+            }
+
             let constant = self.parse_variable()?;
             self.define_variable(constant);
             if self.check(&Token::RightParen) {
@@ -752,6 +762,15 @@ impl<'a> Parser<'a> {
         let mut result = 0;
         while !self.check(&Token::RightParen) {
             result += 1;
+            if result > 255 {
+                return Err(miette::miette!(
+                    labels = vec![LabeledSpan::at(
+                        self.current_span(),
+                        "Can't have more than 255 arguments."
+                    )],
+                    "Arguments error"
+                ));
+            }
             self.expression()?;
             if self.check(&Token::RightParen) {
                 break;
