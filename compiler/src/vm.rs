@@ -38,7 +38,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     globals: FnvHashMap<String, LoxValue>,
     frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
-    upvalues: Vec<Rc<RefCell<Upvalue>>>,
+    open_upvalues: Vec<Rc<RefCell<Upvalue>>>,
 }
 
 impl<W: std::io::Write> VirtualMachine<W> {
@@ -50,7 +50,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             globals: FnvHashMap::default(),
             frames: core::array::from_fn(|_| CallFrame::new()),
             frame_count: 0,
-            upvalues: vec![],
+            open_upvalues: vec![],
         }
     }
 
@@ -389,13 +389,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     fn close_upvalues(&mut self, location: usize) {
         let value = &self.stack[location];
-        for upval in &self.upvalues {
+        for upval in &self.open_upvalues {
             if upval.borrow().is_open_with_index(location) {
                 upval.replace(Upvalue::Closed(value.clone()));
             }
         }
 
-        self.upvalues.retain(|u| u.borrow().is_open());
+        self.open_upvalues.retain(|u| u.borrow().is_open());
     }
 
     fn capture_upvalue(&mut self, location: usize) -> Rc<RefCell<Upvalue>> {
@@ -403,14 +403,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
             upval
         } else {
             let upval = Rc::new(RefCell::new(Upvalue::Open(location)));
-            self.upvalues.push(upval.clone());
+            self.open_upvalues.push(upval.clone());
             upval
         }
     }
 
     #[inline]
     fn find_open_upvalue(&self, location: usize) -> Option<Rc<RefCell<Upvalue>>> {
-        for upval in self.upvalues.iter().rev() {
+        for upval in self.open_upvalues.iter().rev() {
             if upval.borrow().is_open_with_index(location) {
                 return Some(upval.clone());
             }
