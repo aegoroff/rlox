@@ -168,7 +168,7 @@ impl<'a> Parser<'a> {
         self.consume(&Token::RightParen)?;
         self.consume(&Token::LeftBrace)?;
         self.block()?;
-        // IMPORTANT: upvalues collecting MUST be before self.end_compiler() call because it changes current compiler.
+        // IMPORTANT: upvalues collecting MUST be before self.end_compiler() call because it changes the current compiler.
         let uvals: Vec<(usize, usize)> = self
             .compiler
             .borrow()
@@ -646,7 +646,7 @@ impl<'a> Parser<'a> {
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
                     format!(
-                        "Unexpected token: '{}' Expected: 'idenitifier'",
+                        "Unexpected token: '{}' Expected: 'identifier'",
                         self.previous.borrow()
                     )
                 )],

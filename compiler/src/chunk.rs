@@ -301,9 +301,9 @@ impl Chunk {
             | OpCode::DefineGlobalLong
             | OpCode::GetGlobalLong
             | OpCode::SetGlobalLong => {
-                let op1 = self.code[offset + 1]; // first operand defines constant index in the constants vector
-                let op2 = self.code[offset + 2]; // second operand defines constant index in the constants vector
-                let op3 = self.code[offset + 3]; // third operand defines constant index in the constants vector
+                let op1 = self.code[offset + 1]; // first operand defines constant index in the constant's vector
+                let op2 = self.code[offset + 2]; // second operand defines constant index in the constant's vector
+                let op3 = self.code[offset + 3]; // third operand defines constant index in the constant's vector
 
                 (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize)
             }
