@@ -289,18 +289,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::GetLocal => {
                     let slots_offset = self.frame().slots_offset;
-                    let val = self.chunk().read_byte(ip + 1);
-                    let val = &self.stack[slots_offset + val as usize - 1];
-                    let val = val.clone();
+                    let frame_offset = self.chunk().read_byte(ip + 1);
+                    let val = self.stack[slots_offset + frame_offset as usize - 1].clone();
                     self.push(val);
                     ip += 2;
                 }
                 OpCode::SetLocal => {
                     let slots_offset = self.frame().slots_offset;
-                    let val = self.chunk().read_byte(ip + 1);
+                    let frame_offset = self.chunk().read_byte(ip + 1);
                     let value = self.peek(0)?;
-                    let value = value.clone();
-                    self.stack[slots_offset + val as usize - 1] = value;
+                    self.stack[slots_offset + frame_offset as usize - 1] = value.clone();
                     ip += 2;
                 }
                 OpCode::JumpIfFalse => {
@@ -329,14 +327,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::Closure => {
-                    let function_ix = self.chunk().read_constant(ip);
-                    let LoxValue::Function(f) = function_ix else {
+                    let function_value = self.chunk().read_constant(ip);
+                    let LoxValue::Function(function) = function_value else {
                         return Err(ProgramError::ExpectedFunction);
                     };
-                    let upvalues_count = f.upvalue_count;
+                    let upvalues_count = function.upvalue_count;
                     ip += 2;
 
-                    let mut closure = Closure::new(f);
+                    let mut closure = Closure::new(function);
                     for _ in 0..upvalues_count {
                         let is_local = self.chunk().read_byte(ip);
                         let index = self.chunk().read_byte(ip + 1);
