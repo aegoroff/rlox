@@ -38,7 +38,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     globals: FnvHashMap<String, LoxValue>,
     frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
-    open_upvalues: Option<Box<Upvalue>>,
+    upvalues: Vec<Rc<RefCell<Upvalue>>>,
 }
 
 impl<W: std::io::Write> VirtualMachine<W> {
@@ -50,7 +50,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             globals: FnvHashMap::default(),
             frames: core::array::from_fn(|_| CallFrame::new()),
             frame_count: 0,
-            open_upvalues: None,
+            upvalues: vec![],
         }
     }
 
@@ -142,7 +142,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::Return => {
-                    self.close_upvalues(self.stack.len());
+                    self.close_upvalues(self.stack.len() - 1);
                     let value = self.pop()?;
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
@@ -343,9 +343,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         ip += 2;
                         if is_local == 1 {
                             let slots_offset = self.frame().slots_offset;
-                            closure
-                                .upvalues
-                                .push(self.capture_upvalue(slots_offset + index as usize - 1));
+                            let upvalue = self.capture_upvalue(slots_offset + index as usize - 1);
+                            closure.upvalues.push(upvalue);
                         } else {
                             let upvalue = &self.frame().closure.upvalues[index as usize];
                             closure.upvalues.push(upvalue.clone());
@@ -358,11 +357,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::GetUpvalue => {
                     let slot = self.chunk().read_byte(ip + 1);
                     let upvalue = self.frame().closure.upvalues[slot as usize].clone();
-                    if let Some(val) = upvalue.closed {
-                        self.push(val.borrow().clone());
-                    } else {
-                        self.push(self.stack[upvalue.location].clone());
-                    }
+                    let lox_value = match &*upvalue.borrow() {
+                        Upvalue::Open(location) => self.stack[*location].clone(),
+                        Upvalue::Closed(value) => value.clone(),
+                    };
+                    self.push(lox_value);
 
                     ip += 2;
                 }
@@ -370,8 +369,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let slot = self.chunk().read_byte(ip + 1);
                     let val = self.peek(0)?;
                     let val = val.clone();
-                    let location = self.frame().closure.upvalues[slot as usize].location;
-                    self.stack[location] = val;
+                    let upvalue = self.frame().closure.upvalues[slot as usize].clone();
+                    match &mut *upvalue.borrow_mut() {
+                        Upvalue::Open(location) => self.stack[*location] = val.clone(),
+                        Upvalue::Closed(value) => *value = val.clone(),
+                    };
                     ip += 2;
                 }
                 OpCode::CloseUpvalue => {
@@ -385,42 +387,35 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    fn close_upvalues(&mut self, last: usize) {
-        while let Some(ref mut open) = self.open_upvalues {
-            if open.location >= last {
-                let val = self.stack[open.location].clone();
-                open.closed = Some(Rc::new(RefCell::new(val)));
-                self.open_upvalues = open.next.clone();
-            } else {
-                break;
+    fn close_upvalues(&mut self, location: usize) {
+        let value = &self.stack[location];
+        for upval in &self.upvalues {
+            if upval.borrow().is_open_with_index(location) {
+                upval.replace(Upvalue::Closed(value.clone()));
             }
+        }
+
+        self.upvalues.retain(|u| u.borrow().is_open());
+    }
+
+    fn capture_upvalue(&mut self, location: usize) -> Rc<RefCell<Upvalue>> {
+        if let Some(upval) = self.find_open_uval(location) {
+            upval
+        } else {
+            let upval = Rc::new(RefCell::new(Upvalue::Open(location)));
+            self.upvalues.push(upval.clone());
+            upval
         }
     }
 
-    fn capture_upvalue(&mut self, location: usize) -> Upvalue {
-        let mut prev_upvalue: Option<Box<Upvalue>> = None;
-        let mut upvalue = &self.open_upvalues;
-        while let Some(upval) = upvalue {
-            if upval.location <= location {
-                break;
+    fn find_open_uval(&self, location: usize) -> Option<Rc<RefCell<Upvalue>>> {
+        for upval in self.upvalues.iter().rev() {
+            if upval.borrow().is_open_with_index(location) {
+                return Some(upval.clone());
             }
-            prev_upvalue = upvalue.clone();
-            upvalue = &upval.next;
-        }
-        if let Some(upvalue) = upvalue {
-            if upvalue.location == location {
-                return *upvalue.clone();
-            }
-        }
-        let mut created_upvalue = Upvalue::new(location);
-        created_upvalue.next = upvalue.clone();
-        if let Some(ref mut prev) = prev_upvalue {
-            prev.next = Some(Box::new(created_upvalue.clone()));
-        } else {
-            self.open_upvalues = Some(Box::new(created_upvalue.clone()));
         }
 
-        created_upvalue
+        None
     }
 
     #[inline]

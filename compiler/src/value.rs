@@ -158,7 +158,7 @@ impl NativeFunction {
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Closure {
     pub function: Function,
-    pub upvalues: Vec<Upvalue>,
+    pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
 }
 
 impl Display for Closure {
@@ -179,10 +179,9 @@ impl Closure {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Upvalue {
-    pub location: usize,
-    pub next: Option<Box<Upvalue>>,
-    pub closed: Option<Rc<RefCell<LoxValue>>>,
+pub enum Upvalue {
+    Open(usize),
+    Closed(LoxValue),
 }
 
 impl Display for Upvalue {
@@ -192,12 +191,17 @@ impl Display for Upvalue {
 }
 
 impl Upvalue {
-    #[must_use]
-    pub fn new(location: usize) -> Self {
-        Self {
-            location,
-            next: None,
-            closed: None,
+    pub fn is_open(&self) -> bool {
+        match self {
+            Upvalue::Open(_) => true,
+            Upvalue::Closed(_) => false,
+        }
+    }
+
+    pub fn is_open_with_index(&self, index: usize) -> bool {
+        match self {
+            Upvalue::Open(idx) => index == *idx,
+            Upvalue::Closed(_) => false,
         }
     }
 }
