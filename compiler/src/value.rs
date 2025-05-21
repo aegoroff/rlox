@@ -191,6 +191,7 @@ impl Display for Upvalue {
 }
 
 impl Upvalue {
+    #[must_use]
     pub fn is_open(&self) -> bool {
         match self {
             Upvalue::Open(_) => true,
@@ -198,6 +199,7 @@ impl Upvalue {
         }
     }
 
+    #[must_use]
     pub fn is_open_with_index(&self, index: usize) -> bool {
         match self {
             Upvalue::Open(idx) => index == *idx,

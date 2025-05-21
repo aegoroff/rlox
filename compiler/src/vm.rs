@@ -373,14 +373,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     match &mut *upvalue.borrow_mut() {
                         Upvalue::Open(location) => self.stack[*location] = val.clone(),
                         Upvalue::Closed(value) => *value = val.clone(),
-                    };
+                    }
                     ip += 2;
                 }
                 OpCode::CloseUpvalue => {
                     let location = self.stack.len() - 1; // old location upvalues point to
                     self.close_upvalues(location);
                     self.pop()?;
-                    ip += 1
+                    ip += 1;
                 }
             }
         }
@@ -399,7 +399,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn capture_upvalue(&mut self, location: usize) -> Rc<RefCell<Upvalue>> {
-        if let Some(upval) = self.find_open_uval(location) {
+        if let Some(upval) = self.find_open_upvalue(location) {
             upval
         } else {
             let upval = Rc::new(RefCell::new(Upvalue::Open(location)));
@@ -408,7 +408,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
     }
 
-    fn find_open_uval(&self, location: usize) -> Option<Rc<RefCell<Upvalue>>> {
+    #[inline]
+    fn find_open_upvalue(&self, location: usize) -> Option<Rc<RefCell<Upvalue>>> {
         for upval in self.upvalues.iter().rev() {
             if upval.borrow().is_open_with_index(location) {
                 return Some(upval.clone());
