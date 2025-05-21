@@ -21,6 +21,7 @@ pub enum ProgramError {
     ExpectedString,
     ExpectedBool,
     ExpectedFunction,
+    InvalidFunctionArgsCount(usize, usize),
 }
 
 impl Display for ProgramError {
@@ -40,6 +41,9 @@ impl Display for ProgramError {
             ProgramError::ExpectedString => write!(f, "Expected string"),
             ProgramError::ExpectedBool => write!(f, "Expected boolean"),
             ProgramError::ExpectedFunction => write!(f, "Expected function"),
+            ProgramError::InvalidFunctionArgsCount(arity, args_count) => {
+                write!(f, "Expected {arity} arguments but got {args_count}")
+            }
         }
     }
 }

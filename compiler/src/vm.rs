@@ -339,7 +339,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         let is_local = self.chunk().read_byte(ip);
                         let index = self.chunk().read_byte(ip + 1);
                         ip += 2;
-                        let upvalue= if is_local == 1 {
+                        let upvalue = if is_local == 1 {
                             let slots_offset = self.frame().slots_offset;
                             self.capture_upvalue(slots_offset + index as usize - 1)
                         } else {
@@ -423,6 +423,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn call(&mut self, closure: Closure, args_count: usize) -> Result<(), ProgramError> {
+        if closure.function.arity != args_count {
+            return Err(ProgramError::InvalidFunctionArgsCount(
+                closure.function.arity,
+                args_count,
+            ));
+        }
         self.frame_count += 1;
         self.frame().slots_offset = self.stack.len() - args_count;
         self.frame().closure = closure;
