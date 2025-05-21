@@ -446,7 +446,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn call_native(&mut self, func: NativeFunction, args_count: usize) -> Result<(), ProgramError> {
         let mut args = Vec::new();
         for _ in 0..args_count {
-            args.push(self.pop()?) // pop args
+            args.push(self.pop()?); // pop args
         }
         args.reverse();
         let args = args;
