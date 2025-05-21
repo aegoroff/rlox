@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+mod builtin;
 mod chunk;
 pub mod compile;
 pub mod value;

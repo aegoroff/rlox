@@ -133,25 +133,16 @@ impl Function {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct NativeFunction {
     pub arity: usize,
     pub name: String,
+    pub func: fn(&[LoxValue]) -> crate::Result<LoxValue, ProgramError>,
 }
 
 impl Display for NativeFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<native fn {}>", self.name)
-    }
-}
-
-impl NativeFunction {
-    #[must_use]
-    pub fn new(name: &str, arity: usize) -> Self {
-        Self {
-            arity,
-            name: name.to_owned(),
-        }
     }
 }
 

@@ -1,8 +1,8 @@
 #![allow(clippy::missing_errors_doc)]
 
-use crate::ProgramError;
 use crate::chunk::Chunk;
 use crate::value::{Closure, Upvalue};
+use crate::{ProgramError, builtin};
 use crate::{
     chunk::OpCode,
     compile::Parser,
@@ -11,7 +11,6 @@ use crate::{
 use fnv::FnvHashMap;
 use std::cell::{Ref, RefCell};
 use std::rc::Rc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const FRAMES_MAX: usize = 64;
 
@@ -71,8 +70,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let clock = LoxValue::Native(NativeFunction {
             arity: 0,
             name: clock_name.clone(),
+            func: builtin::clock,
+        });
+        let sqrt_name = "sqrt".to_string();
+        let sqrt = LoxValue::Native(NativeFunction {
+            arity: 1,
+            name: sqrt_name.clone(),
+            func: builtin::sqrt,
         });
         self.globals.insert(clock_name, clock);
+        self.globals.insert(sqrt_name, sqrt);
     }
 
     #[inline]
@@ -437,18 +444,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn call_native(&mut self, func: NativeFunction, args_count: usize) -> Result<(), ProgramError> {
-        let slots_offset = self.stack.len() - args_count;
-        let result = match func.name.as_str() {
-            "clock" => self.clock_native(slots_offset, args_count),
-            _ => {
-                return Err(ProgramError::Runtime(format!(
-                    "Undefined native function '{}'",
-                    func.name
-                )));
-            }
-        };
-        let num_to_pop = func.arity + 1;
-        self.pop_stack_n_times(num_to_pop)?;
+        let mut args = Vec::new();
+        for _ in 0..args_count {
+            args.push(self.pop()?) // pop args
+        }
+        args.reverse();
+        let args = args;
+        self.pop()?; // native function value
+
+        let result = (func.func)(&args)?;
+
         self.push(result);
         Ok(())
     }
@@ -490,14 +495,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.globals.insert(name.clone(), value);
         self.pop()?;
         Ok(())
-    }
-
-    #[inline]
-    fn clock_native(&self, _: usize, _: usize) -> LoxValue {
-        let start = SystemTime::now();
-        let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let millis = since_the_epoch.as_millis();
-        LoxValue::Number(millis as f64 * 0.001)
     }
 }
 
