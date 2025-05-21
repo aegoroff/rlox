@@ -368,8 +368,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let val = val.clone();
                     let upvalue = self.frame().closure.upvalues[slot as usize].clone();
                     match &mut *upvalue.borrow_mut() {
-                        Upvalue::Open(location) => self.stack[*location] = val.clone(),
-                        Upvalue::Closed(value) => *value = val.clone(),
+                        Upvalue::Open(location) => self.stack[*location] = val,
+                        Upvalue::Closed(value) => *value = val,
                     }
                     ip += 2;
                 }
