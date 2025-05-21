@@ -387,6 +387,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn close_upvalues(&mut self, location: usize) {
         let value = &self.stack[location];
         for upval in &self.open_upvalues {
@@ -398,25 +399,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.open_upvalues.retain(|u| u.borrow().is_open());
     }
 
+    #[inline]
     fn capture_upvalue(&mut self, location: usize) -> Rc<RefCell<Upvalue>> {
-        if let Some(upval) = self.find_open_upvalue(location) {
-            upval
+        if let Some(upval) = self
+            .open_upvalues
+            .iter()
+            .rev()
+            .find(|upval| upval.borrow().is_open_with_index(location))
+        {
+            upval.clone()
         } else {
             let upval = Rc::new(RefCell::new(Upvalue::Open(location)));
             self.open_upvalues.push(upval.clone());
             upval
         }
-    }
-
-    #[inline]
-    fn find_open_upvalue(&self, location: usize) -> Option<Rc<RefCell<Upvalue>>> {
-        for upval in self.open_upvalues.iter().rev() {
-            if upval.borrow().is_open_with_index(location) {
-                return Some(upval.clone());
-            }
-        }
-
-        None
     }
 
     #[inline]
