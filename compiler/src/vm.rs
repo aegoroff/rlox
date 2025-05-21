@@ -339,14 +339,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         let is_local = self.chunk().read_byte(ip);
                         let index = self.chunk().read_byte(ip + 1);
                         ip += 2;
-                        if is_local == 1 {
+                        let upvalue= if is_local == 1 {
                             let slots_offset = self.frame().slots_offset;
-                            let upvalue = self.capture_upvalue(slots_offset + index as usize - 1);
-                            closure.upvalues.push(upvalue);
+                            self.capture_upvalue(slots_offset + index as usize - 1)
                         } else {
-                            let upvalue = &self.frame().closure.upvalues[index as usize];
-                            closure.upvalues.push(upvalue.clone());
-                        }
+                            self.frame().closure.upvalues[index as usize].clone()
+                        };
+                        closure.upvalues.push(upvalue);
                     }
 
                     let val = LoxValue::Closure(closure);
