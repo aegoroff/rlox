@@ -189,7 +189,7 @@ impl Chunk {
             return offset + 1;
         };
         print!("{offset:04} ");
-        let line_ix = offset.min(self.lines.len() - 1);
+        let line_ix = self.line_index(offset);
         if line_ix > 0 && self.lines[line_ix] == self.lines[line_ix - 1] {
             print!("   | ");
         } else {
@@ -230,6 +230,17 @@ impl Chunk {
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
             OpCode::Closure => self.disassembly_closure_instruction(offset),
         }
+    }
+
+    #[inline]
+    pub fn line(&self, offset: usize) -> usize {
+        let line_ix = offset.min(self.lines.len() - 1);
+        self.lines[line_ix]
+    }
+
+    #[inline]
+    fn line_index(&self, offset: usize) -> usize {
+        offset.min(self.lines.len() - 1)
     }
 
     fn disassembly_byte_instruction(&self, offset: usize, code: &OpCode) -> usize {

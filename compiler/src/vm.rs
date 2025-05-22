@@ -319,7 +319,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Closure => {
                     let function_value = self.chunk().read_constant(ip, 1);
                     let LoxValue::Function(function) = function_value else {
-                        return Err(ProgramError::ExpectedFunction);
+                        let line = self.chunk().line(ip - 1);
+                        return Err(ProgramError::ExpectedFunction(line));
                     };
                     let upvalues_count = function.upvalue_count;
                     ip += 1;
@@ -451,7 +452,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
         let name = val.try_str()?;
         if !self.globals.contains_key(name) {
-            return Err(ProgramError::UndefinedGlobal(name.clone()));
+            let line = chunk.line(offset);
+            return Err(ProgramError::UndefinedGlobal(line, name.clone()));
         }
         let value = self.peek(0)?;
         let value = value.clone();
@@ -467,7 +469,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let val = chunk.ref_constant(offset, constant_size);
         let name = val.try_str()?;
         let Some(val) = self.globals.get(name) else {
-            return Err(ProgramError::UndefinedGlobal(name.clone()));
+            let line = chunk.line(offset);
+            return Err(ProgramError::UndefinedGlobal(line, name.clone()));
         };
         let val = val.clone();
         drop(chunk);
