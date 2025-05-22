@@ -13,6 +13,7 @@ pub enum LoxValue {
     Native(NativeFunction),
     Closure(Closure),
     Nil,
+    NaN,
 }
 
 const ERROR_MARGIN: f64 = 0.00001;
@@ -99,6 +100,7 @@ impl Display for LoxValue {
             LoxValue::Function(func) => write!(f, "{func}"),
             LoxValue::Native(native) => write!(f, "{native}"),
             LoxValue::Closure(closure) => write!(f, "{closure}"),
+            LoxValue::NaN => write!(f, "NaN"),
         }
     }
 }

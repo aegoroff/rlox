@@ -213,9 +213,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let a = a.try_num()?;
                     let b = b.try_num()?;
                     if b == 0.0 {
-                        return Err(ProgramError::DivisionByZero);
+                        self.push(LoxValue::NaN);
+                    } else {
+                        self.push(LoxValue::Number(a / b));
                     }
-                    self.push(LoxValue::Number(a / b));
                 }
                 OpCode::Nil => self.push(LoxValue::Nil),
                 OpCode::True => self.push(LoxValue::Bool(true)),
@@ -531,6 +532,7 @@ mod tests {
     #[test_case("print (3 + 3) / 3;", "2")]
     #[test_case("print 4 / 2;", "2")]
     #[test_case("print 4 / 1;", "4")]
+    #[test_case("print 4 / 0;", "NaN")]
     #[test_case("print 5 / -1;", "-5")]
     #[test_case("print (5 - (3-1)) + -1;", "2")]
     #[test_case("print (5 - (3-1)) * -1;", "-3")]

@@ -15,7 +15,6 @@ pub enum ProgramError {
     InvalidInstruction(usize),
     InstructionsStackEmpty,
     NotEnoughStackCapacity(usize, usize),
-    DivisionByZero,
     InvalidCallable,
     OperandsMustBeNumbers,
     ExpectedNumber,
@@ -36,7 +35,6 @@ impl Display for ProgramError {
                 f,
                 "Not enough stack capacity for distance {distance}. Current stack size is {size}"
             ),
-            ProgramError::DivisionByZero => write!(f, "Division by zero"),
             ProgramError::InvalidCallable => write!(f, "Can only call functions and classes."),
             ProgramError::OperandsMustBeNumbers => write!(f, "Operands must be numbers"),
             ProgramError::ExpectedNumber => write!(f, "Expected number"),
