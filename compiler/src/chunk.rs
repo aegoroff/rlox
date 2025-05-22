@@ -131,13 +131,13 @@ impl Chunk {
         OpCode::from_u8(self.code[offset]).ok_or(ProgramError::InvalidInstruction(offset))
     }
 
-    pub fn read_constant(&self, offset: usize) -> LoxValue {
-        let ix = self.get_constant_ix(offset);
+    pub fn read_constant(&self, offset: usize, constant_size: usize) -> LoxValue {
+        let ix = self.get_constant_ix(offset, constant_size);
         self.constants[ix].clone()
     }
 
-    pub fn ref_constant(&self, offset: usize) -> &LoxValue {
-        let ix = self.get_constant_ix(offset);
+    pub fn ref_constant(&self, offset: usize, constant_size: usize) -> &LoxValue {
+        let ix = self.get_constant_ix(offset, constant_size);
         &self.constants[ix]
     }
 
@@ -222,7 +222,7 @@ impl Chunk {
     }
 
     fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
-        let ix = self.get_constant_ix(offset);
+        let ix = self.get_constant_ix(offset, 1);
         let constant = &self.constants[ix];
         println!("{:<16} {ix:4} '{constant}'", code.to_string());
         offset + 2
@@ -266,7 +266,7 @@ impl Chunk {
     }
 
     fn disassembly_constant_long(&self, offset: usize, code: &OpCode) -> usize {
-        let ix = self.get_constant_ix(offset);
+        let ix = self.get_constant_ix(offset, 3);
         let constant = &self.constants[ix];
         println!("{:<16} {ix:4} '{constant}'", code.to_string());
         offset + 4
@@ -290,22 +290,10 @@ impl Chunk {
         i
     }
 
-    fn get_constant_ix(&self, offset: usize) -> usize {
-        let Some(code) = OpCode::from_u8(self.code[offset]) else {
-            return 0;
-        };
-        match code {
-            OpCode::Constant
-            | OpCode::DefineGlobal
-            | OpCode::GetGlobal
-            | OpCode::SetGlobal
-            | OpCode::SetUpvalue
-            | OpCode::GetUpvalue
-            | OpCode::Closure => self.code[offset + 1] as usize,
-            OpCode::ConstantLong
-            | OpCode::DefineGlobalLong
-            | OpCode::GetGlobalLong
-            | OpCode::SetGlobalLong => {
+    fn get_constant_ix(&self, offset: usize, constant_size: usize) -> usize {
+        match constant_size {
+            1 => self.code[offset + 1] as usize,
+            3 => {
                 let op1 = self.code[offset + 1]; // first operand defines constant index in the constant's vector
                 let op2 = self.code[offset + 2]; // second operand defines constant index in the constant's vector
                 let op3 = self.code[offset + 3]; // third operand defines constant index in the constant's vector

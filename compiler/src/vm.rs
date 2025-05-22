@@ -144,7 +144,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             }
             match code {
                 OpCode::Constant => {
-                    let constant = self.chunk().read_constant(ip);
+                    let constant = self.chunk().read_constant(ip, 1);
                     self.push(constant);
                     ip += 2;
                 }
@@ -162,7 +162,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     break;
                 }
                 OpCode::ConstantLong => {
-                    let constant = self.chunk().read_constant(ip);
+                    let constant = self.chunk().read_constant(ip, 3);
                     self.push(constant);
                     ip += 4;
                 }
@@ -271,27 +271,27 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 1;
                 }
                 OpCode::DefineGlobal => {
-                    self.define_global(ip)?;
+                    self.define_global(ip, 1)?;
                     ip += 2;
                 }
                 OpCode::DefineGlobalLong => {
-                    self.define_global(ip)?;
+                    self.define_global(ip, 3)?;
                     ip += 4;
                 }
                 OpCode::GetGlobal => {
-                    self.get_global(ip)?;
+                    self.get_global(ip, 1)?;
                     ip += 2;
                 }
                 OpCode::GetGlobalLong => {
-                    self.get_global(ip)?;
+                    self.get_global(ip, 3)?;
                     ip += 4;
                 }
                 OpCode::SetGlobal => {
-                    self.set_global(ip)?;
+                    self.set_global(ip, 1)?;
                     ip += 2;
                 }
                 OpCode::SetGlobalLong => {
-                    self.set_global(ip)?;
+                    self.set_global(ip, 3)?;
                     ip += 4;
                 }
                 OpCode::GetLocal => {
@@ -334,7 +334,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                 }
                 OpCode::Closure => {
-                    let function_value = self.chunk().read_constant(ip);
+                    let function_value = self.chunk().read_constant(ip, 1);
                     let LoxValue::Function(function) = function_value else {
                         return Err(ProgramError::ExpectedFunction);
                     };
@@ -463,9 +463,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn set_global(&mut self, offset: usize) -> Result<(), ProgramError> {
+    fn set_global(&mut self, offset: usize, constant_size: usize) -> Result<(), ProgramError> {
         let chunk = self.chunk();
-        let val = chunk.ref_constant(offset);
+        let val = chunk.ref_constant(offset, constant_size);
 
         let name = val.try_str()?;
         if !self.globals.contains_key(name) {
@@ -480,9 +480,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn get_global(&mut self, offset: usize) -> Result<(), ProgramError> {
+    fn get_global(&mut self, offset: usize, constant_size: usize) -> Result<(), ProgramError> {
         let chunk = self.chunk();
-        let val = chunk.ref_constant(offset);
+        let val = chunk.ref_constant(offset, constant_size);
         let name = val.try_str()?;
         let Some(val) = self.globals.get(name) else {
             return Err(ProgramError::UndefinedGlobal(name.clone()));
@@ -494,9 +494,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn define_global(&mut self, offset: usize) -> Result<(), ProgramError> {
+    fn define_global(&mut self, offset: usize, constant_size: usize) -> Result<(), ProgramError> {
         let chunk = self.chunk();
-        let val = chunk.ref_constant(offset);
+        let val = chunk.ref_constant(offset, constant_size);
         let name = val.try_str()?;
         let name = name.clone();
         drop(chunk);
