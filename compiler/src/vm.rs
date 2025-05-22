@@ -13,6 +13,8 @@ use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
 const FRAMES_MAX: usize = 64;
+const CONST_SIZE: usize = 1;
+const CONST_LONG_SIZE: usize = 3;
 
 #[derive(Default)]
 struct CallFrame {
@@ -135,6 +137,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let code_size = self.chunk().code.len();
         while ip < code_size {
             let code = self.chunk().read_opcode(ip)?;
+            ip += 1; // shift opcode offset itself
             #[cfg(feature = "disassembly")]
             {
                 for value in &self.stack {
@@ -144,9 +147,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
             }
             match code {
                 OpCode::Constant => {
-                    let constant = self.chunk().read_constant(ip, 1);
+                    let constant = self.chunk().read_constant(ip, CONST_SIZE);
                     self.push(constant);
-                    ip += 2;
+                    ip += CONST_SIZE;
+                }
+                OpCode::ConstantLong => {
+                    let constant = self.chunk().read_constant(ip, CONST_LONG_SIZE);
+                    self.push(constant);
+                    ip += CONST_LONG_SIZE;
                 }
                 OpCode::Return => {
                     self.close_upvalues(self.stack.len() - 1);
@@ -161,16 +169,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(value);
                     break;
                 }
-                OpCode::ConstantLong => {
-                    let constant = self.chunk().read_constant(ip, 3);
-                    self.push(constant);
-                    ip += 4;
-                }
                 OpCode::Negate => {
                     let value = self.pop()?;
                     let value = value.try_num()?;
                     self.push(LoxValue::Number(-value));
-                    ip += 1;
                 }
                 OpCode::Add => {
                     let b = self.pop()?;
@@ -190,8 +192,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         let r = b.try_num()?;
                         self.push(LoxValue::Number(l + r));
                     }
-
-                    ip += 1;
                 }
                 OpCode::Subtract => {
                     let b = self.pop()?;
@@ -199,7 +199,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let a = a.try_num()?;
                     let b = b.try_num()?;
                     self.push(LoxValue::Number(a - b));
-                    ip += 1;
                 }
                 OpCode::Multiply => {
                     let b = self.pop()?;
@@ -207,7 +206,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let a = a.try_num()?;
                     let b = b.try_num()?;
                     self.push(LoxValue::Number(a * b));
-                    ip += 1;
                 }
                 OpCode::Divide => {
                     let b = self.pop()?;
@@ -218,39 +216,26 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         return Err(ProgramError::DivisionByZero);
                     }
                     self.push(LoxValue::Number(a / b));
-                    ip += 1;
                 }
-                OpCode::Nil => {
-                    self.push(LoxValue::Nil);
-                    ip += 1;
-                }
-                OpCode::True => {
-                    self.push(LoxValue::Bool(true));
-                    ip += 1;
-                }
-                OpCode::False => {
-                    self.push(LoxValue::Bool(false));
-                    ip += 1;
-                }
+                OpCode::Nil => self.push(LoxValue::Nil),
+                OpCode::True => self.push(LoxValue::Bool(true)),
+                OpCode::False => self.push(LoxValue::Bool(false)),
                 OpCode::Not => {
                     let value = self.pop()?;
                     let val = value.try_bool()?;
                     self.push(LoxValue::Bool(!val));
-                    ip += 1;
                 }
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
                     let result = a.equal(&b);
                     self.push(LoxValue::Bool(result));
-                    ip += 1;
                 }
                 OpCode::Less => {
                     let b = self.pop()?;
                     let a = self.pop()?;
                     let result = a.less(&b)?;
                     self.push(LoxValue::Bool(result));
-                    ip += 1;
                 }
                 OpCode::Greater => {
                     let b = self.pop()?;
@@ -258,80 +243,77 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let lt = a.less(&b)?;
                     let gt = !lt && !a.equal(&b);
                     self.push(LoxValue::Bool(gt));
-                    ip += 1;
                 }
                 OpCode::Print => {
                     let value = self.pop()?;
                     writeln!(self.writer, "{value}")
                         .map_err(|e| ProgramError::Runtime(e.to_string()))?;
-                    ip += 1;
                 }
                 OpCode::Pop => {
                     self.pop()?;
-                    ip += 1;
                 }
                 OpCode::DefineGlobal => {
-                    self.define_global(ip, 1)?;
-                    ip += 2;
+                    self.define_global(ip, CONST_SIZE)?;
+                    ip += CONST_SIZE;
                 }
                 OpCode::DefineGlobalLong => {
-                    self.define_global(ip, 3)?;
-                    ip += 4;
+                    self.define_global(ip, CONST_LONG_SIZE)?;
+                    ip += CONST_LONG_SIZE;
                 }
                 OpCode::GetGlobal => {
-                    self.get_global(ip, 1)?;
-                    ip += 2;
+                    self.get_global(ip, CONST_SIZE)?;
+                    ip += CONST_SIZE;
                 }
                 OpCode::GetGlobalLong => {
-                    self.get_global(ip, 3)?;
-                    ip += 4;
+                    self.get_global(ip, CONST_LONG_SIZE)?;
+                    ip += CONST_LONG_SIZE;
                 }
                 OpCode::SetGlobal => {
-                    self.set_global(ip, 1)?;
-                    ip += 2;
+                    self.set_global(ip, CONST_SIZE)?;
+                    ip += CONST_SIZE;
                 }
                 OpCode::SetGlobalLong => {
-                    self.set_global(ip, 3)?;
-                    ip += 4;
+                    self.set_global(ip, CONST_LONG_SIZE)?;
+                    ip += CONST_LONG_SIZE;
                 }
                 OpCode::GetLocal => {
                     let slots_offset = self.frame().slots_offset;
-                    let frame_offset = self.chunk().read_byte(ip + 1);
+                    let frame_offset = self.chunk().read_byte(ip);
                     let val = self.stack[slots_offset + frame_offset as usize - 1].clone();
                     self.push(val);
-                    ip += 2;
+                    ip += 1;
                 }
                 OpCode::SetLocal => {
                     let slots_offset = self.frame().slots_offset;
-                    let frame_offset = self.chunk().read_byte(ip + 1);
+                    let frame_offset = self.chunk().read_byte(ip);
                     let value = self.peek(0)?;
                     self.stack[slots_offset + frame_offset as usize - 1] = value.clone();
-                    ip += 2;
+                    ip += 1;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = self.chunk().read_short(ip + 1);
+                    let offset = self.chunk().read_short(ip);
                     let top = self.peek(0)?;
                     let falsey = !top.is_truthy();
-                    ip += 3;
+                    ip += 2;
                     if falsey {
                         ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = self.chunk().read_short(ip + 1);
-                    ip += 3;
+                    let offset = self.chunk().read_short(ip);
+                    ip += 2;
                     ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = self.chunk().read_short(ip + 1);
-                    ip += 3;
+                    let offset = self.chunk().read_short(ip);
+                    ip += 2;
                     ip -= offset;
                 }
                 OpCode::Call => {
-                    let args_count = self.chunk().read_byte(ip + 1);
+                    let args_count = self.chunk().read_byte(ip);
                     let func = self.peek(args_count as usize)?;
                     self.call_value(func.clone(), args_count as usize)?;
-                    ip += 2;
+                    ip += 1;
                 }
                 OpCode::Closure => {
                     let function_value = self.chunk().read_constant(ip, 1);
@@ -339,7 +321,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         return Err(ProgramError::ExpectedFunction);
                     };
                     let upvalues_count = function.upvalue_count;
-                    ip += 2;
+                    ip += 1;
 
                     let mut closure = Closure::new(function);
                     for _ in 0..upvalues_count {
@@ -359,7 +341,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(val);
                 }
                 OpCode::GetUpvalue => {
-                    let slot = self.chunk().read_byte(ip + 1);
+                    let slot = self.chunk().read_byte(ip);
                     let upvalue = self.frame().closure.upvalues[slot as usize].clone();
                     let lox_value = match &*upvalue.borrow() {
                         Upvalue::Open(location) => self.stack[*location].clone(),
@@ -367,10 +349,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     };
                     self.push(lox_value);
 
-                    ip += 2;
+                    ip += 1;
                 }
                 OpCode::SetUpvalue => {
-                    let slot = self.chunk().read_byte(ip + 1);
+                    let slot = self.chunk().read_byte(ip);
                     let val = self.peek(0)?;
                     let val = val.clone();
                     let upvalue = self.frame().closure.upvalues[slot as usize].clone();
@@ -378,13 +360,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         Upvalue::Open(location) => self.stack[*location] = val,
                         Upvalue::Closed(value) => *value = val,
                     }
-                    ip += 2;
+                    ip += 1;
                 }
                 OpCode::CloseUpvalue => {
                     let location = self.stack.len() - 1; // old location upvalues point to
                     self.close_upvalues(location);
                     self.pop()?;
-                    ip += 1;
                 }
             }
         }

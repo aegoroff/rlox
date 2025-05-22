@@ -141,14 +141,25 @@ impl Chunk {
         &self.constants[ix]
     }
 
+    #[inline]
     pub fn read_byte(&self, offset: usize) -> u8 {
         self.code[offset]
     }
 
+    #[inline]
     pub fn read_short(&self, offset: usize) -> usize {
         let op1 = self.code[offset];
         let op2 = self.code[offset + 1];
         (op2 as usize) << 8 | (op1 as usize)
+    }
+
+    #[inline]
+    pub fn read_three_bytes(&self, offset: usize) -> usize {
+        let op1 = self.code[offset]; // first operand defines constant index in the constant's vector
+        let op2 = self.code[offset + 1]; // second operand defines constant index in the constant's vector
+        let op3 = self.code[offset + 2]; // third operand defines constant index in the constant's vector
+
+        (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize)
     }
 
     pub fn patch_jump(&mut self, offset: usize) {
@@ -248,7 +259,7 @@ impl Chunk {
     }
 
     fn disassembly_jump_instruction(&self, offset: usize, code: &OpCode, sign: i32) -> usize {
-        let jump = self.read_short(offset + 1);
+        let jump = self.read_short(offset);
 
         println!(
             "{:<16} {offset:4} -> {}",
@@ -259,7 +270,7 @@ impl Chunk {
     }
 
     fn disassembly_constant(&self, offset: usize, code: &OpCode, constant_size: usize) -> usize {
-        let ix = self.get_constant_ix(offset, constant_size);
+        let ix = self.get_constant_ix(offset + 1, constant_size);
         let constant = &self.constants[ix];
         println!("{:<16} {ix:4} '{constant}'", code.to_string());
         offset + constant_size + 1 // + 1 for opcode itself
@@ -283,16 +294,11 @@ impl Chunk {
         i
     }
 
+    #[inline]
     fn get_constant_ix(&self, offset: usize, constant_size: usize) -> usize {
         match constant_size {
-            1 => self.code[offset + 1] as usize,
-            3 => {
-                let op1 = self.code[offset + 1]; // first operand defines constant index in the constant's vector
-                let op2 = self.code[offset + 2]; // second operand defines constant index in the constant's vector
-                let op3 = self.code[offset + 3]; // third operand defines constant index in the constant's vector
-
-                (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize)
-            }
+            1 => self.read_byte(offset) as usize,
+            3 => self.read_three_bytes(offset),
             _ => usize::MAX, // so as to crash app if error
         }
     }
