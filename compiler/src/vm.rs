@@ -369,6 +369,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.close_upvalues(location);
                     self.pop()?;
                 }
+                OpCode::Class => {
+                    let class_name = self.chunk().read_constant(ip, CONST_SIZE);
+                    self.push(class_name);
+                    ip += 1;
+                }
             }
         }
         Ok(())
@@ -583,6 +588,7 @@ mod tests {
 
 outer();"#, "10" ; "closure2")]
     #[test_case("fun outer() { var x = 10; fun inner() { x = 20; } inner(); print x; } outer();", "20" ; "assign in closure")]
+    #[test_case("class Foo { } print Foo;", "Foo" ; "class print")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

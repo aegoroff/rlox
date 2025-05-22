@@ -127,11 +127,35 @@ impl<'a> Parser<'a> {
     fn declaration(&mut self) -> crate::Result<()> {
         if self.matches(&Token::Var)? {
             self.var_declaration()
+        } else if self.matches(&Token::Class)? {
+            self.class_declaration()
         } else if self.matches(&Token::Fun)? {
             self.fun_declaration()
         } else {
             self.statement()
         }
+    }
+
+    fn class_declaration(&mut self) -> crate::Result<()> {
+        let Token::Identifier(id) = *self.current.borrow() else {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), "Class name expected")],
+                "Class name error"
+            ));
+        };
+        self.advance()?;
+
+        let constant = self.identifier_constant(id);
+        self.declare_variable(id)?;
+
+        self.emit_opcode(OpCode::Class);
+        self.emit_operand(constant);
+
+        self.define_variable(constant);
+
+        self.consume(&Token::LeftBrace)?;
+        self.consume(&Token::RightBrace)?;
+        Ok(())
     }
 
     fn fun_declaration(&mut self) -> crate::Result<()> {

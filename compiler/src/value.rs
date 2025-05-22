@@ -12,6 +12,7 @@ pub enum LoxValue {
     Function(Function),
     Native(NativeFunction),
     Closure(Closure),
+    Class(Class),
     Nil,
     NaN,
 }
@@ -101,6 +102,7 @@ impl Display for LoxValue {
             LoxValue::Native(native) => write!(f, "{native}"),
             LoxValue::Closure(closure) => write!(f, "{closure}"),
             LoxValue::NaN => write!(f, "NaN"),
+            LoxValue::Class(class) => write!(f, "{class}"),
         }
     }
 }
@@ -198,5 +200,22 @@ impl Upvalue {
             Upvalue::Open(idx) => index == *idx,
             Upvalue::Closed(_) => false,
         }
+    }
+}
+
+#[derive(Default, Debug, PartialEq, Clone)]
+pub struct Class {
+    pub name: String,
+}
+
+impl Class {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+
+impl Display for Class {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
