@@ -186,7 +186,7 @@ impl Chunk {
         }
         match code {
             OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
-                self.disassembly_constant(offset, &code)
+                self.disassembly_constant(offset, &code, 1)
             }
             OpCode::SetLocal
             | OpCode::GetLocal
@@ -212,20 +212,13 @@ impl Chunk {
             OpCode::GetGlobalLong
             | OpCode::SetGlobalLong
             | OpCode::DefineGlobalLong
-            | OpCode::ConstantLong => self.disassembly_constant_long(offset, &code),
+            | OpCode::ConstantLong => self.disassembly_constant(offset, &code, 3),
             OpCode::JumpIfFalse | OpCode::Jump => {
                 self.disassembly_jump_instruction(offset, &code, 1)
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
             OpCode::Closure => self.disassembly_closure_instruction(offset),
         }
-    }
-
-    fn disassembly_constant(&self, offset: usize, code: &OpCode) -> usize {
-        let ix = self.get_constant_ix(offset, 1);
-        let constant = &self.constants[ix];
-        println!("{:<16} {ix:4} '{constant}'", code.to_string());
-        offset + 2
     }
 
     fn disassembly_byte_instruction(&self, offset: usize, code: &OpCode) -> usize {
@@ -265,11 +258,11 @@ impl Chunk {
         offset + 3
     }
 
-    fn disassembly_constant_long(&self, offset: usize, code: &OpCode) -> usize {
-        let ix = self.get_constant_ix(offset, 3);
+    fn disassembly_constant(&self, offset: usize, code: &OpCode, constant_size: usize) -> usize {
+        let ix = self.get_constant_ix(offset, constant_size);
         let constant = &self.constants[ix];
         println!("{:<16} {ix:4} '{constant}'", code.to_string());
-        offset + 4
+        offset + constant_size + 1 // + 1 for opcode itself
     }
 
     fn disassembly_simple_instruction(&self, offset: usize, code: &OpCode) -> usize {
@@ -300,7 +293,7 @@ impl Chunk {
 
                 (op3 as usize) << 16 | (op2 as usize) << 8 | (op1 as usize)
             }
-            _ => 0,
+            _ => usize::MAX, // so as to crash app if error
         }
     }
 }
