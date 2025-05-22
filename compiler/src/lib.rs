@@ -23,6 +23,7 @@ pub enum ProgramError {
     ExpectedBool,
     ExpectedFunction,
     InvalidFunctionArgsCount(usize, usize),
+    UndefinedGlobal(String),
 }
 
 impl Display for ProgramError {
@@ -44,6 +45,9 @@ impl Display for ProgramError {
             ProgramError::ExpectedFunction => write!(f, "Expected function"),
             ProgramError::InvalidFunctionArgsCount(arity, args_count) => {
                 write!(f, "Expected {arity} arguments but got {args_count}")
+            }
+            ProgramError::UndefinedGlobal(value) => {
+                write!(f, "Undefined global variable '{value}'")
             }
         }
     }

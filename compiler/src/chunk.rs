@@ -136,6 +136,11 @@ impl Chunk {
         self.constants[ix].clone()
     }
 
+    pub fn ref_constant(&self, offset: usize) -> &LoxValue {
+        let ix = self.get_constant_ix(offset);
+        &self.constants[ix]
+    }
+
     pub fn read_byte(&self, offset: usize) -> u8 {
         self.code[offset]
     }

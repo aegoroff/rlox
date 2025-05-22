@@ -460,39 +460,45 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn set_global(&mut self, offset: usize) -> Result<(), ProgramError> {
-        let name = self.chunk().read_constant(offset);
-        let name = name.try_str()?;
+        let chunk = self.chunk();
+        let val = chunk.ref_constant(offset);
+
+        let name = val.try_str()?;
         if !self.globals.contains_key(name) {
-            return Err(ProgramError::Runtime(format!(
-                "Undefined variable '{name}'"
-            )));
+            return Err(ProgramError::UndefinedGlobal(name.clone()));
         }
         let value = self.peek(0)?;
         let value = value.clone();
-        self.globals.insert(name.clone(), value);
+        let name = name.clone();
+        drop(chunk);
+        self.globals.insert(name, value);
         Ok(())
     }
 
     #[inline]
     fn get_global(&mut self, offset: usize) -> Result<(), ProgramError> {
-        let name = self.chunk().read_constant(offset);
-        let name = name.try_str()?;
+        let chunk = self.chunk();
+        let val = chunk.ref_constant(offset);
+        let name = val.try_str()?;
         let Some(val) = self.globals.get(name) else {
-            return Err(ProgramError::Runtime(format!(
-                "Undefined variable '{name}'"
-            )));
+            return Err(ProgramError::UndefinedGlobal(name.clone()));
         };
-        self.push(val.clone());
+        let val = val.clone();
+        drop(chunk);
+        self.push(val);
         Ok(())
     }
 
     #[inline]
     fn define_global(&mut self, offset: usize) -> Result<(), ProgramError> {
-        let name = self.chunk().read_constant(offset);
-        let name = name.try_str()?;
+        let chunk = self.chunk();
+        let val = chunk.ref_constant(offset);
+        let name = val.try_str()?;
+        let name = name.clone();
+        drop(chunk);
         let value = self.peek(0)?;
         let value = value.clone();
-        self.globals.insert(name.clone(), value);
+        self.globals.insert(name, value);
         self.pop()?;
         Ok(())
     }
