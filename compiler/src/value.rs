@@ -13,6 +13,7 @@ pub enum LoxValue {
     Native(NativeFunction),
     Closure(Closure),
     Class(Class),
+    Instance(Instance),
     Nil,
     NaN,
 }
@@ -103,6 +104,7 @@ impl Display for LoxValue {
             LoxValue::Closure(closure) => write!(f, "{closure}"),
             LoxValue::NaN => write!(f, "NaN"),
             LoxValue::Class(class) => write!(f, "{class}"),
+            LoxValue::Instance(instance) => write!(f, "{instance}"),
         }
     }
 }
@@ -217,5 +219,26 @@ impl Class {
 impl Display for Class {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Default, Debug, PartialEq, Clone)]
+pub struct Instance {
+    fields: Vec<LoxValue>,
+    pub class: Class,
+}
+
+impl Instance {
+    pub fn new(class: Class) -> Self {
+        Self {
+            class,
+            fields: vec![],
+        }
+    }
+}
+
+impl Display for Instance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} instance", self.class.name)
     }
 }

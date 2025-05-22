@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::chunk::Chunk;
-use crate::value::{Closure, Upvalue};
+use crate::value::{Class, Closure, Instance, Upvalue};
 use crate::{ProgramError, builtin};
 use crate::{
     chunk::OpCode,
@@ -371,7 +371,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Class => {
                     let class_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    self.push(class_name);
+                    let class_name = class_name.try_str()?;
+                    let class = Class::new(class_name.clone());
+                    let class = LoxValue::Class(class);
+                    self.push(class);
                     ip += 1;
                 }
             }
@@ -411,6 +414,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), ProgramError> {
         match callee {
             LoxValue::Closure(closure) => self.call(closure, args_count),
+            LoxValue::Class(class) => self.call_class(class, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
             _ => Err(ProgramError::InvalidCallable),
         }
@@ -447,6 +451,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let result = (func.func)(&args)?;
 
         self.push(result);
+        Ok(())
+    }
+
+    #[inline]
+    fn call_class(&mut self, class: Class, args_count: usize) -> Result<(), ProgramError> {
+        let instance = Instance::new(class);
+        let instance = LoxValue::Instance(instance);
+        let stack_size = self.stack.len();
+        self.stack[stack_size - args_count - 1] = instance;
         Ok(())
     }
 
@@ -589,6 +602,7 @@ mod tests {
 outer();"#, "10" ; "closure2")]
     #[test_case("fun outer() { var x = 10; fun inner() { x = 20; } inner(); print x; } outer();", "20" ; "assign in closure")]
     #[test_case("class Foo { } print Foo;", "Foo" ; "class print")]
+    #[test_case("class Foo { } print Foo();", "Foo instance" ; "class instance print")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
