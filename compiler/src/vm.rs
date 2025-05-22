@@ -423,7 +423,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), ProgramError> {
         match callee {
             LoxValue::Closure(closure) => self.call(closure, args_count),
-            LoxValue::Native(func) => self.call_native(func, args_count),
+            LoxValue::Native(func) => self.call_native(&func, args_count),
             _ => Err(ProgramError::InvalidCallable),
         }
     }
@@ -443,7 +443,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_native(&mut self, func: NativeFunction, args_count: usize) -> Result<(), ProgramError> {
+    fn call_native(
+        &mut self,
+        func: &NativeFunction,
+        args_count: usize,
+    ) -> Result<(), ProgramError> {
         let mut args = Vec::new();
         for _ in 0..args_count {
             args.push(self.pop()?); // pop args
