@@ -40,11 +40,12 @@ pub enum OpCode {
     JumpIfFalse = 29,
     Loop = 30,
     Call = 31,
-    Closure = 32,
-    CloseUpvalue = 33,
-    Return = 34,
-    Class = 35,
-    Method = 36,
+    Invoke = 32,
+    Closure = 33,
+    CloseUpvalue = 34,
+    Return = 35,
+    Class = 36,
+    Method = 37,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -89,6 +90,7 @@ impl Display for OpCode {
             OpCode::GetProperty => write!(f, "OP_GET_PROPERTY"),
             OpCode::SetProperty => write!(f, "OP_SET_PROPERTY"),
             OpCode::Method => write!(f, "OP_METHOD"),
+            OpCode::Invoke => write!(f, "OP_INVOKE"),
         }
     }
 }
@@ -241,6 +243,7 @@ impl Chunk {
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
             OpCode::Closure => self.disassembly_closure_instruction(offset),
+            OpCode::Invoke => self.disassembly_invoke_instruction(offset),
         }
     }
 
@@ -259,6 +262,17 @@ impl Chunk {
         let ix = self.code[offset + 1];
         println!("{:<16} {ix:4}", code.to_string());
         offset + 2
+    }
+
+    fn disassembly_invoke_instruction(&self, offset: usize) -> usize {
+        let constant = self.code[offset + 1];
+        let arg_count = self.code[offset + 2];
+        let val = &self.constants[constant as usize];
+        println!(
+            "{:<16}    ({arg_count} args) {constant:4} '{val}'",
+            OpCode::Invoke.to_string()
+        );
+        offset + 3
     }
 
     fn disassembly_closure_instruction(&self, offset: usize) -> usize {

@@ -9,7 +9,7 @@ use crate::{
     value::{Function, LoxValue, NativeFunction},
 };
 use fnv::FnvHashMap;
-use std::cell::{Ref, RefCell};
+use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
 
 const FRAMES_MAX: usize = 64;
@@ -411,10 +411,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
                     match instance.clone() {
                         LoxValue::Instance(instance) => {
-                            self.set_member(property_name, property_value, instance)?;
+                            self.set_member(property_name, property_value, instance.borrow_mut())?;
                         }
                         LoxValue::Bound(instance, _) => {
-                            self.set_member(property_name, property_value, instance)?;
+                            self.set_member(property_name, property_value, instance.borrow_mut())?;
                         }
                         _ => {
                             let line = self.chunk().line(ip - 1);
@@ -429,6 +429,32 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.define_method(method_name, ip)?;
                     ip += 1;
                 }
+                OpCode::Invoke => {
+                    let method_name = self.chunk().read_constant(ip, CONST_SIZE);
+                    let method_name = method_name.try_str()?;
+                    let argc = self.chunk().read_byte(ip + 1);
+                    let receiver = self.peek(argc as usize)?;
+
+                    if let LoxValue::Bound(inst, _) = receiver.clone() {
+                        let instance = inst.borrow();
+                        let class = instance.class.borrow();
+                        let method = class.methods.get(method_name);
+                        if let Some(method) = method {
+                            self.call_value(method.clone(), argc as usize)?;
+                        } else {
+                            let line = self.chunk().line(ip - 1);
+                            return Err(RuntimeError::UndefinedMethodOrProperty(
+                                line,
+                                method_name.clone(),
+                            ));
+                        }
+                    } else {
+                        let line = self.chunk().line(ip - 1);
+                        return Err(RuntimeError::ExpectedInstance(line));
+                    }
+
+                    ip += 2;
+                }
             }
         }
         Ok(())
@@ -438,10 +464,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
         &mut self,
         property_name: &str,
         property_value: LoxValue,
-        instance: Rc<RefCell<Instance>>,
+        mut instance: RefMut<Instance>,
     ) -> Result<(), RuntimeError> {
         instance
-            .borrow_mut()
             .fields
             .insert(property_name.to_owned(), property_value.clone());
         self.pop()?;
