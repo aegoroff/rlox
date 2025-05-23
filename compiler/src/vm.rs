@@ -381,19 +381,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
                     let property = property.try_str()?;
                     let instance = self.peek(0)?;
-                    let field_value = if let LoxValue::Instance(instance) = instance {
-                        if let Some(field) = instance.borrow().fields.get(property) {
-                            Some(field.clone())
-                        } else {
-                            let inst = instance.borrow();
-                            let class = inst.class.borrow();
-                            let method = class.methods.get(property);
-                            method
-                                .map(|val| LoxValue::Bound(instance.clone(), Box::new(val.clone())))
+                    let field_value = match instance {
+                        LoxValue::Instance(instance) => Self::get_member(property, instance),
+                        LoxValue::Bound(instance, _) => Self::get_member(property, instance),
+                        _ => {
+                            let line = self.chunk().line(ip - 1);
+                            return Err(RuntimeError::ExpectedInstance(line));
                         }
-                    } else {
-                        let line = self.chunk().line(ip - 1);
-                        return Err(RuntimeError::ExpectedInstance(line));
                     };
                     if let Some(val) = field_value {
                         self.pop()?; // instance
@@ -415,16 +409,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
                     let instance = self.peek(0)?;
 
-                    if let LoxValue::Instance(instance) = instance {
-                        instance
-                            .borrow_mut()
-                            .fields
-                            .insert(property_name.clone(), property_value.clone());
-                        self.pop()?; // instance
-                        self.push(property_value);
-                    } else {
-                        let line = self.chunk().line(ip - 1);
-                        return Err(RuntimeError::ExpectedInstance(line));
+                    match instance.clone() {
+                        LoxValue::Instance(instance) => {
+                            self.set_member(property_name, property_value, instance)?;
+                        }
+                        LoxValue::Bound(instance, _) => {
+                            self.set_member(property_name, property_value, instance)?;
+                        }
+                        _ => {
+                            let line = self.chunk().line(ip - 1);
+                            return Err(RuntimeError::ExpectedInstance(line));
+                        }
                     }
                     ip += 1;
                 }
@@ -437,6 +432,32 @@ impl<W: std::io::Write> VirtualMachine<W> {
             }
         }
         Ok(())
+    }
+
+    fn set_member(
+        &mut self,
+        property_name: &str,
+        property_value: LoxValue,
+        instance: Rc<RefCell<Instance>>,
+    ) -> Result<(), RuntimeError> {
+        instance
+            .borrow_mut()
+            .fields
+            .insert(property_name.to_owned(), property_value.clone());
+        self.pop()?;
+        self.push(property_value);
+        Ok(())
+    }
+
+    fn get_member(property: &String, instance: &Rc<RefCell<Instance>>) -> Option<LoxValue> {
+        if let Some(field) = instance.borrow().fields.get(property) {
+            Some(field.clone())
+        } else {
+            let inst = instance.borrow();
+            let class = inst.class.borrow();
+            let method = class.methods.get(property);
+            method.map(|val| LoxValue::Bound(instance.clone(), Box::new(val.clone())))
+        }
     }
 
     #[inline]
@@ -539,13 +560,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance = LoxValue::Instance(receiver.clone());
         let stack_size = self.stack.len();
 
+        self.stack[stack_size - args_count - 1] = instance;
         if let Some(init) = class.borrow().methods.get(scanner::INIT) {
-            self.stack[stack_size - args_count - 1] = instance.clone();
             self.call_method(receiver, init.clone(), args_count)?;
-            let stack_size = self.stack.len();
-            self.stack[stack_size - 1] = instance;
-        } else {
-            self.stack[stack_size - args_count - 1] = instance;
+        } else if args_count > 0 {
+            return Err(RuntimeError::InvalidFunctionArgsCount(0, args_count));
         }
         Ok(())
     }

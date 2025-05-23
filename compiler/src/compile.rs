@@ -62,7 +62,7 @@ pub struct Compiler<'a> {
     locals: Vec<Local<'a>>,
     scope_depth: usize,
     pub function: Function,
-    function_type: FunctionType,
+    pub function_type: FunctionType,
     upvalues: Vec<Upvalue>,
 }
 
@@ -76,12 +76,13 @@ struct Upvalue {
     pub is_local: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub enum FunctionType {
     Function,
     #[default]
     Script,
     Method,
+    TypeInitializer,
 }
 
 impl<'a> Compiler<'a> {
@@ -91,10 +92,10 @@ impl<'a> Compiler<'a> {
         enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
         name: &'a str,
     ) -> Self {
-        let receiver = if let FunctionType::Method = function_type {
-            scanner::THIS
-        } else {
+        let receiver = if let FunctionType::Function = function_type {
             ""
+        } else {
+            scanner::THIS
         };
         Self {
             locals: vec![Local::new(receiver, Some(0))], // caller function itself
@@ -200,7 +201,12 @@ impl<'a> Parser<'a> {
         self.advance()?;
 
         let constant = self.identifier_constant(id);
-        self.function(FunctionType::Method)?;
+        let function_type = if id == scanner::INIT {
+            FunctionType::TypeInitializer
+        } else {
+            FunctionType::Method
+        };
+        self.function(function_type)?;
         self.emit_opcode(OpCode::Method);
         self.emit_operand(constant);
         Ok(())
@@ -1047,12 +1053,7 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_loop(&mut self, loop_start: usize) -> crate::Result<()> {
-        self.compiler
-            .borrow_mut()
-            .function
-            .chunk
-            .borrow_mut()
-            .write_code(OpCode::Loop, self.tokens.line);
+        self.emit_opcode(OpCode::Loop);
 
         let offset = self.chunk_code_size() - loop_start + 2;
         if offset > u16::MAX as usize {
@@ -1093,18 +1094,15 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_return(&mut self) {
-        self.compiler
-            .borrow_mut()
-            .function
-            .chunk
-            .borrow_mut()
-            .write_code(OpCode::Nil, self.tokens.line);
-        self.compiler
-            .borrow_mut()
-            .function
-            .chunk
-            .borrow_mut()
-            .write_code(OpCode::Return, self.tokens.line);
+        let function_type = self.compiler.borrow().function_type.clone();
+        if let FunctionType::TypeInitializer = function_type {
+            self.emit_opcode(OpCode::GetLocal);
+            self.emit_operand(0);
+        } else {
+            self.emit_opcode(OpCode::Nil);
+        }
+
+        self.emit_opcode(OpCode::Return);
     }
 
     fn end_compiler(&mut self) -> Function {
