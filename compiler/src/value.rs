@@ -15,7 +15,7 @@ pub enum LoxValue {
     Native(NativeFunction),
     Closure(Closure),
     Class(Class),
-    Instance(Instance),
+    Instance(Rc<RefCell<Instance>>),
     Nil,
     NaN,
 }
@@ -106,7 +106,7 @@ impl Display for LoxValue {
             LoxValue::Closure(closure) => write!(f, "{closure}"),
             LoxValue::NaN => write!(f, "NaN"),
             LoxValue::Class(class) => write!(f, "{class}"),
-            LoxValue::Instance(instance) => write!(f, "{instance}"),
+            LoxValue::Instance(instance) => write!(f, "{}", instance.borrow()),
         }
     }
 }

@@ -115,19 +115,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn peek_mut(&mut self, distance: usize) -> Result<&mut LoxValue, ProgramError> {
-        if self.stack.len() < distance + 1 {
-            Err(ProgramError::NotEnoughStackCapacity(
-                distance,
-                self.stack.len(),
-            ))
-        } else {
-            let len = self.stack.len();
-            Ok(&mut self.stack[len - 1 - distance])
-        }
-    }
-
-    #[inline]
     fn frame(&mut self) -> &mut CallFrame {
         &mut self.frames[self.frame_count - 1]
     }
@@ -395,7 +382,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property = property.try_str()?;
                     let instance = self.peek(0)?;
                     let field_value = if let LoxValue::Instance(instance) = instance {
-                        instance.fields.get(property).cloned()
+                        instance.borrow().fields.get(property).cloned()
                     } else {
                         let line = self.chunk().line(ip - 1);
                         return Err(ProgramError::ExpectedInstance(line));
@@ -412,10 +399,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property_name = property.try_str()?;
                     let property_value = self.pop()?;
 
-                    let instance = self.peek_mut(0)?;
+                    let instance = self.peek(0)?;
 
                     if let LoxValue::Instance(instance) = instance {
                         instance
+                            .borrow_mut()
                             .fields
                             .insert(property_name.clone(), property_value.clone());
                         self.pop()?; // instance
@@ -506,7 +494,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn call_class(&mut self, class: Class, args_count: usize) -> Result<(), ProgramError> {
         let instance = Instance::new(class);
-        let instance = LoxValue::Instance(instance);
+        let instance = LoxValue::Instance(Rc::new(RefCell::new(instance)));
         let stack_size = self.stack.len();
         self.stack[stack_size - args_count - 1] = instance;
         Ok(())
