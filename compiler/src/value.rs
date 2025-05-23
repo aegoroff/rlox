@@ -1,6 +1,8 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
+
+use fnv::FnvHashMap;
 
 use crate::{ProgramError, chunk::Chunk};
 
@@ -224,7 +226,7 @@ impl Display for Class {
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Instance {
-    fields: HashMap<String, LoxValue>,
+    fields: FnvHashMap<String, LoxValue>,
     pub class: Class,
 }
 
@@ -232,7 +234,7 @@ impl Instance {
     pub fn new(class: Class) -> Self {
         Self {
             class,
-            fields: HashMap::new(),
+            fields: FnvHashMap::default(),
         }
     }
 }
