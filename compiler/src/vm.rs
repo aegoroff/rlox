@@ -2,7 +2,7 @@
 
 use crate::chunk::Chunk;
 use crate::value::{Class, Closure, Instance, Upvalue};
-use crate::{ProgramError, builtin};
+use crate::{RuntimeError, builtin};
 use crate::{
     chunk::OpCode,
     compile::Parser,
@@ -90,12 +90,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn pop(&mut self) -> Result<LoxValue, ProgramError> {
-        self.stack.pop().ok_or(ProgramError::InstructionsStackEmpty)
+    fn pop(&mut self) -> Result<LoxValue, RuntimeError> {
+        self.stack.pop().ok_or(RuntimeError::InstructionsStackEmpty)
     }
 
     #[inline]
-    fn pop_stack_n_times(&mut self, num_to_pop: usize) -> Result<(), ProgramError> {
+    fn pop_stack_n_times(&mut self, num_to_pop: usize) -> Result<(), RuntimeError> {
         for _ in 0..num_to_pop {
             self.pop()?;
         }
@@ -103,9 +103,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn peek(&self, distance: usize) -> Result<&LoxValue, ProgramError> {
+    fn peek(&self, distance: usize) -> Result<&LoxValue, RuntimeError> {
         if self.stack.len() < distance + 1 {
-            Err(ProgramError::NotEnoughStackCapacity(
+            Err(RuntimeError::NotEnoughStackCapacity(
                 distance,
                 self.stack.len(),
             ))
@@ -115,9 +115,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn peek_mut(&mut self, distance: usize) -> Result<&mut LoxValue, ProgramError> {
+    fn peek_mut(&mut self, distance: usize) -> Result<&mut LoxValue, RuntimeError> {
         if self.stack.len() < distance + 1 {
-            Err(ProgramError::NotEnoughStackCapacity(
+            Err(RuntimeError::NotEnoughStackCapacity(
                 distance,
                 self.stack.len(),
             ))
@@ -141,7 +141,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             .borrow()
     }
 
-    fn run(&mut self) -> Result<(), ProgramError> {
+    fn run(&mut self) -> Result<(), RuntimeError> {
         #[cfg(feature = "disassembly")]
         {
             println!("--- start run ---");
@@ -261,7 +261,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Print => {
                     let value = self.pop()?;
                     writeln!(self.writer, "{value}")
-                        .map_err(|e| ProgramError::Runtime(e.to_string()))?;
+                        .map_err(|e| RuntimeError::Common(e.to_string()))?;
                 }
                 OpCode::Pop => {
                     self.pop()?;
@@ -333,7 +333,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let function_value = self.chunk().read_constant(ip, 1);
                     let LoxValue::Function(function) = function_value else {
                         let line = self.chunk().line(ip - 1);
-                        return Err(ProgramError::ExpectedFunction(line));
+                        return Err(RuntimeError::ExpectedFunction(line));
                     };
                     let upvalues_count = function.upvalue_count;
                     ip += 1;
@@ -398,11 +398,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         instance.borrow().fields.get(property).cloned()
                     } else {
                         let line = self.chunk().line(ip - 1);
-                        return Err(ProgramError::ExpectedInstance(line));
+                        return Err(RuntimeError::ExpectedInstance(line));
                     };
                     if let Some(val) = field_value {
                         self.pop()?; // instance
                         self.push(val);
+                    } else {
+                        let line = self.chunk().line(ip - 1);
+                        return Err(RuntimeError::UndefinedMethodOrProperty(
+                            line,
+                            property.clone(),
+                        ));
                     }
 
                     ip += 1;
@@ -423,7 +429,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.push(property_value);
                     } else {
                         let line = self.chunk().line(ip - 1);
-                        return Err(ProgramError::ExpectedInstance(line));
+                        return Err(RuntimeError::ExpectedInstance(line));
                     };
                     ip += 1;
                 }
@@ -439,14 +445,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn define_method(&mut self, name: &str, ip: usize) -> Result<(), ProgramError> {
+    fn define_method(&mut self, name: &str, ip: usize) -> Result<(), RuntimeError> {
         let method_closure = self.pop()?;
         let class = self.peek_mut(0)?;
         if let LoxValue::Class(class) = class {
             class.methods.insert(name.to_owned(), method_closure);
         } else {
             let line = self.chunk().line(ip - 1);
-            return Err(ProgramError::ExpectedInstance(line));
+            return Err(RuntimeError::ExpectedInstance(line));
         };
         Ok(())
     }
@@ -480,20 +486,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), ProgramError> {
+    fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), RuntimeError> {
         match callee {
             LoxValue::Closure(closure) => self.call_function(closure, args_count),
             LoxValue::Class(class) => self.call_class(class, args_count),
             LoxValue::Instance(instance) => self.call_instance(instance, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
-            _ => Err(ProgramError::InvalidCallable),
+            _ => Err(RuntimeError::InvalidCallable),
         }
     }
 
     #[inline]
-    fn call_function(&mut self, closure: Closure, args_count: usize) -> Result<(), ProgramError> {
+    fn call_function(&mut self, closure: Closure, args_count: usize) -> Result<(), RuntimeError> {
         if closure.function.arity != args_count {
-            return Err(ProgramError::InvalidFunctionArgsCount(
+            return Err(RuntimeError::InvalidFunctionArgsCount(
                 closure.function.arity,
                 args_count,
             ));
@@ -509,7 +515,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         &mut self,
         func: &NativeFunction,
         args_count: usize,
-    ) -> Result<(), ProgramError> {
+    ) -> Result<(), RuntimeError> {
         let mut args = Vec::new();
         for _ in 0..args_count {
             args.push(self.pop()?); // pop args
@@ -525,7 +531,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_class(&mut self, class: Class, args_count: usize) -> Result<(), ProgramError> {
+    fn call_class(&mut self, class: Class, args_count: usize) -> Result<(), RuntimeError> {
         let instance = Instance::new(class);
         let instance = LoxValue::Instance(Rc::new(RefCell::new(instance)));
         let stack_size = self.stack.len();
@@ -538,19 +544,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
         &mut self,
         instance: Rc<RefCell<Instance>>,
         args_count: usize,
-    ) -> Result<(), ProgramError> {
+    ) -> Result<(), RuntimeError> {
         Ok(())
     }
 
     #[inline]
-    fn set_global(&mut self, offset: usize, constant_size: usize) -> Result<(), ProgramError> {
+    fn set_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
 
         let name = val.try_str()?;
         if !self.globals.contains_key(name) {
             let line = chunk.line(offset);
-            return Err(ProgramError::UndefinedGlobal(line, name.clone()));
+            return Err(RuntimeError::UndefinedGlobal(line, name.clone()));
         }
         let value = self.peek(0)?;
         let value = value.clone();
@@ -561,13 +567,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn get_global(&mut self, offset: usize, constant_size: usize) -> Result<(), ProgramError> {
+    fn get_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
         let name = val.try_str()?;
         let Some(val) = self.globals.get(name) else {
             let line = chunk.line(offset);
-            return Err(ProgramError::UndefinedGlobal(line, name.clone()));
+            return Err(RuntimeError::UndefinedGlobal(line, name.clone()));
         };
         let val = val.clone();
         drop(chunk);
@@ -576,7 +582,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn define_global(&mut self, offset: usize, constant_size: usize) -> Result<(), ProgramError> {
+    fn define_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
         let name = val.try_str()?;

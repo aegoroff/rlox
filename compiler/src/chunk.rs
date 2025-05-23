@@ -3,7 +3,7 @@ use std::fmt::Display;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-use crate::{ProgramError, value::LoxValue};
+use crate::{RuntimeError, value::LoxValue};
 
 #[repr(u8)]
 #[derive(FromPrimitive)]
@@ -135,8 +135,8 @@ impl Chunk {
         }
     }
 
-    pub fn read_opcode(&self, offset: usize) -> Result<OpCode, ProgramError> {
-        OpCode::from_u8(self.code[offset]).ok_or(ProgramError::InvalidInstruction(offset))
+    pub fn read_opcode(&self, offset: usize) -> Result<OpCode, RuntimeError> {
+        OpCode::from_u8(self.code[offset]).ok_or(RuntimeError::InvalidInstruction(offset))
     }
 
     pub fn read_constant(&self, offset: usize, constant_size: usize) -> LoxValue {

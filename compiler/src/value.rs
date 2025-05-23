@@ -4,7 +4,7 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use fnv::FnvHashMap;
 
-use crate::{ProgramError, chunk::Chunk};
+use crate::{RuntimeError, chunk::Chunk};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoxValue {
@@ -49,7 +49,7 @@ impl LoxValue {
         }
     }
 
-    pub fn less(&self, other: &LoxValue) -> Result<bool, ProgramError> {
+    pub fn less(&self, other: &LoxValue) -> Result<bool, RuntimeError> {
         if let Ok(l) = self.try_num() {
             let r = other.try_num()?;
             Ok(l < r)
@@ -60,31 +60,31 @@ impl LoxValue {
             let r = other.try_str()?;
             Ok(l < r)
         } else {
-            Err(ProgramError::OperandsMustBeNumbers)
+            Err(RuntimeError::OperandsMustBeNumbers)
         }
     }
 
-    pub fn try_num(&self) -> Result<f64, ProgramError> {
+    pub fn try_num(&self) -> Result<f64, RuntimeError> {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(ProgramError::ExpectedNumber)
+            Err(RuntimeError::ExpectedNumber)
         }
     }
 
-    pub fn try_str(&self) -> Result<&String, ProgramError> {
+    pub fn try_str(&self) -> Result<&String, RuntimeError> {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(ProgramError::ExpectedString)
+            Err(RuntimeError::ExpectedString)
         }
     }
 
-    pub fn try_bool(&self) -> Result<bool, ProgramError> {
+    pub fn try_bool(&self) -> Result<bool, RuntimeError> {
         match self {
             LoxValue::Bool(b) => Ok(*b),
             LoxValue::Nil => Ok(false),
-            _ => Err(ProgramError::ExpectedBool),
+            _ => Err(RuntimeError::ExpectedBool),
         }
     }
 
@@ -145,7 +145,7 @@ impl Function {
 pub struct NativeFunction {
     pub arity: usize,
     pub name: String,
-    pub func: fn(&[LoxValue]) -> crate::Result<LoxValue, ProgramError>,
+    pub func: fn(&[LoxValue]) -> crate::Result<LoxValue, RuntimeError>,
 }
 
 impl Display for NativeFunction {

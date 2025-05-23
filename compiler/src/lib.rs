@@ -10,8 +10,8 @@ extern crate num_derive;
 
 pub type Result<T, E = miette::Report> = core::result::Result<T, E>;
 
-pub enum ProgramError {
-    Runtime(String),
+pub enum RuntimeError {
+    Common(String),
     InvalidInstruction(usize),
     InstructionsStackEmpty,
     NotEnoughStackCapacity(usize, usize),
@@ -24,32 +24,36 @@ pub enum ProgramError {
     ExpectedInstance(usize),
     InvalidFunctionArgsCount(usize, usize),
     UndefinedGlobal(usize, String),
+    UndefinedMethodOrProperty(usize, String),
 }
 
-impl Display for ProgramError {
+impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProgramError::Runtime(s) => write!(f, "{s}"),
-            ProgramError::InvalidInstruction(code) => write!(f, "Invalid instruction: {code}"),
-            ProgramError::InstructionsStackEmpty => write!(f, "Instructions stack empty"),
-            ProgramError::NotEnoughStackCapacity(distance, size) => write!(
+            RuntimeError::Common(s) => write!(f, "{s}"),
+            RuntimeError::InvalidInstruction(code) => write!(f, "Invalid instruction: {code}"),
+            RuntimeError::InstructionsStackEmpty => write!(f, "Instructions stack empty"),
+            RuntimeError::NotEnoughStackCapacity(distance, size) => write!(
                 f,
                 "Not enough stack capacity for distance {distance}. Current stack size is {size}"
             ),
-            ProgramError::InvalidCallable => write!(f, "Can only call functions and classes."),
-            ProgramError::OperandsMustBeNumbers => write!(f, "Operands must be numbers"),
-            ProgramError::ExpectedNumber => write!(f, "Expected number"),
-            ProgramError::ExpectedString => write!(f, "Expected string"),
-            ProgramError::ExpectedBool => write!(f, "Expected boolean"),
-            ProgramError::ExpectedFunction(line) => write!(f, "Expected function at {line}"),
-            ProgramError::InvalidFunctionArgsCount(arity, args_count) => {
+            RuntimeError::InvalidCallable => write!(f, "Can only call functions and classes."),
+            RuntimeError::OperandsMustBeNumbers => write!(f, "Operands must be numbers"),
+            RuntimeError::ExpectedNumber => write!(f, "Expected number"),
+            RuntimeError::ExpectedString => write!(f, "Expected string"),
+            RuntimeError::ExpectedBool => write!(f, "Expected boolean"),
+            RuntimeError::ExpectedFunction(line) => write!(f, "Expected function at {line}"),
+            RuntimeError::InvalidFunctionArgsCount(arity, args_count) => {
                 write!(f, "Expected {arity} arguments but got {args_count}")
             }
-            ProgramError::UndefinedGlobal(line, value) => {
+            RuntimeError::UndefinedGlobal(line, value) => {
                 write!(f, "Undefined global variable '{value}' in line {line}")
             }
-            ProgramError::ExpectedInstance(line) => {
+            RuntimeError::ExpectedInstance(line) => {
                 write!(f, "Only instances can have properties in line {line}")
+            }
+            RuntimeError::UndefinedMethodOrProperty(line, value) => {
+                write!(f, "Undefined method or property '{value}' in line {line}")
             }
         }
     }

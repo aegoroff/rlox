@@ -1,8 +1,8 @@
-use crate::{ProgramError, value::LoxValue};
+use crate::{RuntimeError, value::LoxValue};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[inline]
-pub fn clock(_: &[LoxValue]) -> crate::Result<LoxValue, ProgramError> {
+pub fn clock(_: &[LoxValue]) -> crate::Result<LoxValue, RuntimeError> {
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
     let millis = since_the_epoch.as_millis();
@@ -10,10 +10,10 @@ pub fn clock(_: &[LoxValue]) -> crate::Result<LoxValue, ProgramError> {
 }
 
 #[inline]
-pub fn sqrt(args: &[LoxValue]) -> crate::Result<LoxValue, ProgramError> {
+pub fn sqrt(args: &[LoxValue]) -> crate::Result<LoxValue, RuntimeError> {
     if let LoxValue::Number(num) = args[0] {
         Ok(LoxValue::Number(num.sqrt()))
     } else {
-        Err(ProgramError::ExpectedNumber)
+        Err(RuntimeError::ExpectedNumber)
     }
 }
