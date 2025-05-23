@@ -150,7 +150,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let code_size = self.chunk().code.len();
         while ip < code_size {
             let code = self.chunk().read_opcode(ip)?;
-            ip += 1; // shift opcode offset itself
             #[cfg(feature = "disassembly")]
             {
                 for value in &self.stack {
@@ -158,6 +157,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 self.chunk().disassembly_instruction(ip);
             }
+            ip += 1; // shift opcode offset itself
             match code {
                 OpCode::Constant => {
                     let constant = self.chunk().read_constant(ip, CONST_SIZE);
