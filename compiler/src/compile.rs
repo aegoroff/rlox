@@ -76,6 +76,7 @@ pub enum FunctionType {
     Function,
     #[default]
     Script,
+    Method,
 }
 
 impl<'a> Compiler<'a> {
@@ -85,8 +86,13 @@ impl<'a> Compiler<'a> {
         enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
         name: &'a str,
     ) -> Self {
+        let receiver = if let FunctionType::Method = function_type {
+            "this"
+        } else {
+            ""
+        };
         Self {
-            locals: vec![Local::new("", Some(0))], // caller function itself
+            locals: vec![Local::new(receiver, Some(0))], // caller function itself
             scope_depth: 0,
             function: Function::new(name),
             function_type,
@@ -175,7 +181,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
 
         let constant = self.identifier_constant(id);
-        self.function(FunctionType::Function)?;
+        self.function(FunctionType::Method)?;
         self.emit_opcode(OpCode::Method);
         self.emit_operand(constant);
         Ok(())
@@ -690,6 +696,10 @@ impl<'a> Parser<'a> {
         self.named_variable(self.previous.clone(), can_assign)
     }
 
+    fn this(&mut self) -> crate::Result<()> {
+        self.variable(false)
+    }
+
     fn begin_scope(&mut self) {
         self.compiler.borrow_mut().scope_depth += 1;
     }
@@ -917,6 +927,7 @@ impl<'a> Parser<'a> {
             Token::Number(_) => self.number(),
             Token::String(_) => self.string(),
             Token::Identifier(_) => self.variable(can_assign),
+            Token::This => self.this(),
             Token::True | Token::False | Token::Nil => self.literal(),
             _ => Ok(()),
         }

@@ -545,10 +545,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn call_method(
         &mut self,
-        _receiver: Rc<RefCell<Instance>>,
+        receiver: Rc<RefCell<Instance>>,
         method: LoxValue,
         args_count: usize,
     ) -> Result<(), RuntimeError> {
+        let stack_size = self.stack.len();
+        self.stack[stack_size - args_count - 1] =
+            LoxValue::Bound(receiver, Box::new(method.clone()));
         self.call_value(method, args_count)
     }
 
