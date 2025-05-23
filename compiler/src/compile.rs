@@ -19,6 +19,7 @@ use crate::{
 pub struct Parser<'a> {
     tokens: Lexer<'a>,
     compiler: Rc<RefCell<Compiler<'a>>>,
+    class_compiler: Option<Rc<RefCell<ClassCompiler>>>,
     current: Rc<RefCell<Token<'a>>>,
     previous: Rc<RefCell<Token<'a>>>,
 }
@@ -63,6 +64,10 @@ pub struct Compiler<'a> {
     pub function: Function,
     function_type: FunctionType,
     upvalues: Vec<Upvalue>,
+}
+
+pub struct ClassCompiler {
+    enclosing: Option<Rc<RefCell<ClassCompiler>>>,
 }
 
 #[derive(Debug)]
@@ -114,6 +119,7 @@ impl<'a> Parser<'a> {
                 None,
                 "script",
             ))),
+            class_compiler: None,
         }
     }
 
