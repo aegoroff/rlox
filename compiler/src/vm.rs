@@ -382,9 +382,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property = property.try_str()?;
                     let instance = self.peek(0)?;
                     let field_value = if let LoxValue::Instance(instance) = instance {
-                        let method_or_field = if let Some(field) =
-                            instance.borrow().fields.get(property)
-                        {
+                        if let Some(field) = instance.borrow().fields.get(property) {
                             Some(field.clone())
                         } else {
                             let inst = instance.borrow();
@@ -392,8 +390,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             let method = class.methods.get(property);
                             method
                                 .map(|val| LoxValue::Bound(instance.clone(), Box::new(val.clone())))
-                        };
-                        method_or_field
+                        }
                     } else {
                         let line = self.chunk().line(ip - 1);
                         return Err(RuntimeError::ExpectedInstance(line));

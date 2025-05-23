@@ -67,7 +67,7 @@ pub struct Compiler<'a> {
 }
 
 pub struct ClassCompiler {
-    enclosing: Option<Rc<RefCell<ClassCompiler>>>,
+    pub enclosing: Option<Rc<RefCell<ClassCompiler>>>,
 }
 
 #[derive(Debug)]
@@ -165,6 +165,11 @@ impl<'a> Parser<'a> {
 
         self.define_variable(constant);
 
+        let class_compiler = ClassCompiler {
+            enclosing: self.class_compiler.clone(),
+        };
+        self.class_compiler = Some(Rc::new(RefCell::new(class_compiler)));
+
         self.named_variable(self.previous.clone(), false)?;
         self.consume(&Token::LeftBrace)?;
 
@@ -174,6 +179,14 @@ impl<'a> Parser<'a> {
 
         self.consume(&Token::RightBrace)?;
         self.emit_opcode(OpCode::Pop);
+
+        let enclosing = if let Some(ref class_compiler) = self.class_compiler {
+            class_compiler.borrow().enclosing.clone()
+        } else {
+            None
+        };
+        self.class_compiler = enclosing;
+
         Ok(())
     }
 
@@ -703,6 +716,15 @@ impl<'a> Parser<'a> {
     }
 
     fn this(&mut self) -> crate::Result<()> {
+        if self.class_compiler.is_none() {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Can't use 'this' outside of a class."
+                )],
+                "Invalid this usage"
+            ));
+        }
         self.variable(false)
     }
 
