@@ -115,6 +115,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
+    fn peek_mut(&mut self, distance: usize) -> Result<&mut LoxValue, ProgramError> {
+        if self.stack.len() < distance + 1 {
+            Err(ProgramError::NotEnoughStackCapacity(
+                distance,
+                self.stack.len(),
+            ))
+        } else {
+            let len = self.stack.len();
+            Ok(&mut self.stack[len - 1 - distance])
+        }
+    }
+
+    #[inline]
     fn frame(&mut self) -> &mut CallFrame {
         &mut self.frames[self.frame_count - 1]
     }
@@ -377,6 +390,42 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(class);
                     ip += 1;
                 }
+                OpCode::GetProperty => {
+                    let property = self.chunk().read_constant(ip, CONST_SIZE);
+                    let property = property.try_str()?;
+                    let instance = self.peek(0)?;
+                    let field_value = if let LoxValue::Instance(instance) = instance {
+                        instance.fields.get(property).cloned()
+                    } else {
+                        let line = self.chunk().line(ip - 1);
+                        return Err(ProgramError::ExpectedInstance(line));
+                    };
+                    if let Some(val) = field_value {
+                        self.pop()?; // instance
+                        self.push(val);
+                    }
+
+                    ip += 1;
+                }
+                OpCode::SetProperty => {
+                    let property = self.chunk().read_constant(ip, CONST_SIZE);
+                    let property_name = property.try_str()?;
+                    let property_value = self.pop()?;
+
+                    let instance = self.peek_mut(0)?;
+
+                    if let LoxValue::Instance(instance) = instance {
+                        instance
+                            .fields
+                            .insert(property_name.clone(), property_value.clone());
+                        self.pop()?; // instance
+                        self.push(property_value);
+                    } else {
+                        let line = self.chunk().line(ip - 1);
+                        return Err(ProgramError::ExpectedInstance(line));
+                    };
+                    ip += 1;
+                }
             }
         }
         Ok(())
@@ -603,6 +652,8 @@ outer();"#, "10" ; "closure2")]
     #[test_case("fun outer() { var x = 10; fun inner() { x = 20; } inner(); print x; } outer();", "20" ; "assign in closure")]
     #[test_case("class Foo { } print Foo;", "Foo" ; "class print")]
     #[test_case("class Foo { } print Foo();", "Foo instance" ; "class instance print")]
+    #[test_case("class Foo { } var foo = Foo(); print foo.value = 10;", "10" ; "instance field simple test")]
+    #[test_case("class Pair { } var pair = Pair(); pair.first = 1; pair.second = 2; print pair.first + pair.second;", "3" ; "instance field usage test")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

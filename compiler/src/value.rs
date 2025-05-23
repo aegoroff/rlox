@@ -226,7 +226,7 @@ impl Display for Class {
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Instance {
-    fields: FnvHashMap<String, LoxValue>,
+    pub fields: FnvHashMap<String, LoxValue>,
     pub class: Class,
 }
 

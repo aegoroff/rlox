@@ -530,6 +530,30 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn dot(&mut self, can_assign: bool) -> crate::Result<()> {
+        let Token::Identifier(id) = *self.current.borrow() else {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Expect property name after '.'"
+                )],
+                "Property name error"
+            ));
+        };
+        self.advance()?;
+
+        let name_ix = self.identifier_constant(id);
+        if can_assign && self.matches(&Token::Equal)? {
+            self.expression()?;
+            self.emit_opcode(OpCode::SetProperty);
+        } else {
+            self.emit_opcode(OpCode::GetProperty);
+        }
+        self.emit_operand(name_ix);
+
+        Ok(())
+    }
+
     fn and(&mut self) -> crate::Result<()> {
         let and_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_opcode(OpCode::Pop);
@@ -813,7 +837,7 @@ impl<'a> Parser<'a> {
         while Parser::get_precedence(&self.current.borrow()) as u8 >= precedence as u8 {
             self.advance()?;
             let previous = self.previous.clone();
-            self.call_infix(&previous.borrow())?;
+            self.call_infix(&previous.borrow(), can_assign)?;
         }
         if can_assign && self.matches(&Token::Equal)? {
             Err(miette::miette!(
@@ -838,12 +862,12 @@ impl<'a> Parser<'a> {
             }
             Token::And => Precedence::And,
             Token::Or => Precedence::Or,
-            Token::LeftParen => Precedence::Call,
+            Token::LeftParen | Token::Dot => Precedence::Call,
             _ => Precedence::None,
         }
     }
 
-    fn call_infix(&mut self, token: &Token) -> crate::Result<()> {
+    fn call_infix(&mut self, token: &Token, can_assign: bool) -> crate::Result<()> {
         match token {
             Token::Minus
             | Token::Plus
@@ -858,6 +882,7 @@ impl<'a> Parser<'a> {
             Token::And => self.and(),
             Token::Or => self.or(),
             Token::LeftParen => self.call(),
+            Token::Dot => self.dot(can_assign),
             _ => Ok(()),
         }
     }

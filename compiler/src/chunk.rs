@@ -24,24 +24,26 @@ pub enum OpCode {
     SetGlobalLong = 13,
     GetUpvalue = 14,
     SetUpvalue = 15,
-    Equal = 16,
-    Greater = 17,
-    Less = 18,
-    Add = 19,
-    Subtract = 20,
-    Multiply = 21,
-    Divide = 22,
-    Not = 23,
-    Negate = 24,
-    Print = 25,
-    Jump = 26,
-    JumpIfFalse = 27,
-    Loop = 28,
-    Call = 29,
-    Closure = 30,
-    CloseUpvalue = 31,
-    Return = 32,
-    Class = 33,
+    GetProperty = 16,
+    SetProperty = 17,
+    Equal = 18,
+    Greater = 19,
+    Less = 20,
+    Add = 21,
+    Subtract = 22,
+    Multiply = 23,
+    Divide = 24,
+    Not = 25,
+    Negate = 26,
+    Print = 27,
+    Jump = 28,
+    JumpIfFalse = 29,
+    Loop = 30,
+    Call = 31,
+    Closure = 32,
+    CloseUpvalue = 33,
+    Return = 34,
+    Class = 35,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -83,6 +85,8 @@ impl Display for OpCode {
             OpCode::SetUpvalue => write!(f, "OP_SET_UPVALUE"),
             OpCode::CloseUpvalue => write!(f, "OP_CLOSE_UPVALUE"),
             OpCode::Class => write!(f, "OP_CLASS"),
+            OpCode::GetProperty => write!(f, "OP_GET_PROPERTY"),
+            OpCode::SetProperty => write!(f, "OP_SET_PROPERTY"),
         }
     }
 }
@@ -206,6 +210,8 @@ impl Chunk {
             | OpCode::Call
             | OpCode::GetUpvalue
             | OpCode::Class
+            | OpCode::GetProperty
+            | OpCode::SetProperty
             | OpCode::SetUpvalue => self.disassembly_byte_instruction(offset, &code),
             OpCode::Return
             | OpCode::Nil

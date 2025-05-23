@@ -21,6 +21,7 @@ pub enum ProgramError {
     ExpectedString,
     ExpectedBool,
     ExpectedFunction(usize),
+    ExpectedInstance(usize),
     InvalidFunctionArgsCount(usize, usize),
     UndefinedGlobal(usize, String),
 }
@@ -46,6 +47,9 @@ impl Display for ProgramError {
             }
             ProgramError::UndefinedGlobal(line, value) => {
                 write!(f, "Undefined global variable '{value}' in line {line}")
+            }
+            ProgramError::ExpectedInstance(line) => {
+                write!(f, "Only instances can have properties in line {line}")
             }
         }
     }
