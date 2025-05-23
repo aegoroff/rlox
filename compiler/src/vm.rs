@@ -386,13 +386,18 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             if let Some(field) = instance.borrow().fields.get(property) {
                                 Some(field.clone())
                             } else {
-                                instance
-                                    .borrow()
-                                    .class
-                                    .borrow()
-                                    .methods
-                                    .get(property)
-                                    .cloned()
+                                let inst = instance.borrow();
+                                let class = inst.class.borrow();
+                                let method = class.methods.get(property);
+                                if let Some(m) = method {
+                                    let bound = BoundMethod {
+                                        receiver: instance.clone(),
+                                        method: Rc::new(RefCell::new(m.clone())),
+                                    };
+                                    Some(LoxValue::Bound(bound))
+                                } else {
+                                    None
+                                }
                             };
                         method_or_field
                     } else {
@@ -546,8 +551,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_method(&mut self, method: BoundMethod, args_count: usize) -> Result<(), RuntimeError> {
-        self.call_function(method.method, args_count)
+    fn call_method(&mut self, bound: BoundMethod, args_count: usize) -> Result<(), RuntimeError> {
+        let closure = bound.method;
+        self.call_value(closure.borrow().clone(), args_count)
     }
 
     #[inline]

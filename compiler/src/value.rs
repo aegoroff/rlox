@@ -113,7 +113,7 @@ impl Display for LoxValue {
                     f,
                     "{} -> {}",
                     method.receiver.borrow(),
-                    method.method.function.name
+                    method.method.borrow()
                 )
             }
         }
@@ -260,6 +260,6 @@ impl Display for Instance {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BoundMethod {
-    pub receiver: Rc<RefCell<LoxValue>>,
-    pub method: Closure,
+    pub receiver: Rc<RefCell<Instance>>,
+    pub method: Rc<RefCell<LoxValue>>,
 }
