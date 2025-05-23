@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::chunk::Chunk;
-use crate::value::{BoundMethod, Class, Closure, Instance, Upvalue};
+use crate::value::{Class, Closure, Instance, Upvalue};
 use crate::{RuntimeError, builtin};
 use crate::{
     chunk::OpCode,
@@ -382,23 +382,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property = property.try_str()?;
                     let instance = self.peek(0)?;
                     let field_value = if let LoxValue::Instance(instance) = instance {
-                        let method_or_field =
-                            if let Some(field) = instance.borrow().fields.get(property) {
-                                Some(field.clone())
-                            } else {
-                                let inst = instance.borrow();
-                                let class = inst.class.borrow();
-                                let method = class.methods.get(property);
-                                if let Some(m) = method {
-                                    let bound = BoundMethod {
-                                        receiver: instance.clone(),
-                                        method: Rc::new(RefCell::new(m.clone())),
-                                    };
-                                    Some(LoxValue::Bound(bound))
-                                } else {
-                                    None
-                                }
-                            };
+                        let method_or_field = if let Some(field) =
+                            instance.borrow().fields.get(property)
+                        {
+                            Some(field.clone())
+                        } else {
+                            let inst = instance.borrow();
+                            let class = inst.class.borrow();
+                            let method = class.methods.get(property);
+                            method
+                                .map(|val| LoxValue::Bound(instance.clone(), Box::new(val.clone())))
+                        };
                         method_or_field
                     } else {
                         let line = self.chunk().line(ip - 1);
@@ -434,7 +428,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     } else {
                         let line = self.chunk().line(ip - 1);
                         return Err(RuntimeError::ExpectedInstance(line));
-                    };
+                    }
                     ip += 1;
                 }
                 OpCode::Method => {
@@ -460,7 +454,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         } else {
             let line = self.chunk().line(ip - 1);
             return Err(RuntimeError::ExpectedInstance(line));
-        };
+        }
         Ok(())
     }
 
@@ -496,8 +490,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), RuntimeError> {
         match callee {
             LoxValue::Closure(closure) => self.call_function(closure, args_count),
-            LoxValue::Class(class) => self.call_class(class, args_count),
-            LoxValue::Bound(method) => self.call_method(method, args_count),
+            LoxValue::Class(class) => {
+                self.call_class(class, args_count);
+                Ok(())
+            }
+            LoxValue::Bound(receiver, method) => self.call_method(receiver, *method, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
             _ => Err(RuntimeError::InvalidCallable),
         }
@@ -538,22 +535,21 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_class(
-        &mut self,
-        class: Rc<RefCell<Class>>,
-        args_count: usize,
-    ) -> Result<(), RuntimeError> {
+    fn call_class(&mut self, class: Rc<RefCell<Class>>, args_count: usize) {
         let instance = Instance::new(class);
         let instance = LoxValue::Instance(Rc::new(RefCell::new(instance)));
         let stack_size = self.stack.len();
         self.stack[stack_size - args_count - 1] = instance;
-        Ok(())
     }
 
     #[inline]
-    fn call_method(&mut self, bound: BoundMethod, args_count: usize) -> Result<(), RuntimeError> {
-        let closure = bound.method;
-        self.call_value(closure.borrow().clone(), args_count)
+    fn call_method(
+        &mut self,
+        _receiver: Rc<RefCell<Instance>>,
+        method: LoxValue,
+        args_count: usize,
+    ) -> Result<(), RuntimeError> {
+        self.call_value(method, args_count)
     }
 
     #[inline]

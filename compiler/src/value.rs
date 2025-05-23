@@ -16,7 +16,7 @@ pub enum LoxValue {
     Closure(Closure),
     Class(Rc<RefCell<Class>>),
     Instance(Rc<RefCell<Instance>>),
-    Bound(BoundMethod),
+    Bound(Rc<RefCell<Instance>>, Box<LoxValue>),
     Nil,
     NaN,
 }
@@ -108,13 +108,8 @@ impl Display for LoxValue {
             LoxValue::NaN => write!(f, "NaN"),
             LoxValue::Class(class) => write!(f, "{}", class.borrow()),
             LoxValue::Instance(instance) => write!(f, "{}", instance.borrow()),
-            LoxValue::Bound(method) => {
-                write!(
-                    f,
-                    "{} -> {}",
-                    method.receiver.borrow(),
-                    method.method.borrow()
-                )
+            LoxValue::Bound(receiver, method) => {
+                write!(f, "{} -> {}", receiver.borrow(), method)
             }
         }
     }
@@ -223,6 +218,7 @@ pub struct Class {
 }
 
 impl Class {
+    #[must_use]
     pub fn new(name: String) -> Self {
         Self {
             name,
@@ -256,10 +252,4 @@ impl Display for Instance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} instance", self.class.borrow().name)
     }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct BoundMethod {
-    pub receiver: Rc<RefCell<Instance>>,
-    pub method: Rc<RefCell<LoxValue>>,
 }
