@@ -14,8 +14,9 @@ pub enum LoxValue {
     Function(Function),
     Native(NativeFunction),
     Closure(Closure),
-    Class(Class),
+    Class(Rc<RefCell<Class>>),
     Instance(Rc<RefCell<Instance>>),
+    Bound(BoundMethod),
     Nil,
     NaN,
 }
@@ -105,8 +106,16 @@ impl Display for LoxValue {
             LoxValue::Native(native) => write!(f, "{native}"),
             LoxValue::Closure(closure) => write!(f, "{closure}"),
             LoxValue::NaN => write!(f, "NaN"),
-            LoxValue::Class(class) => write!(f, "{class}"),
+            LoxValue::Class(class) => write!(f, "{}", class.borrow()),
             LoxValue::Instance(instance) => write!(f, "{}", instance.borrow()),
+            LoxValue::Bound(method) => {
+                write!(
+                    f,
+                    "{} -> {}",
+                    method.receiver.borrow(),
+                    method.method.function.name
+                )
+            }
         }
     }
 }
@@ -231,11 +240,11 @@ impl Display for Class {
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Instance {
     pub fields: FnvHashMap<String, LoxValue>,
-    pub class: Class,
+    pub class: Rc<RefCell<Class>>,
 }
 
 impl Instance {
-    pub fn new(class: Class) -> Self {
+    pub fn new(class: Rc<RefCell<Class>>) -> Self {
         Self {
             class,
             fields: FnvHashMap::default(),
@@ -245,6 +254,12 @@ impl Instance {
 
 impl Display for Instance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} instance", self.class.name)
+        write!(f, "{} instance", self.class.borrow().name)
     }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct BoundMethod {
+    pub receiver: Rc<RefCell<LoxValue>>,
+    pub method: Closure,
 }
