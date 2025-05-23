@@ -44,6 +44,7 @@ pub enum OpCode {
     CloseUpvalue = 33,
     Return = 34,
     Class = 35,
+    Method = 36,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -87,6 +88,7 @@ impl Display for OpCode {
             OpCode::Class => write!(f, "OP_CLASS"),
             OpCode::GetProperty => write!(f, "OP_GET_PROPERTY"),
             OpCode::SetProperty => write!(f, "OP_SET_PROPERTY"),
+            OpCode::Method => write!(f, "OP_METHOD"),
         }
     }
 }
@@ -210,6 +212,7 @@ impl Chunk {
             | OpCode::Call
             | OpCode::GetUpvalue
             | OpCode::Class
+            | OpCode::Method
             | OpCode::GetProperty
             | OpCode::SetProperty
             | OpCode::SetUpvalue => self.disassembly_byte_instruction(offset, &code),

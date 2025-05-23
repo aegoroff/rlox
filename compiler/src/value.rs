@@ -209,12 +209,16 @@ impl Upvalue {
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Class {
+    pub methods: FnvHashMap<String, LoxValue>,
     pub name: String,
 }
 
 impl Class {
     pub fn new(name: String) -> Self {
-        Self { name }
+        Self {
+            name,
+            methods: FnvHashMap::default(),
+        }
     }
 }
 

@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
     }
 
     fn class_declaration(&mut self) -> crate::Result<()> {
-        let Token::Identifier(id) = *self.current.borrow() else {
+        let Token::Identifier(class_name) = *self.current.borrow() else {
             return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Class name expected")],
                 "Class name error"
@@ -145,16 +145,39 @@ impl<'a> Parser<'a> {
         };
         self.advance()?;
 
-        let constant = self.identifier_constant(id);
-        self.declare_variable(id)?;
+        let constant = self.identifier_constant(class_name);
+        self.declare_variable(class_name)?;
 
         self.emit_opcode(OpCode::Class);
         self.emit_operand(constant);
 
         self.define_variable(constant);
 
+        self.named_variable(self.previous.clone(), false)?;
         self.consume(&Token::LeftBrace)?;
+
+        while !self.check(&Token::RightBrace) && !self.check(&Token::Eof) {
+            self.method()?;
+        }
+
         self.consume(&Token::RightBrace)?;
+        self.emit_opcode(OpCode::Pop);
+        Ok(())
+    }
+
+    fn method(&mut self) -> crate::Result<()> {
+        let Token::Identifier(id) = *self.current.borrow() else {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), "method name expected")],
+                "Method name error"
+            ));
+        };
+        self.advance()?;
+
+        let constant = self.identifier_constant(id);
+        self.function(FunctionType::Function)?;
+        self.emit_opcode(OpCode::Method);
+        self.emit_operand(constant);
         Ok(())
     }
 

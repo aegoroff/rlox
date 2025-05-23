@@ -115,6 +115,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
+    fn peek_mut(&mut self, distance: usize) -> Result<&mut LoxValue, ProgramError> {
+        if self.stack.len() < distance + 1 {
+            Err(ProgramError::NotEnoughStackCapacity(
+                distance,
+                self.stack.len(),
+            ))
+        } else {
+            let len = self.stack.len();
+            Ok(&mut self.stack[len - 1 - distance])
+        }
+    }
+
+    #[inline]
     fn frame(&mut self) -> &mut CallFrame {
         &mut self.frames[self.frame_count - 1]
     }
@@ -414,8 +427,27 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     };
                     ip += 1;
                 }
+                OpCode::Method => {
+                    let method_name = self.chunk().read_constant(ip, CONST_SIZE);
+                    let method_name = method_name.try_str()?;
+                    self.define_method(method_name, ip)?;
+                    ip += 1;
+                }
             }
         }
+        Ok(())
+    }
+
+    #[inline]
+    fn define_method(&mut self, name: &str, ip: usize) -> Result<(), ProgramError> {
+        let method_closure = self.pop()?;
+        let class = self.peek_mut(0)?;
+        if let LoxValue::Class(class) = class {
+            class.methods.insert(name.to_owned(), method_closure);
+        } else {
+            let line = self.chunk().line(ip - 1);
+            return Err(ProgramError::ExpectedInstance(line));
+        };
         Ok(())
     }
 
