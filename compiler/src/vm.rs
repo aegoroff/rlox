@@ -487,10 +487,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), RuntimeError> {
         match callee {
             LoxValue::Closure(closure) => self.call_function(closure, args_count),
-            LoxValue::Class(class) => {
-                self.call_class(class, args_count);
-                Ok(())
-            }
+            LoxValue::Class(class) => self.call_class(class, args_count),
             LoxValue::Bound(receiver, method) => self.call_method(receiver, *method, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
             _ => Err(RuntimeError::InvalidCallable),
@@ -532,11 +529,25 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn call_class(&mut self, class: Rc<RefCell<Class>>, args_count: usize) {
-        let instance = Instance::new(class);
-        let instance = LoxValue::Instance(Rc::new(RefCell::new(instance)));
+    fn call_class(
+        &mut self,
+        class: Rc<RefCell<Class>>,
+        args_count: usize,
+    ) -> Result<(), RuntimeError> {
+        let instance = Instance::new(class.clone());
+        let receiver = Rc::new(RefCell::new(instance));
+        let instance = LoxValue::Instance(receiver.clone());
         let stack_size = self.stack.len();
-        self.stack[stack_size - args_count - 1] = instance;
+
+        if let Some(init) = class.borrow().methods.get(scanner::INIT) {
+            self.stack[stack_size - args_count - 1] = instance.clone();
+            self.call_method(receiver, init.clone(), args_count)?;
+            let stack_size = self.stack.len();
+            self.stack[stack_size - 1] = instance;
+        } else {
+            self.stack[stack_size - args_count - 1] = instance;
+        }
+        Ok(())
     }
 
     #[inline]
@@ -697,6 +708,11 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class Bagel { method() { print 10;} } var b = Bagel(); b.method();", "10" ; "call class method")]
     #[test_case("class Bagel { method() { print 10;} } Bagel().method();", "10" ; "call class method without instance in var")]
     #[test_case("class Bagel { method() { print 10;} } var b = Bagel().method; b();", "10" ; "call class method from assigned var")]
+    #[test_case("class Class { init() { print 10; } method() { print 20; } } var c = Class(); c.method();", "10\n20" ; "class constructor without fields setting")]
+    #[test_case("class Class { init() { this.some = 10; } method() { print this.some; } } var c = Class(); c.method();", "10" ; "class constructor")]
+    #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(10); c.method();", "10" ; "class constructor with arg")]
+    #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
+    #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
