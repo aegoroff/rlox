@@ -87,7 +87,7 @@ impl<'a> Compiler<'a> {
         name: &'a str,
     ) -> Self {
         let receiver = if let FunctionType::Method = function_type {
-            "this"
+            scanner::THIS
         } else {
             ""
         };
@@ -732,17 +732,21 @@ impl<'a> Parser<'a> {
         token: Rc<RefCell<Token<'a>>>,
         can_assign: bool,
     ) -> crate::Result<()> {
-        let Token::Identifier(id) = *token.borrow() else {
-            return Err(miette::miette!(
-                labels = vec![LabeledSpan::at(
-                    self.current_span(),
-                    format!(
-                        "Unexpected token: '{}' Expected: 'identifier'",
-                        self.previous.borrow()
-                    )
-                )],
-                "Variable error"
-            ));
+        let id = match *token.borrow() {
+            Token::Identifier(id) => id,
+            Token::This => scanner::THIS,
+            _ => {
+                return Err(miette::miette!(
+                    labels = vec![LabeledSpan::at(
+                        self.current_span(),
+                        format!(
+                            "Unexpected token: '{}' Expected: 'identifier'",
+                            self.previous.borrow()
+                        )
+                    )],
+                    "Variable error"
+                ));
+            }
         };
         let mut set_code = OpCode::SetGlobal;
         let mut get_code = OpCode::GetGlobal;
