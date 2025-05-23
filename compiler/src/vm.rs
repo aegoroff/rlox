@@ -62,7 +62,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let closure = Closure::new(function);
         self.pop().map_err(|e| miette::miette!(e.to_string()))?;
         self.push(LoxValue::Closure(closure.clone()));
-        self.call(closure, 0)
+        self.call_function(closure, 0)
             .map_err(|e| miette::miette!(e.to_string()))
     }
 
@@ -482,15 +482,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), ProgramError> {
         match callee {
-            LoxValue::Closure(closure) => self.call(closure, args_count),
+            LoxValue::Closure(closure) => self.call_function(closure, args_count),
             LoxValue::Class(class) => self.call_class(class, args_count),
+            LoxValue::Instance(instance) => self.call_instance(instance, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
             _ => Err(ProgramError::InvalidCallable),
         }
     }
 
     #[inline]
-    fn call(&mut self, closure: Closure, args_count: usize) -> Result<(), ProgramError> {
+    fn call_function(&mut self, closure: Closure, args_count: usize) -> Result<(), ProgramError> {
         if closure.function.arity != args_count {
             return Err(ProgramError::InvalidFunctionArgsCount(
                 closure.function.arity,
@@ -529,6 +530,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance = LoxValue::Instance(Rc::new(RefCell::new(instance)));
         let stack_size = self.stack.len();
         self.stack[stack_size - args_count - 1] = instance;
+        Ok(())
+    }
+
+    #[inline]
+    fn call_instance(
+        &mut self,
+        instance: Rc<RefCell<Instance>>,
+        args_count: usize,
+    ) -> Result<(), ProgramError> {
         Ok(())
     }
 
@@ -674,6 +684,7 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class Foo { } print Foo();", "Foo instance" ; "class instance print")]
     #[test_case("class Foo { } var foo = Foo(); print foo.value = 10;", "10" ; "instance field simple test")]
     #[test_case("class Pair { } var pair = Pair(); pair.first = 1; pair.second = 2; print pair.first + pair.second;", "3" ; "instance field usage test")]
+    #[test_case("class Bagel { method() { print 10;} } var b = Bagel(); b.method();", "10" ; "call class method")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
