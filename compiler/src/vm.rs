@@ -433,26 +433,25 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let method_name = self.chunk().read_constant(ip, CONST_SIZE);
                     let method_name = method_name.try_str()?;
                     let argc = self.chunk().read_byte(ip + 1);
-                    let receiver = self.peek(argc as usize)?;
-
-                    match receiver.clone() {
-                        LoxValue::Instance(inst) => {
-                            self.invoke_method(ip, method_name, argc, inst)?;
-                        }
-                        LoxValue::Bound(inst, _) => {
-                            self.invoke_method(ip, method_name, argc, inst)?;
-                        }
-                        _ => {
-                            let line = self.chunk().line(ip - 1);
-                            return Err(RuntimeError::ExpectedInstance(line));
-                        }
-                    }
+                    self.invoke(ip, method_name, argc)?;
 
                     ip += 2;
                 }
             }
         }
         Ok(())
+    }
+
+    fn invoke(&mut self, ip: usize, method_name: &String, argc: u8) -> Result<(), RuntimeError> {
+        let receiver = self.peek(argc as usize)?;
+        match receiver.clone() {
+            LoxValue::Instance(inst) => self.invoke_method(ip, method_name, argc, inst),
+            LoxValue::Bound(inst, _) => self.invoke_method(ip, method_name, argc, inst),
+            _ => {
+                let line = self.chunk().line(ip - 1);
+                Err(RuntimeError::ExpectedInstance(line))
+            }
+        }
     }
 
     fn invoke_method(
