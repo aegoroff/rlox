@@ -466,8 +466,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance = inst.borrow();
         let class = instance.class.borrow();
         let method = class.methods.get(method_name);
+        let field = instance.fields.get(method_name);
         if let Some(method) = method {
             self.call_value(method.clone(), argc as usize)?;
+        } else if let Some(field) = field {
+            self.call_value(field.clone(), argc as usize)?;
         } else {
             let line = self.chunk().line(ip - 1);
             return Err(RuntimeError::UndefinedMethodOrProperty(
@@ -781,6 +784,7 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } Class(10).method();", "10" ; "class constructor with arg without temp local")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
+    #[test_case("class Oops { init() { fun f() { print 10; } this.field = f; } } var oops = Oops(); oops.field();", "10" ; "call on field")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
