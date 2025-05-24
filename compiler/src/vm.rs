@@ -802,6 +802,7 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
     #[test_case("class Oops { init() { fun f() { print 10; } this.field = f; } } var oops = Oops(); oops.field();", "10" ; "call on field")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
+    #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } B().bf();", "5" ; "Call own method with inherited present")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } print B().bf();", "10" ; "Call inherited method inside other")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
