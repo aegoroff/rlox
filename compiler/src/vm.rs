@@ -435,28 +435,45 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let argc = self.chunk().read_byte(ip + 1);
                     let receiver = self.peek(argc as usize)?;
 
-                    if let LoxValue::Bound(inst, _) = receiver.clone() {
-                        let instance = inst.borrow();
-                        let class = instance.class.borrow();
-                        let method = class.methods.get(method_name);
-                        if let Some(method) = method {
-                            self.call_value(method.clone(), argc as usize)?;
-                        } else {
-                            let line = self.chunk().line(ip - 1);
-                            return Err(RuntimeError::UndefinedMethodOrProperty(
-                                line,
-                                method_name.clone(),
-                            ));
+                    match receiver.clone() {
+                        LoxValue::Instance(inst) => {
+                            self.invoke_method(ip, method_name, argc, inst)?;
                         }
-                    } else {
-                        let line = self.chunk().line(ip - 1);
-                        return Err(RuntimeError::ExpectedInstance(line));
+                        LoxValue::Bound(inst, _) => {
+                            self.invoke_method(ip, method_name, argc, inst)?;
+                        }
+                        _ => {
+                            let line = self.chunk().line(ip - 1);
+                            return Err(RuntimeError::ExpectedInstance(line));
+                        }
                     }
 
                     ip += 2;
                 }
             }
         }
+        Ok(())
+    }
+
+    fn invoke_method(
+        &mut self,
+        ip: usize,
+        method_name: &String,
+        argc: u8,
+        inst: Rc<RefCell<Instance>>,
+    ) -> Result<(), RuntimeError> {
+        let instance = inst.borrow();
+        let class = instance.class.borrow();
+        let method = class.methods.get(method_name);
+        if let Some(method) = method {
+            self.call_value(method.clone(), argc as usize)?;
+        } else {
+            let line = self.chunk().line(ip - 1);
+            return Err(RuntimeError::UndefinedMethodOrProperty(
+                line,
+                method_name.clone(),
+            ));
+        };
         Ok(())
     }
 
