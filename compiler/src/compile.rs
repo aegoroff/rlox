@@ -150,7 +150,8 @@ impl<'a> Parser<'a> {
     }
 
     fn class_declaration(&mut self) -> crate::Result<()> {
-        let Token::Identifier(class_name) = *self.current.borrow() else {
+        let class_name_token = self.current.clone();
+        let Token::Identifier(class_name) = *class_name_token.borrow() else {
             return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(self.current_span(), "Class name expected")],
                 "Class name error"
@@ -170,6 +171,29 @@ impl<'a> Parser<'a> {
             enclosing: self.class_compiler.clone(),
         };
         self.class_compiler = Some(Rc::new(RefCell::new(class_compiler)));
+
+        if self.matches(&Token::Less)? {
+            let Token::Identifier(_) = *self.current.borrow() else {
+                return Err(miette::miette!(
+                    labels = vec![LabeledSpan::at(self.current_span(), "Class name expected")],
+                    "Class name error"
+                ));
+            };
+            self.advance()?;
+            self.variable(false)?;
+
+            if self.previous == class_name_token {
+                return Err(miette::miette!(
+                    labels = vec![LabeledSpan::at(
+                        self.current_span(),
+                        "A class can't inherit from itself."
+                    )],
+                    "Inheritance error"
+                ));
+            }
+            self.named_variable(class_name_token, false)?;
+            self.emit_opcode(OpCode::Inherit);
+        }
 
         self.named_variable(self.previous.clone(), false)?;
         self.consume(&Token::LeftBrace)?;

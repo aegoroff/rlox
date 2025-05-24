@@ -437,6 +437,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
                     ip += 2;
                 }
+                OpCode::Inherit => {
+                    let super_class = self.peek(1)?;
+                    let super_class = super_class.try_class()?;
+                    let sub_class = self.peek(0)?;
+                    let sub_class = sub_class.try_class()?;
+                    for (name, method) in super_class.borrow().methods.iter() {
+                        sub_class
+                            .borrow_mut()
+                            .methods
+                            .insert(name.clone(), method.clone());
+                    }
+
+                    self.pop()?;
+                }
             }
         }
         Ok(())
@@ -787,6 +801,7 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
     #[test_case("class Oops { init() { fun f() { print 10; } this.field = f; } } var oops = Oops(); oops.field();", "10" ; "call on field")]
+    #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();

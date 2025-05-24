@@ -89,6 +89,14 @@ impl LoxValue {
         }
     }
 
+    pub fn try_class(&self) -> Result<&Rc<RefCell<Class>>, RuntimeError> {
+        if let LoxValue::Class(c) = self {
+            Ok(c)
+        } else {
+            Err(RuntimeError::ExpectedString)
+        }
+    }
+
     #[must_use]
     pub fn is_truthy(&self) -> bool {
         self.try_bool().unwrap_or(true)

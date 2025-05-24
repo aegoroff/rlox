@@ -19,6 +19,7 @@ pub enum RuntimeError {
     OperandsMustBeNumbers,
     ExpectedNumber,
     ExpectedString,
+    ExpectedClass,
     ExpectedBool,
     ExpectedFunction(usize),
     ExpectedInstance(usize),
@@ -41,6 +42,7 @@ impl Display for RuntimeError {
             RuntimeError::OperandsMustBeNumbers => write!(f, "Operands must be numbers"),
             RuntimeError::ExpectedNumber => write!(f, "Expected number"),
             RuntimeError::ExpectedString => write!(f, "Expected string"),
+            RuntimeError::ExpectedClass => write!(f, "Expected class"),
             RuntimeError::ExpectedBool => write!(f, "Expected boolean"),
             RuntimeError::ExpectedFunction(line) => write!(f, "Expected function at {line}"),
             RuntimeError::InvalidFunctionArgsCount(arity, args_count) => {
