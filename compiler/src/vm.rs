@@ -442,6 +442,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn invoke(&mut self, ip: usize, method_name: &String, argc: u8) -> Result<(), RuntimeError> {
         let receiver = self.peek(argc as usize)?;
         match receiver.clone() {
@@ -454,6 +455,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
     }
 
+    #[inline]
     fn invoke_method(
         &mut self,
         ip: usize,
@@ -476,6 +478,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn set_member(
         &mut self,
         property_name: &str,
@@ -490,6 +493,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline]
     fn get_member(property: &String, instance: &Rc<RefCell<Instance>>) -> Option<LoxValue> {
         if let Some(field) = instance.borrow().fields.get(property) {
             Some(field.clone())

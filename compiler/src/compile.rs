@@ -601,7 +601,8 @@ impl<'a> Parser<'a> {
             self.expression()?;
             self.emit_opcode(OpCode::SetProperty);
             self.emit_operand(name_ix);
-        } else if self.matches(&Token::LeftParen)? {
+        } else if id != scanner::INIT && self.matches(&Token::LeftParen)? {
+            // HACK: id != scanner::INIT to avoid borrowing mut twice
             let argc = self.argument_list()?;
             self.emit_opcode(OpCode::Invoke);
             self.emit_operand(name_ix);
