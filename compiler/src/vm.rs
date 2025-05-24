@@ -470,6 +470,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         if let Some(method) = method {
             self.call_value(method.clone(), argc as usize)?;
         } else if let Some(field) = field {
+            let len = self.stack.len();
+            self.stack[len - argc as usize - 1] = field.clone();
             self.call_value(field.clone(), argc as usize)?;
         } else {
             let line = self.chunk().line(ip - 1);
