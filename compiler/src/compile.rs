@@ -191,11 +191,11 @@ impl<'a> Parser<'a> {
                     "Inheritance error"
                 ));
             }
-            self.named_variable(class_name_token, false)?;
+            self.named_variable(class_name_token.clone(), false)?;
             self.emit_opcode(OpCode::Inherit);
         }
 
-        self.named_variable(self.previous.clone(), false)?;
+        self.named_variable(class_name_token, false)?;
         self.consume(&Token::LeftBrace)?;
 
         while !self.check(&Token::RightBrace) && !self.check(&Token::Eof) {
