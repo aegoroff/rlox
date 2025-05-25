@@ -97,6 +97,14 @@ impl LoxValue {
         }
     }
 
+    pub fn try_instance(&self, line: usize) -> Result<&Rc<RefCell<Instance>>, RuntimeError> {
+        if let LoxValue::Instance(instance) = self {
+            Ok(instance)
+        } else {
+            Err(RuntimeError::ExpectedInstance(line))
+        }
+    }
+
     #[must_use]
     pub fn is_truthy(&self) -> bool {
         self.try_bool().unwrap_or(true)

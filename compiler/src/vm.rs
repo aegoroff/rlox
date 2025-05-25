@@ -453,8 +453,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::GetSuper => {
                     let name = self.chunk().read_constant(ip, CONST_SIZE);
+                    let name = name.try_str()?;
                     let super_class = self.pop()?;
                     let super_class = super_class.try_class()?;
+
+                    let line = self.chunk().line(ip - 1);
+                    let instance = self.pop()?;
+                    let instance = instance.try_instance(line)?;
+                    let super_class = super_class.borrow();
+                    let method = super_class.methods.get(name).ok_or(
+                        RuntimeError::UndefinedMethodOrProperty(line, name.to_owned()),
+                    )?;
+                    let bound = LoxValue::Bound(instance.clone(), Box::new(method.clone()));
+                    self.push(bound);
                     ip += 1;
                 }
             }
