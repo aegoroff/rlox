@@ -68,6 +68,7 @@ pub struct Compiler<'a> {
 
 pub struct ClassCompiler {
     pub enclosing: Option<Rc<RefCell<ClassCompiler>>>,
+    pub has_superclass: bool,
 }
 
 #[derive(Debug)]
@@ -169,8 +170,10 @@ impl<'a> Parser<'a> {
 
         let class_compiler = ClassCompiler {
             enclosing: self.class_compiler.clone(),
+            has_superclass: false,
         };
-        self.class_compiler = Some(Rc::new(RefCell::new(class_compiler)));
+        let class_compiler = Rc::new(RefCell::new(class_compiler));
+        self.class_compiler = Some(class_compiler.clone());
 
         if self.matches(&Token::Less)? {
             let Token::Identifier(_) = *self.current.borrow() else {
@@ -191,8 +194,13 @@ impl<'a> Parser<'a> {
                     "Inheritance error"
                 ));
             }
+            self.begin_scope();
+            self.add_local(scanner::SUPER)?;
+            self.define_variable(0);
+
             self.named_variable(class_name_token.clone(), false)?;
             self.emit_opcode(OpCode::Inherit);
+            class_compiler.borrow_mut().has_superclass = true;
         }
 
         self.named_variable(class_name_token, false)?;
@@ -205,11 +213,16 @@ impl<'a> Parser<'a> {
         self.consume(&Token::RightBrace)?;
         self.emit_opcode(OpCode::Pop);
 
+        let mut has_superclass = false;
         let enclosing = if let Some(ref class_compiler) = self.class_compiler {
+            has_superclass = class_compiler.borrow().has_superclass;
             class_compiler.borrow().enclosing.clone()
         } else {
             None
         };
+        if has_superclass {
+            self.end_scope();
+        }
         self.class_compiler = enclosing;
 
         Ok(())
