@@ -789,9 +789,19 @@ impl<'a> Parser<'a> {
         self.advance()?;
         let name = self.identifier_constant(id);
         self.named_variable(Rc::new(RefCell::new(Token::This)), false)?;
-        self.named_variable(Rc::new(RefCell::new(Token::Super)), false)?;
-        self.emit_opcode(OpCode::GetSuper);
-        self.emit_operand(name);
+
+        if self.matches(&Token::LeftParen)? {
+            let argc = self.argument_list()?;
+            self.named_variable(Rc::new(RefCell::new(Token::Super)), false)?;
+            self.emit_opcode(OpCode::SuperInvoke);
+            self.emit_operand(name);
+            self.emit_operand(argc);
+        } else {
+            self.named_variable(Rc::new(RefCell::new(Token::Super)), false)?;
+            self.emit_opcode(OpCode::GetSuper);
+            self.emit_operand(name);
+        }
+
         Ok(())
     }
 

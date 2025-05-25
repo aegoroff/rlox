@@ -468,6 +468,21 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(bound);
                     ip += 1;
                 }
+                OpCode::SuperInvoke => {
+                    let method_name = self.chunk().read_constant(ip, CONST_SIZE);
+                    let method_name = method_name.try_str()?;
+                    let argc = self.chunk().read_byte(ip + 1);
+                    let super_class = self.pop()?;
+                    let super_class = super_class.try_class()?;
+                    let super_class = super_class.borrow();
+                    let line = self.chunk().line(ip - 1);
+                    let method = super_class.methods.get(method_name).ok_or(
+                        RuntimeError::UndefinedMethodOrProperty(line, method_name.to_owned()),
+                    )?;
+                    self.call_value(method.clone(), argc as usize)?;
+
+                    ip += 2;
+                }
             }
         }
         Ok(())

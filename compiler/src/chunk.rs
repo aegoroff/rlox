@@ -42,12 +42,13 @@ pub enum OpCode {
     Loop = 31,
     Call = 32,
     Invoke = 33,
-    Closure = 34,
-    CloseUpvalue = 35,
-    Return = 36,
-    Class = 37,
-    Inherit = 38,
-    Method = 39,
+    SuperInvoke = 34,
+    Closure = 35,
+    CloseUpvalue = 36,
+    Return = 37,
+    Class = 38,
+    Inherit = 39,
+    Method = 40,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -95,6 +96,7 @@ impl Display for OpCode {
             OpCode::Invoke => write!(f, "OP_INVOKE"),
             OpCode::Inherit => write!(f, "OP_INHERIT"),
             OpCode::GetSuper => write!(f, "OP_GET_SUPER"),
+            OpCode::SuperInvoke => write!(f, "OP_SUPER_INVOKE"),
         }
     }
 }
@@ -250,7 +252,7 @@ impl Chunk {
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
             OpCode::Closure => self.disassembly_closure_instruction(offset),
-            OpCode::Invoke => self.disassembly_invoke_instruction(offset),
+            OpCode::Invoke | OpCode::SuperInvoke => self.disassembly_invoke_instruction(offset),
         }
     }
 
