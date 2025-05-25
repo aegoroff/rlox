@@ -93,7 +93,7 @@ impl LoxValue {
         if let LoxValue::Class(c) = self {
             Ok(c)
         } else {
-            Err(RuntimeError::ExpectedString)
+            Err(RuntimeError::ExpectedClass)
         }
     }
 
