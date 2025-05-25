@@ -26,7 +26,7 @@ pub enum OpCode {
     SetUpvalue = 15,
     GetProperty = 16,
     SetProperty = 17,
-    Super = 18,
+    GetSuper = 18,
     Equal = 19,
     Greater = 20,
     Less = 21,
@@ -94,7 +94,7 @@ impl Display for OpCode {
             OpCode::Method => write!(f, "OP_METHOD"),
             OpCode::Invoke => write!(f, "OP_INVOKE"),
             OpCode::Inherit => write!(f, "OP_INHERIT"),
-            OpCode::Super => write!(f, "OP_SUPER"),
+            OpCode::GetSuper => write!(f, "OP_GET_SUPER"),
         }
     }
 }
@@ -214,7 +214,7 @@ impl Chunk {
             | OpCode::DefineGlobal
             | OpCode::GetGlobal
             | OpCode::SetGlobal
-            | OpCode::Super => self.disassembly_constant(offset, &code, 1),
+            | OpCode::GetSuper => self.disassembly_constant(offset, &code, 1),
             OpCode::SetLocal
             | OpCode::GetLocal
             | OpCode::Call

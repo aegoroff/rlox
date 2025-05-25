@@ -790,7 +790,7 @@ impl<'a> Parser<'a> {
         let name = self.identifier_constant(id);
         self.named_variable(Rc::new(RefCell::new(Token::This)), false)?;
         self.named_variable(Rc::new(RefCell::new(Token::Super)), false)?;
-        self.emit_opcode(OpCode::Super);
+        self.emit_opcode(OpCode::GetSuper);
         self.emit_operand(name);
         Ok(())
     }

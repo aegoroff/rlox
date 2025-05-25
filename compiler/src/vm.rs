@@ -451,7 +451,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
                     self.pop()?;
                 }
-                OpCode::Super => {
+                OpCode::GetSuper => {
                     let name = self.chunk().read_constant(ip, CONST_SIZE);
                     let super_class = self.pop()?;
                     let super_class = super_class.try_class()?;
