@@ -778,6 +778,23 @@ impl<'a> Parser<'a> {
         self.variable(false)
     }
 
+    fn super_(&mut self) -> crate::Result<()> {
+        self.consume(&Token::Dot)?;
+        let Token::Identifier(id) = *self.current.borrow() else {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), "Identifier expected")],
+                "Identifier error"
+            ));
+        };
+        self.advance()?;
+        let name = self.identifier_constant(id);
+        self.named_variable(Rc::new(RefCell::new(Token::This)), false)?;
+        self.named_variable(Rc::new(RefCell::new(Token::Super)), false)?;
+        self.emit_opcode(OpCode::Super);
+        self.emit_operand(name);
+        Ok(())
+    }
+
     fn begin_scope(&mut self) {
         self.compiler.borrow_mut().scope_depth += 1;
     }
@@ -813,6 +830,7 @@ impl<'a> Parser<'a> {
         let id = match *token.borrow() {
             Token::Identifier(id) => id,
             Token::This => scanner::THIS,
+            Token::Super => scanner::SUPER,
             _ => {
                 return Err(miette::miette!(
                     labels = vec![LabeledSpan::at(
@@ -1010,6 +1028,7 @@ impl<'a> Parser<'a> {
             Token::String(_) => self.string(),
             Token::Identifier(_) => self.variable(can_assign),
             Token::This => self.this(),
+            Token::Super => self.super_(),
             Token::True | Token::False | Token::Nil => self.literal(),
             _ => Ok(()),
         }

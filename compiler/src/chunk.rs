@@ -26,27 +26,28 @@ pub enum OpCode {
     SetUpvalue = 15,
     GetProperty = 16,
     SetProperty = 17,
-    Equal = 18,
-    Greater = 19,
-    Less = 20,
-    Add = 21,
-    Subtract = 22,
-    Multiply = 23,
-    Divide = 24,
-    Not = 25,
-    Negate = 26,
-    Print = 27,
-    Jump = 28,
-    JumpIfFalse = 29,
-    Loop = 30,
-    Call = 31,
-    Invoke = 32,
-    Closure = 33,
-    CloseUpvalue = 34,
-    Return = 35,
-    Class = 36,
-    Inherit = 37,
-    Method = 38,
+    Super = 18,
+    Equal = 19,
+    Greater = 20,
+    Less = 21,
+    Add = 22,
+    Subtract = 23,
+    Multiply = 24,
+    Divide = 25,
+    Not = 26,
+    Negate = 27,
+    Print = 28,
+    Jump = 29,
+    JumpIfFalse = 30,
+    Loop = 31,
+    Call = 32,
+    Invoke = 33,
+    Closure = 34,
+    CloseUpvalue = 35,
+    Return = 36,
+    Class = 37,
+    Inherit = 38,
+    Method = 39,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -93,6 +94,7 @@ impl Display for OpCode {
             OpCode::Method => write!(f, "OP_METHOD"),
             OpCode::Invoke => write!(f, "OP_INVOKE"),
             OpCode::Inherit => write!(f, "OP_INHERIT"),
+            OpCode::Super => write!(f, "OP_SUPER"),
         }
     }
 }
@@ -208,9 +210,11 @@ impl Chunk {
             print!("{:4} ", self.lines[line_ix]);
         }
         match code {
-            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
-                self.disassembly_constant(offset, &code, 1)
-            }
+            OpCode::Constant
+            | OpCode::DefineGlobal
+            | OpCode::GetGlobal
+            | OpCode::SetGlobal
+            | OpCode::Super => self.disassembly_constant(offset, &code, 1),
             OpCode::SetLocal
             | OpCode::GetLocal
             | OpCode::Call
