@@ -143,15 +143,18 @@ impl Chunk {
         }
     }
 
+    #[inline]
     pub fn read_opcode(&self, offset: usize) -> Result<OpCode, RuntimeError> {
         OpCode::from_u8(self.code[offset]).ok_or(RuntimeError::InvalidInstruction(offset))
     }
 
+    #[inline]
     pub fn read_constant(&self, offset: usize, constant_size: usize) -> LoxValue {
         let ix = self.get_constant_ix(offset, constant_size);
         self.constants[ix].clone()
     }
 
+    #[inline]
     pub fn ref_constant(&self, offset: usize, constant_size: usize) -> &LoxValue {
         let ix = self.get_constant_ix(offset, constant_size);
         &self.constants[ix]
