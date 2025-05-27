@@ -9,7 +9,7 @@ use crate::{
     value::{Function, LoxValue, NativeFunction},
 };
 use fnv::FnvHashMap;
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
 const FRAMES_MAX: usize = 64;
@@ -381,15 +381,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
                     let property = property.try_str()?;
                     let instance = self.peek(0)?;
-                    let field_value = match instance {
-                        LoxValue::Instance(instance) => Self::get_member(property, instance),
-                        LoxValue::Bound(instance, _) => Self::get_member(property, instance),
-                        _ => {
-                            let line = self.chunk().line(ip - 1);
-                            return Err(RuntimeError::ExpectedInstance(line));
-                        }
+                    let value = if let LoxValue::Instance(instance) = instance {
+                        Self::get_member(property, instance)
+                    } else {
+                        let line = self.chunk().line(ip - 1);
+                        return Err(RuntimeError::ExpectedInstance(line));
                     };
-                    if let Some(val) = field_value {
+                    if let Some(val) = value {
                         self.pop()?; // instance
                         self.push(val);
                     } else {
@@ -405,21 +403,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::SetProperty => {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
                     let property_name = property.try_str()?;
-                    let property_value = self.pop()?;
+                    let instance = self.peek(1)?;
+                    let property_value = self.peek(0)?;
 
-                    let instance = self.peek(0)?;
-
-                    match instance.clone() {
-                        LoxValue::Instance(instance) => {
-                            self.set_member(property_name, property_value, instance.borrow_mut())?;
-                        }
-                        LoxValue::Bound(instance, _) => {
-                            self.set_member(property_name, property_value, instance.borrow_mut())?;
-                        }
-                        _ => {
-                            let line = self.chunk().line(ip - 1);
-                            return Err(RuntimeError::ExpectedInstance(line));
-                        }
+                    if let LoxValue::Instance(instance) = instance {
+                        instance
+                            .borrow_mut()
+                            .fields
+                            .insert(property_name.to_owned(), property_value.clone());
+                        let value = self.pop()?;
+                        self.pop()?;
+                        self.push(value);
+                    } else {
+                        let line = self.chunk().line(ip - 1);
+                        return Err(RuntimeError::ExpectedInstance(line));
                     }
                     ip += 1;
                 }
@@ -526,21 +523,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 method_name.clone(),
             ));
         };
-        Ok(())
-    }
-
-    #[inline]
-    fn set_member(
-        &mut self,
-        property_name: &str,
-        property_value: LoxValue,
-        mut instance: RefMut<Instance>,
-    ) -> Result<(), RuntimeError> {
-        instance
-            .fields
-            .insert(property_name.to_owned(), property_value.clone());
-        self.pop()?;
-        self.push(property_value);
         Ok(())
     }
 
@@ -673,8 +655,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         args_count: usize,
     ) -> Result<(), RuntimeError> {
         let stack_size = self.stack.len();
-        self.stack[stack_size - args_count - 1] =
-            LoxValue::Bound(receiver, Box::new(method.clone()));
+        self.stack[stack_size - args_count - 1] = LoxValue::Instance(receiver);
         self.call_value(method, args_count)
     }
 
