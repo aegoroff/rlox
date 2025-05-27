@@ -613,11 +613,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
         self.stack[stack_size - args_count - 1] = instance;
         if let Some(init) = class.borrow().methods.get(scanner::INIT) {
-            self.call_method(receiver, init.clone(), args_count)?;
+            self.call_value(init.clone(), args_count)
         } else if args_count > 0 {
-            return Err(RuntimeError::InvalidFunctionArgsCount(0, args_count));
+            Err(RuntimeError::InvalidFunctionArgsCount(0, args_count))
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     #[inline]
