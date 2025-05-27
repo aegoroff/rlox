@@ -806,6 +806,7 @@ outer();"#, "10" ; "closure2")]
         let mut stdout = Vec::new();
         let mut vm = VirtualMachine::new(&mut stdout);
         vm.init();
+        println!("Code: {input}");
 
         // Act
         let actual = vm.interpret(input);
