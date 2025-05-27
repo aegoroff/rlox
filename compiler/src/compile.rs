@@ -459,6 +459,15 @@ impl<'a> Parser<'a> {
         if self.matches(&Token::Semicolon)? {
             self.emit_return();
         } else {
+            if let FunctionType::TypeInitializer = self.compiler.borrow().function_type {
+                return Err(miette::miette!(
+                    labels = vec![LabeledSpan::at(
+                        self.current_span(),
+                        "Can't return a value from an initializer."
+                    )],
+                    "Return usage error"
+                ));
+            }
             self.expression()?;
             self.consume(&Token::Semicolon)?;
             self.compiler
