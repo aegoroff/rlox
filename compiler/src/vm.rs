@@ -484,12 +484,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance = receiver.try_instance(line)?;
         let instance = instance.clone(); // to avoid borrowing mut while borrowing
         let instance = instance.borrow();
-        let class = instance.class.borrow();
-        let method = class.methods.get(method_name);
-        let field = instance.fields.get(method_name);
-        if let Some(method) = method {
+        if let Some(method) = instance.class.borrow().methods.get(method_name) {
             self.call_value(method.clone(), argc as usize)?;
-        } else if let Some(field) = field {
+        } else if let Some(field) = instance.fields.get(method_name) {
             let len = self.stack.len();
             self.stack[len - argc as usize - 1] = field.clone();
             self.call_value(field.clone(), argc as usize)?;
