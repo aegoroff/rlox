@@ -480,25 +480,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn invoke(&mut self, ip: usize, method_name: &String, argc: u8) -> Result<(), RuntimeError> {
         let receiver = self.peek(argc as usize)?;
-        match receiver.clone() {
-            LoxValue::Instance(inst) => self.invoke_method(ip, method_name, argc, inst),
-            LoxValue::Bound(inst, _) => self.invoke_method(ip, method_name, argc, inst),
-            _ => {
-                let line = self.chunk().line(ip - 1);
-                Err(RuntimeError::ExpectedInstance(line))
-            }
-        }
-    }
-
-    #[inline]
-    fn invoke_method(
-        &mut self,
-        ip: usize,
-        method_name: &String,
-        argc: u8,
-        inst: Rc<RefCell<Instance>>,
-    ) -> Result<(), RuntimeError> {
-        let instance = inst.borrow();
+        let line = self.chunk().line(ip);
+        let instance = receiver.try_instance(line)?;
+        let instance = instance.clone(); // to avoid borrowing mut while borrowing
+        let instance = instance.borrow();
         let class = instance.class.borrow();
         let method = class.methods.get(method_name);
         let field = instance.fields.get(method_name);
@@ -509,7 +494,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
             self.stack[len - argc as usize - 1] = field.clone();
             self.call_value(field.clone(), argc as usize)?;
         } else {
-            let line = self.chunk().line(ip - 1);
             return Err(RuntimeError::UndefinedMethodOrProperty(
                 line,
                 method_name.clone(),
