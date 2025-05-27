@@ -381,17 +381,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
                     let property = property.try_str()?;
                     let instance = self.peek(0)?;
-                    let value = if let LoxValue::Instance(instance) = instance {
-                        Self::get_member(property, instance)
-                    } else {
-                        let line = self.chunk().line(ip - 1);
-                        return Err(RuntimeError::ExpectedInstance(line));
-                    };
+                    let line = self.chunk().line(ip - 1);
+                    let instance = instance.try_instance(line)?;
+                    let value = Self::get_member(property, instance);
                     if let Some(val) = value {
                         self.pop()?; // instance
                         self.push(val);
                     } else {
-                        let line = self.chunk().line(ip - 1);
                         return Err(RuntimeError::UndefinedMethodOrProperty(
                             line,
                             property.clone(),
@@ -405,19 +401,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let property_name = property.try_str()?;
                     let instance = self.peek(1)?;
                     let property_value = self.peek(0)?;
-
-                    if let LoxValue::Instance(instance) = instance {
-                        instance
-                            .borrow_mut()
-                            .fields
-                            .insert(property_name.to_owned(), property_value.clone());
-                        let value = self.pop()?;
-                        self.pop()?;
-                        self.push(value);
-                    } else {
-                        let line = self.chunk().line(ip - 1);
-                        return Err(RuntimeError::ExpectedInstance(line));
-                    }
+                    let line = self.chunk().line(ip - 1);
+                    let instance = instance.try_instance(line)?;
+                    instance
+                        .borrow_mut()
+                        .fields
+                        .insert(property_name.to_owned(), property_value.clone());
+                    let value = self.pop()?;
+                    self.pop()?;
+                    self.push(value);
                     ip += 1;
                 }
                 OpCode::Method => {
