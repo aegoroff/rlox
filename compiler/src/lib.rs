@@ -26,6 +26,7 @@ pub enum RuntimeError {
     InvalidFunctionArgsCount(usize, usize),
     UndefinedGlobal(usize, String),
     UndefinedMethodOrProperty(usize, String),
+    StackOverflow,
 }
 
 impl Display for RuntimeError {
@@ -56,6 +57,9 @@ impl Display for RuntimeError {
             }
             RuntimeError::UndefinedMethodOrProperty(line, value) => {
                 write!(f, "Undefined method or property '{value}' in line {line}")
+            }
+            RuntimeError::StackOverflow => {
+                write!(f, "Stack overflow. Too much nestings call max available 64")
             }
         }
     }

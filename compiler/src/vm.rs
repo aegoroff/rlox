@@ -574,6 +574,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 args_count,
             ));
         }
+        if self.frame_count == FRAMES_MAX - 1 {
+            return Err(RuntimeError::StackOverflow);
+        }
         self.frame_count += 1;
         self.frame().slots_offset = self.stack.len() - args_count;
         self.frame().closure = closure;
