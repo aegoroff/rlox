@@ -69,7 +69,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             miette::miette!(
                 labels = vec![LabeledSpan::at(
                     parser.get_line_range(self.line),
-                    format!("#{}: {e}", self.line)
+                    e.to_string()
                 )],
                 "Runtime error"
             )
