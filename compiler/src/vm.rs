@@ -169,14 +169,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += CONST_LONG_SIZE;
                 }
                 OpCode::Return => {
-                    self.close_upvalues(self.stack.len() - 1);
                     let value = self.pop()?;
-                    self.frame_count -= 1;
-                    if self.frame_count == 0 {
-                        break;
+
+                    for idx in self.frame().slots_offset..self.stack.len() {
+                        self.close_upvalues(idx);
                     }
 
                     let num_to_pop = self.frame().closure.function.arity + 1;
+                    self.frame_count -= 1;
+                    if self.frame_count == 0 {
+                        self.pop()?;
+                        break;
+                    }
+
                     self.pop_stack_n_times(num_to_pop)?;
                     self.push(value);
                     break;
