@@ -81,6 +81,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    #[must_use]
     pub fn line_starts_at(&self, line: usize) -> usize {
         *self.lines_start.get(&line).unwrap_or(&0)
     }

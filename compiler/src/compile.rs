@@ -133,6 +133,7 @@ impl<'a> Parser<'a> {
         Ok(self.end_compiler())
     }
 
+    #[must_use]
     pub fn get_line_range(&self, line: usize) -> Range<usize> {
         let start = self.tokens.line_starts_at(line);
         start..start

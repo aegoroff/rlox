@@ -435,7 +435,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let super_class = super_class.try_class()?;
                     let sub_class = self.peek(0)?;
                     let sub_class = sub_class.try_class()?;
-                    for (name, method) in super_class.borrow().methods.iter() {
+                    for (name, method) in &super_class.borrow().methods {
                         sub_class
                             .borrow_mut()
                             .methods
@@ -559,7 +559,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), RuntimeError> {
         match callee {
             LoxValue::Closure(closure) => self.call_function(closure, args_count),
-            LoxValue::Class(class) => self.call_class(class, args_count),
+            LoxValue::Class(class) => self.call_class(&class, args_count),
             LoxValue::Bound(receiver, method) => self.call_method(receiver, *method, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
             _ => Err(RuntimeError::InvalidCallable),
@@ -606,7 +606,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn call_class(
         &mut self,
-        class: Rc<RefCell<Class>>,
+        class: &Rc<RefCell<Class>>,
         args_count: usize,
     ) -> Result<(), RuntimeError> {
         let instance = Instance::new(class.clone());
