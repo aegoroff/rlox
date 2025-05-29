@@ -40,6 +40,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
     open_upvalues: Vec<Rc<RefCell<Upvalue>>>,
+    line: usize,
 }
 
 impl<W: std::io::Write> VirtualMachine<W> {
@@ -52,6 +53,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             frames: core::array::from_fn(|_| CallFrame::new()),
             frame_count: 0,
             open_upvalues: vec![],
+            line: 0,
         }
     }
 
@@ -63,7 +65,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.pop().map_err(|e| miette::miette!(e.to_string()))?;
         self.push(LoxValue::Closure(closure.clone()));
         self.call_function(closure, 0)
-            .map_err(|e| miette::miette!(e.to_string()))
+            .map_err(|e| miette::miette!("{e} at {}", self.line))
     }
 
     pub fn init(&mut self) {
@@ -138,6 +140,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         while ip < code_size {
             let code = self.chunk().read_opcode(ip)?;
             let line = self.chunk().line(ip);
+            self.line = line;
             #[cfg(feature = "disassembly")]
             {
                 for value in &self.stack {
@@ -172,14 +175,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Negate => {
                     let value = self.pop()?;
-                    let value = value.try_num(line)?;
+                    let value = value.try_num()?;
                     self.push(LoxValue::Number(-value));
                 }
                 OpCode::Add => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let lr = a.try_str(line);
-                    let rr = b.try_str(line);
+                    let lr = a.try_str();
+                    let rr = b.try_str();
                     if lr.is_ok() || rr.is_ok() {
                         // concat strings here if any of the operands is a string
                         if let Ok(l) = lr {
@@ -189,30 +192,30 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             let result = a.to_string() + r;
                             self.push(LoxValue::String(result));
                         }
-                    } else if let Ok(l) = a.try_num(line) {
-                        let r = b.try_num(line)?;
+                    } else if let Ok(l) = a.try_num() {
+                        let r = b.try_num()?;
                         self.push(LoxValue::Number(l + r));
                     }
                 }
                 OpCode::Subtract => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num(line)?;
-                    let b = b.try_num(line)?;
+                    let a = a.try_num()?;
+                    let b = b.try_num()?;
                     self.push(LoxValue::Number(a - b));
                 }
                 OpCode::Multiply => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num(line)?;
-                    let b = b.try_num(line)?;
+                    let a = a.try_num()?;
+                    let b = b.try_num()?;
                     self.push(LoxValue::Number(a * b));
                 }
                 OpCode::Divide => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num(line)?;
-                    let b = b.try_num(line)?;
+                    let a = a.try_num()?;
+                    let b = b.try_num()?;
                     if b == 0.0 {
                         self.push(LoxValue::NaN);
                     } else {
@@ -224,7 +227,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::False => self.push(LoxValue::Bool(false)),
                 OpCode::Not => {
                     let value = self.pop()?;
-                    let val = value.try_bool(line)?;
+                    let val = value.try_bool()?;
                     self.push(LoxValue::Bool(!val));
                 }
                 OpCode::Equal => {
@@ -236,13 +239,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Less => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let result = a.less(&b, line)?;
+                    let result = a.less(&b)?;
                     self.push(LoxValue::Bool(result));
                 }
                 OpCode::Greater => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let lt = a.less(&b, line)?;
+                    let lt = a.less(&b)?;
                     let gt = !lt && !a.equal(&b);
                     self.push(LoxValue::Bool(gt));
                 }
@@ -320,8 +323,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Closure => {
                     let function_value = self.chunk().read_constant(ip, 1);
                     let LoxValue::Function(function) = function_value else {
-                        let line = self.chunk().line(ip - 1);
-                        return Err(RuntimeError::ExpectedFunction(line));
+                        return Err(RuntimeError::ExpectedFunction);
                     };
                     let upvalues_count = function.upvalue_count;
                     ip += 1;
@@ -372,7 +374,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Class => {
                     let class_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let class_name = class_name.try_str(line)?;
+                    let class_name = class_name.try_str()?;
                     let class = Class::new(class_name.clone());
                     let class = LoxValue::Class(Rc::new(RefCell::new(class)));
                     self.push(class);
@@ -380,30 +382,25 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::GetProperty => {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
-                    let property = property.try_str(line)?;
+                    let property = property.try_str()?;
                     let instance = self.peek(0)?;
-                    let line = self.chunk().line(ip - 1);
-                    let instance = instance.try_instance(line)?;
+                    let instance = instance.try_instance()?;
                     let value = Self::get_member(property, instance);
                     if let Some(val) = value {
                         self.pop()?; // instance
                         self.push(val);
                     } else {
-                        return Err(RuntimeError::UndefinedMethodOrProperty(
-                            line,
-                            property.clone(),
-                        ));
+                        return Err(RuntimeError::UndefinedMethodOrProperty(property.clone()));
                     }
 
                     ip += 1;
                 }
                 OpCode::SetProperty => {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
-                    let property_name = property.try_str(line)?;
+                    let property_name = property.try_str()?;
                     let property_value = self.pop()?;
                     let instance = self.pop()?;
-                    let line = self.chunk().line(ip - 1);
-                    let instance = instance.try_instance(line)?;
+                    let instance = instance.try_instance()?;
                     instance
                         .borrow_mut()
                         .fields
@@ -413,23 +410,23 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Method => {
                     let method_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str(line)?;
-                    self.define_method(method_name, ip)?;
+                    let method_name = method_name.try_str()?;
+                    self.define_method(method_name)?;
                     ip += 1;
                 }
                 OpCode::Invoke => {
                     let method_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str(line)?;
+                    let method_name = method_name.try_str()?;
                     let argc = self.chunk().read_byte(ip + 1);
-                    self.invoke(ip, method_name, argc)?;
+                    self.invoke(method_name, argc)?;
 
                     ip += 2;
                 }
                 OpCode::Inherit => {
                     let super_class = self.peek(1)?;
-                    let super_class = super_class.try_class(line)?;
+                    let super_class = super_class.try_class()?;
                     let sub_class = self.peek(0)?;
-                    let sub_class = sub_class.try_class(line)?;
+                    let sub_class = sub_class.try_class()?;
                     for (name, method) in super_class.borrow().methods.iter() {
                         sub_class
                             .borrow_mut()
@@ -441,31 +438,30 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::GetSuper => {
                     let name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let name = name.try_str(line)?;
+                    let name = name.try_str()?;
                     let super_class = self.pop()?;
-                    let super_class = super_class.try_class(line)?;
+                    let super_class = super_class.try_class()?;
 
-                    let line = self.chunk().line(ip - 1);
                     let instance = self.pop()?;
-                    let instance = instance.try_instance(line)?;
+                    let instance = instance.try_instance()?;
                     let super_class = super_class.borrow();
-                    let method = super_class.methods.get(name).ok_or(
-                        RuntimeError::UndefinedMethodOrProperty(line, name.to_owned()),
-                    )?;
+                    let method = super_class
+                        .methods
+                        .get(name)
+                        .ok_or(RuntimeError::UndefinedMethodOrProperty(name.to_owned()))?;
                     let bound = LoxValue::Bound(instance.clone(), Box::new(method.clone()));
                     self.push(bound);
                     ip += 1;
                 }
                 OpCode::SuperInvoke => {
                     let method_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str(line)?;
+                    let method_name = method_name.try_str()?;
                     let argc = self.chunk().read_byte(ip + 1);
                     let super_class = self.pop()?;
-                    let super_class = super_class.try_class(line)?;
+                    let super_class = super_class.try_class()?;
                     let super_class = super_class.borrow();
-                    let line = self.chunk().line(ip - 1);
                     let method = super_class.methods.get(method_name).ok_or(
-                        RuntimeError::UndefinedMethodOrProperty(line, method_name.to_owned()),
+                        RuntimeError::UndefinedMethodOrProperty(method_name.to_owned()),
                     )?;
                     self.call_value(method.clone(), argc as usize)?;
 
@@ -477,10 +473,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn invoke(&mut self, ip: usize, method_name: &String, argc: u8) -> Result<(), RuntimeError> {
+    fn invoke(&mut self, method_name: &String, argc: u8) -> Result<(), RuntimeError> {
         let receiver = self.peek(argc as usize)?;
-        let line = self.chunk().line(ip);
-        let instance = receiver.try_instance(line)?;
+        let instance = receiver.try_instance()?;
         let instance = instance.clone(); // to avoid borrowing mut while borrowing
         let instance = instance.borrow();
         let callable = if let Some(method) = instance.class.borrow().methods.get(method_name) {
@@ -490,10 +485,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             self.stack[len - argc as usize - 1] = field.clone();
             field.clone()
         } else {
-            return Err(RuntimeError::UndefinedMethodOrProperty(
-                line,
-                method_name.clone(),
-            ));
+            return Err(RuntimeError::UndefinedMethodOrProperty(method_name.clone()));
         };
         drop(instance); // IMPORTANT: to avoid borrowing mut twice if setting class field in a method call
         self.call_value(callable, argc as usize)?;
@@ -513,7 +505,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn define_method(&mut self, name: &str, ip: usize) -> Result<(), RuntimeError> {
+    fn define_method(&mut self, name: &str) -> Result<(), RuntimeError> {
         let method_closure = self.pop()?;
         let class = self.peek(0)?;
         if let LoxValue::Class(class) = class {
@@ -522,8 +514,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 .methods
                 .insert(name.to_owned(), method_closure);
         } else {
-            let line = self.chunk().line(ip - 1);
-            return Err(RuntimeError::ExpectedInstance(line));
+            return Err(RuntimeError::ExpectedInstance);
         }
         Ok(())
     }
@@ -639,14 +630,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn set_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
-        let line = self.chunk().line(offset - 1);
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
 
-        let name = val.try_str(line)?;
+        let name = val.try_str()?;
         if !self.globals.contains_key(name) {
-            let line = chunk.line(offset);
-            return Err(RuntimeError::UndefinedGlobal(line, name.clone()));
+            return Err(RuntimeError::UndefinedGlobal(name.clone()));
         }
         let value = self.peek(0)?;
         let value = value.clone();
@@ -660,11 +649,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn get_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
-        let line = self.chunk().line(offset - 1);
-        let name = val.try_str(line)?;
+        let name = val.try_str()?;
         let Some(val) = self.globals.get(name) else {
-            let line = chunk.line(offset);
-            return Err(RuntimeError::UndefinedGlobal(line, name.clone()));
+            return Err(RuntimeError::UndefinedGlobal(name.clone()));
         };
         let val = val.clone();
         drop(chunk);
@@ -676,8 +663,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn define_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
-        let line = self.chunk().line(offset - 1);
-        let name = val.try_str(line)?;
+        let name = val.try_str()?;
         let name = name.clone();
         drop(chunk);
         let value = self.peek(0)?;
