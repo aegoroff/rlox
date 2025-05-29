@@ -647,11 +647,11 @@ impl<'a> Parser<'a> {
             self.expression()?;
             self.emit_opcode(OpCode::SetProperty);
             self.emit_operand(name_ix);
-        // } else if self.matches(&Token::LeftParen)? { // TODO: uncomment after fix
-        //     let argc = self.argument_list()?;
-        //     self.emit_opcode(OpCode::Invoke);
-        //     self.emit_operand(name_ix);
-        //     self.emit_operand(argc);
+        } else if self.matches(&Token::LeftParen)? {
+            let argc = self.argument_list()?;
+            self.emit_opcode(OpCode::Invoke);
+            self.emit_operand(name_ix);
+            self.emit_operand(argc);
         } else {
             self.emit_opcode(OpCode::GetProperty);
             self.emit_operand(name_ix);

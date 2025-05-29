@@ -399,17 +399,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::SetProperty => {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
                     let property_name = property.try_str()?;
-                    let instance = self.peek(1)?;
-                    let property_value = self.peek(0)?;
+                    let property_value = self.pop()?;
+                    let instance = self.pop()?;
                     let line = self.chunk().line(ip - 1);
                     let instance = instance.try_instance(line)?;
                     instance
                         .borrow_mut()
                         .fields
                         .insert(property_name.to_owned(), property_value.clone());
-                    let value = self.pop()?;
-                    self.pop()?;
-                    self.push(value);
+                    self.push(property_value);
                     ip += 1;
                 }
                 OpCode::Method => {
@@ -484,18 +482,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance = receiver.try_instance(line)?;
         let instance = instance.clone(); // to avoid borrowing mut while borrowing
         let instance = instance.borrow();
-        if let Some(method) = instance.class.borrow().methods.get(method_name) {
-            self.call_value(method.clone(), argc as usize)?;
+        let callable = if let Some(method) = instance.class.borrow().methods.get(method_name) {
+            method.clone()
         } else if let Some(field) = instance.fields.get(method_name) {
             let len = self.stack.len();
             self.stack[len - argc as usize - 1] = field.clone();
-            self.call_value(field.clone(), argc as usize)?;
+            field.clone()
         } else {
             return Err(RuntimeError::UndefinedMethodOrProperty(
                 line,
                 method_name.clone(),
             ));
         };
+        drop(instance); // IMPORTANT: to avoid borrowing mut twice if setting class field in a method call
+        self.call_value(callable, argc as usize)?;
         Ok(())
     }
 
