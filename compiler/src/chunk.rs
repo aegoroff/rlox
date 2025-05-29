@@ -261,7 +261,7 @@ impl Chunk {
 
     #[inline]
     pub fn line(&self, offset: usize) -> usize {
-        let line_ix = offset.min(self.lines.len() - 1);
+        let line_ix = self.line_index(offset);
         self.lines[line_ix]
     }
 
