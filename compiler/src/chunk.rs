@@ -308,7 +308,7 @@ impl Chunk {
     }
 
     fn disassembly_jump_instruction(&self, offset: usize, code: &OpCode, sign: i32) -> usize {
-        let jump = self.read_short(offset);
+        let jump = self.read_short(offset + 1);
 
         println!(
             "{:<16} {offset:4} -> {}",
