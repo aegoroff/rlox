@@ -9,6 +9,7 @@ use crate::{
     value::{Function, LoxValue, NativeFunction},
 };
 use fnv::FnvHashMap;
+use miette::LabeledSpan;
 use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
@@ -64,8 +65,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let closure = Closure::new(function);
         self.pop().map_err(|e| miette::miette!(e.to_string()))?;
         self.push(LoxValue::Closure(closure.clone()));
-        self.call_function(closure, 0)
-            .map_err(|e| miette::miette!("{e} at {}", self.line))
+        self.call_function(closure, 0).map_err(|e| {
+            miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    parser.get_line_range(self.line),
+                    format!("#{}: {e}", self.line)
+                )],
+                "Runtime error"
+            )
+        })
     }
 
     pub fn init(&mut self) {

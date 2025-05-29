@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::CharIndices};
+use std::{collections::HashMap, fmt::Display, str::CharIndices};
 
 use miette::LabeledSpan;
 
@@ -8,7 +8,7 @@ pub struct Lexer<'a> {
     chars: std::iter::Peekable<CharIndices<'a>>,
     whole: &'a str,
     pub line: usize,
-    pub line_begin: usize,
+    lines_start: HashMap<usize, usize>,
     pub begin: usize,
     pub end: usize,
 }
@@ -69,14 +69,20 @@ impl std::hash::Hash for Token<'_> {
 impl<'a> Lexer<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {
+        let mut lines_start = HashMap::new();
+        lines_start.insert(1, 0);
         Self {
             chars: content.char_indices().peekable(),
             whole: content,
             line: 1,
-            line_begin: 0,
             begin: 0,
             end: 0,
+            lines_start,
         }
+    }
+
+    pub fn line_starts_at(&self, line: usize) -> usize {
+        *self.lines_start.get(&line).unwrap_or(&0)
     }
 
     fn two_char_token(
@@ -295,7 +301,7 @@ impl<'a> Iterator for Lexer<'a> {
                 ' ' | '\t' | '\r' => continue, // skip whitespaces
                 '\n' => {
                     self.line += 1;
-                    self.line_begin = i;
+                    self.lines_start.insert(self.line, i + 1); // +1 because next line will be started from next char
                     continue; // skip line break
                 }
                 _ => Some(Err(miette::miette!(
