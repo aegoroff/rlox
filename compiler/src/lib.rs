@@ -16,11 +16,11 @@ pub enum RuntimeError {
     InstructionsStackEmpty,
     NotEnoughStackCapacity(usize, usize),
     InvalidCallable,
-    OperandsMustBeNumbers,
-    ExpectedNumber,
-    ExpectedString,
-    ExpectedClass,
-    ExpectedBool,
+    OperandsMustBeNumbers(usize),
+    ExpectedNumber(usize),
+    ExpectedString(usize),
+    ExpectedClass(usize),
+    ExpectedBool(usize),
     ExpectedFunction(usize),
     ExpectedInstance(usize),
     InvalidFunctionArgsCount(usize, usize),
@@ -40,11 +40,13 @@ impl Display for RuntimeError {
                 "Not enough stack capacity for distance {distance}. Current stack size is {size}"
             ),
             RuntimeError::InvalidCallable => write!(f, "Can only call functions and classes."),
-            RuntimeError::OperandsMustBeNumbers => write!(f, "Operands must be numbers"),
-            RuntimeError::ExpectedNumber => write!(f, "Expected number"),
-            RuntimeError::ExpectedString => write!(f, "Expected string"),
-            RuntimeError::ExpectedClass => write!(f, "Expected class"),
-            RuntimeError::ExpectedBool => write!(f, "Expected boolean"),
+            RuntimeError::OperandsMustBeNumbers(line) => {
+                write!(f, "Operands must be numbers at {line}")
+            }
+            RuntimeError::ExpectedNumber(line) => write!(f, "Expected number at {line}"),
+            RuntimeError::ExpectedString(line) => write!(f, "Expected string at {line}"),
+            RuntimeError::ExpectedClass(line) => write!(f, "Expected class at {line}"),
+            RuntimeError::ExpectedBool(line) => write!(f, "Expected boolean at {line}"),
             RuntimeError::ExpectedFunction(line) => write!(f, "Expected function at {line}"),
             RuntimeError::InvalidFunctionArgsCount(arity, args_count) => {
                 write!(f, "Expected {arity} arguments but got {args_count}")

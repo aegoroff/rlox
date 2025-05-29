@@ -26,18 +26,18 @@ const ERROR_MARGIN: f64 = 0.00001;
 impl LoxValue {
     #[must_use]
     pub fn equal(&self, other: &LoxValue) -> bool {
-        if let Ok(l) = self.try_num() {
-            let Ok(r) = other.try_num() else {
+        if let Ok(l) = self.try_num(0) {
+            let Ok(r) = other.try_num(0) else {
                 return false;
             };
             (l - r).abs() < ERROR_MARGIN
-        } else if let Ok(l) = self.try_bool() {
-            let Ok(r) = other.try_bool() else {
+        } else if let Ok(l) = self.try_bool(0) {
+            let Ok(r) = other.try_bool(0) else {
                 return false;
             };
             l == r
-        } else if let Ok(l) = self.try_str() {
-            let Ok(r) = other.try_str() else {
+        } else if let Ok(l) = self.try_str(0) {
+            let Ok(r) = other.try_str(0) else {
                 return false;
             };
             l == r
@@ -50,50 +50,50 @@ impl LoxValue {
         }
     }
 
-    pub fn less(&self, other: &LoxValue) -> Result<bool, RuntimeError> {
-        if let Ok(l) = self.try_num() {
-            let r = other.try_num()?;
+    pub fn less(&self, other: &LoxValue, line: usize) -> Result<bool, RuntimeError> {
+        if let Ok(l) = self.try_num(line) {
+            let r = other.try_num(line)?;
             Ok(l < r)
-        } else if let Ok(l) = self.try_bool() {
-            let r = other.try_bool()?;
+        } else if let Ok(l) = self.try_bool(line) {
+            let r = other.try_bool(line)?;
             Ok(!l & r)
-        } else if let Ok(l) = self.try_str() {
-            let r = other.try_str()?;
+        } else if let Ok(l) = self.try_str(line) {
+            let r = other.try_str(line)?;
             Ok(l < r)
         } else {
-            Err(RuntimeError::OperandsMustBeNumbers)
+            Err(RuntimeError::OperandsMustBeNumbers(line))
         }
     }
 
-    pub fn try_num(&self) -> Result<f64, RuntimeError> {
+    pub fn try_num(&self, line: usize) -> Result<f64, RuntimeError> {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(RuntimeError::ExpectedNumber)
+            Err(RuntimeError::ExpectedNumber(line))
         }
     }
 
-    pub fn try_str(&self) -> Result<&String, RuntimeError> {
+    pub fn try_str(&self, line: usize) -> Result<&String, RuntimeError> {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(RuntimeError::ExpectedString)
+            Err(RuntimeError::ExpectedString(line))
         }
     }
 
-    pub fn try_bool(&self) -> Result<bool, RuntimeError> {
+    pub fn try_bool(&self, line: usize) -> Result<bool, RuntimeError> {
         match self {
             LoxValue::Bool(b) => Ok(*b),
             LoxValue::Nil => Ok(false),
-            _ => Err(RuntimeError::ExpectedBool),
+            _ => Err(RuntimeError::ExpectedBool(line)),
         }
     }
 
-    pub fn try_class(&self) -> Result<&Rc<RefCell<Class>>, RuntimeError> {
+    pub fn try_class(&self, line: usize) -> Result<&Rc<RefCell<Class>>, RuntimeError> {
         if let LoxValue::Class(c) = self {
             Ok(c)
         } else {
-            Err(RuntimeError::ExpectedClass)
+            Err(RuntimeError::ExpectedClass(line))
         }
     }
 
@@ -107,7 +107,7 @@ impl LoxValue {
 
     #[must_use]
     pub fn is_truthy(&self) -> bool {
-        self.try_bool().unwrap_or(true)
+        self.try_bool(0).unwrap_or(true)
     }
 }
 

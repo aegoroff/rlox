@@ -137,6 +137,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let code_size = self.chunk().code.len();
         while ip < code_size {
             let code = self.chunk().read_opcode(ip)?;
+            let line = self.chunk().line(ip);
             #[cfg(feature = "disassembly")]
             {
                 for value in &self.stack {
@@ -171,14 +172,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Negate => {
                     let value = self.pop()?;
-                    let value = value.try_num()?;
+                    let value = value.try_num(line)?;
                     self.push(LoxValue::Number(-value));
                 }
                 OpCode::Add => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let lr = a.try_str();
-                    let rr = b.try_str();
+                    let lr = a.try_str(line);
+                    let rr = b.try_str(line);
                     if lr.is_ok() || rr.is_ok() {
                         // concat strings here if any of the operands is a string
                         if let Ok(l) = lr {
@@ -188,30 +189,30 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             let result = a.to_string() + r;
                             self.push(LoxValue::String(result));
                         }
-                    } else if let Ok(l) = a.try_num() {
-                        let r = b.try_num()?;
+                    } else if let Ok(l) = a.try_num(line) {
+                        let r = b.try_num(line)?;
                         self.push(LoxValue::Number(l + r));
                     }
                 }
                 OpCode::Subtract => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num()?;
-                    let b = b.try_num()?;
+                    let a = a.try_num(line)?;
+                    let b = b.try_num(line)?;
                     self.push(LoxValue::Number(a - b));
                 }
                 OpCode::Multiply => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num()?;
-                    let b = b.try_num()?;
+                    let a = a.try_num(line)?;
+                    let b = b.try_num(line)?;
                     self.push(LoxValue::Number(a * b));
                 }
                 OpCode::Divide => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num()?;
-                    let b = b.try_num()?;
+                    let a = a.try_num(line)?;
+                    let b = b.try_num(line)?;
                     if b == 0.0 {
                         self.push(LoxValue::NaN);
                     } else {
@@ -223,7 +224,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::False => self.push(LoxValue::Bool(false)),
                 OpCode::Not => {
                     let value = self.pop()?;
-                    let val = value.try_bool()?;
+                    let val = value.try_bool(line)?;
                     self.push(LoxValue::Bool(!val));
                 }
                 OpCode::Equal => {
@@ -235,13 +236,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Less => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let result = a.less(&b)?;
+                    let result = a.less(&b, line)?;
                     self.push(LoxValue::Bool(result));
                 }
                 OpCode::Greater => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let lt = a.less(&b)?;
+                    let lt = a.less(&b, line)?;
                     let gt = !lt && !a.equal(&b);
                     self.push(LoxValue::Bool(gt));
                 }
@@ -371,7 +372,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Class => {
                     let class_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let class_name = class_name.try_str()?;
+                    let class_name = class_name.try_str(line)?;
                     let class = Class::new(class_name.clone());
                     let class = LoxValue::Class(Rc::new(RefCell::new(class)));
                     self.push(class);
@@ -379,7 +380,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::GetProperty => {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
-                    let property = property.try_str()?;
+                    let property = property.try_str(line)?;
                     let instance = self.peek(0)?;
                     let line = self.chunk().line(ip - 1);
                     let instance = instance.try_instance(line)?;
@@ -398,7 +399,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::SetProperty => {
                     let property = self.chunk().read_constant(ip, CONST_SIZE);
-                    let property_name = property.try_str()?;
+                    let property_name = property.try_str(line)?;
                     let property_value = self.pop()?;
                     let instance = self.pop()?;
                     let line = self.chunk().line(ip - 1);
@@ -412,13 +413,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Method => {
                     let method_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str()?;
+                    let method_name = method_name.try_str(line)?;
                     self.define_method(method_name, ip)?;
                     ip += 1;
                 }
                 OpCode::Invoke => {
                     let method_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str()?;
+                    let method_name = method_name.try_str(line)?;
                     let argc = self.chunk().read_byte(ip + 1);
                     self.invoke(ip, method_name, argc)?;
 
@@ -426,9 +427,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::Inherit => {
                     let super_class = self.peek(1)?;
-                    let super_class = super_class.try_class()?;
+                    let super_class = super_class.try_class(line)?;
                     let sub_class = self.peek(0)?;
-                    let sub_class = sub_class.try_class()?;
+                    let sub_class = sub_class.try_class(line)?;
                     for (name, method) in super_class.borrow().methods.iter() {
                         sub_class
                             .borrow_mut()
@@ -440,9 +441,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::GetSuper => {
                     let name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let name = name.try_str()?;
+                    let name = name.try_str(line)?;
                     let super_class = self.pop()?;
-                    let super_class = super_class.try_class()?;
+                    let super_class = super_class.try_class(line)?;
 
                     let line = self.chunk().line(ip - 1);
                     let instance = self.pop()?;
@@ -457,10 +458,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 }
                 OpCode::SuperInvoke => {
                     let method_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str()?;
+                    let method_name = method_name.try_str(line)?;
                     let argc = self.chunk().read_byte(ip + 1);
                     let super_class = self.pop()?;
-                    let super_class = super_class.try_class()?;
+                    let super_class = super_class.try_class(line)?;
                     let super_class = super_class.borrow();
                     let line = self.chunk().line(ip - 1);
                     let method = super_class.methods.get(method_name).ok_or(
@@ -638,10 +639,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn set_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
+        let line = self.chunk().line(offset - 1);
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
 
-        let name = val.try_str()?;
+        let name = val.try_str(line)?;
         if !self.globals.contains_key(name) {
             let line = chunk.line(offset);
             return Err(RuntimeError::UndefinedGlobal(line, name.clone()));
@@ -658,7 +660,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn get_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
-        let name = val.try_str()?;
+        let line = self.chunk().line(offset - 1);
+        let name = val.try_str(line)?;
         let Some(val) = self.globals.get(name) else {
             let line = chunk.line(offset);
             return Err(RuntimeError::UndefinedGlobal(line, name.clone()));
@@ -673,7 +676,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn define_global(&mut self, offset: usize, constant_size: usize) -> Result<(), RuntimeError> {
         let chunk = self.chunk();
         let val = chunk.ref_constant(offset, constant_size);
-        let name = val.try_str()?;
+        let line = self.chunk().line(offset - 1);
+        let name = val.try_str(line)?;
         let name = name.clone();
         drop(chunk);
         let value = self.peek(0)?;
