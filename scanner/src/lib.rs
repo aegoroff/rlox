@@ -8,6 +8,7 @@ pub struct Lexer<'a> {
     chars: std::iter::Peekable<CharIndices<'a>>,
     whole: &'a str,
     pub line: usize,
+    pub line_begin: usize,
     pub begin: usize,
     pub end: usize,
 }
@@ -72,6 +73,7 @@ impl<'a> Lexer<'a> {
             chars: content.char_indices().peekable(),
             whole: content,
             line: 1,
+            line_begin: 0,
             begin: 0,
             end: 0,
         }
@@ -293,6 +295,7 @@ impl<'a> Iterator for Lexer<'a> {
                 ' ' | '\t' | '\r' => continue, // skip whitespaces
                 '\n' => {
                     self.line += 1;
+                    self.line_begin = i;
                     continue; // skip line break
                 }
                 _ => Some(Err(miette::miette!(

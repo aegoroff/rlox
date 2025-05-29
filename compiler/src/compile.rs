@@ -470,12 +470,7 @@ impl<'a> Parser<'a> {
             }
             self.expression()?;
             self.consume(&Token::Semicolon)?;
-            self.compiler
-                .borrow_mut()
-                .function
-                .chunk
-                .borrow_mut()
-                .write_code(OpCode::Return, self.tokens.line);
+            self.emit_opcode(OpCode::Return);
         }
         Ok(())
     }
@@ -1122,12 +1117,7 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_jump(&mut self, opcode: OpCode) -> usize {
-        self.compiler
-            .borrow_mut()
-            .function
-            .chunk
-            .borrow_mut()
-            .write_code(opcode, self.tokens.line);
+        self.emit_opcode(opcode);
         self.emit_operand(0xFF);
         self.emit_operand(0xFF);
         self.chunk_code_size() - 2
