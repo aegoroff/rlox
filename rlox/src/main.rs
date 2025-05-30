@@ -8,7 +8,7 @@ use bugreport::{
     collector::{CompileTimeInformation, EnvironmentVariables, OperatingSystem, SoftwareVersion},
     format::Markdown,
 };
-use clap::{ArgMatches, Command, command};
+use clap::{Arg, ArgAction, ArgMatches, Command, command};
 use compiler::vm::VirtualMachine;
 use interpreter::{ast::Stmt, int::Interpreter, parser::Parser, resolver::Resolver};
 use miette::{Context, IntoDiagnostic, miette};
@@ -21,6 +21,7 @@ const COMPILE_CMD: &str = "c";
 const FILE_CMD: &str = "f";
 const STDIN_CMD: &str = "i";
 const BUGREPORT_CMD: &str = "bugreport";
+const PRINTCODE_OPT: &str = "printcode";
 
 const PATH: &str = "PATH";
 
@@ -48,9 +49,10 @@ fn interpretation(cmd: &ArgMatches) -> miette::Result<()> {
 }
 
 fn compilation(cmd: &ArgMatches) -> miette::Result<()> {
+    let printcode = cmd.get_flag(PRINTCODE_OPT);
     match cmd.subcommand() {
-        Some((FILE_CMD, cmd)) => from_file(cmd, compile),
-        Some((STDIN_CMD, cmd)) => from_stdin(cmd, compile),
+        Some((FILE_CMD, cmd)) => from_file(cmd, |s| compile(s, printcode)),
+        Some((STDIN_CMD, cmd)) => from_stdin(cmd, |s| compile(s, printcode)),
         _ => Ok(()),
     }
 }
@@ -60,9 +62,9 @@ fn compilation(cmd: &ArgMatches) -> miette::Result<()> {
 /// # Errors
 ///
 /// This function will return an error if scanning failed.
-fn from_file(
+fn from_file<F: Fn(String) -> miette::Result<()>>(
     cmd: &ArgMatches,
-    action: fn(content: String) -> miette::Result<()>,
+    action: F,
 ) -> miette::Result<()> {
     let path = cmd
         .get_one::<String>(PATH)
@@ -79,9 +81,9 @@ fn from_file(
 /// # Errors
 ///
 /// This function will return an error if scanning failed.
-fn from_stdin(
+fn from_stdin<F: Fn(String) -> miette::Result<()>>(
     _cmd: &ArgMatches,
-    action: fn(content: String) -> miette::Result<()>,
+    action: F,
 ) -> miette::Result<()> {
     let mut content = String::new();
     io::stdin()
@@ -103,11 +105,11 @@ fn interpret(content: String) -> miette::Result<()> {
     })
 }
 
-fn compile(content: String) -> miette::Result<()> {
+fn compile(content: String, printcode: bool) -> miette::Result<()> {
     let mut vm = VirtualMachine::new(stdout());
     vm.init();
 
-    vm.interpret(&content)
+    vm.interpret(&content, printcode)
         .map_err(|err| err.with_source_code(content))
 }
 
@@ -136,6 +138,7 @@ fn compile_cmd() -> Command {
     Command::new(COMPILE_CMD)
         .aliases(["compile"])
         .about("Use bytecode compiler")
+        .arg(printcode_arg())
         .subcommand(file_cmd())
         .subcommand(stdin_cmd())
 }
@@ -168,4 +171,12 @@ fn stdin_cmd() -> Command {
 fn bugreport_cmd() -> Command {
     Command::new(BUGREPORT_CMD)
         .about("Collect information about the system and the environment that users can send along with a bug report")
+}
+
+fn printcode_arg() -> Arg {
+    Arg::new(PRINTCODE_OPT)
+        .long(PRINTCODE_OPT)
+        .required(false)
+        .action(ArgAction::SetTrue)
+        .help("Output generated code")
 }

@@ -58,8 +58,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
     }
 
-    pub fn interpret(&mut self, content: &str) -> crate::Result<()> {
-        let mut parser = Parser::new(content);
+    pub fn interpret(&mut self, content: &str, printcode: bool) -> crate::Result<()> {
+        let mut parser = Parser::new(content, printcode);
         let function = parser.compile()?;
         self.push(LoxValue::Function(function.clone()));
         let closure = Closure::new(function);
@@ -814,10 +814,9 @@ outer();"#, "10" ; "closure2")]
         let mut stdout = Vec::new();
         let mut vm = VirtualMachine::new(&mut stdout);
         vm.init();
-        println!("Code: {input}");
 
         // Act
-        let actual = vm.interpret(input);
+        let actual = vm.interpret(input, true);
 
         // Assert
         if actual.is_err() {

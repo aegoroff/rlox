@@ -22,6 +22,7 @@ pub struct Parser<'a> {
     class_compiler: Option<Rc<RefCell<ClassCompiler>>>,
     current: Rc<RefCell<Token<'a>>>,
     previous: Rc<RefCell<Token<'a>>>,
+    printcode: bool,
 }
 
 #[repr(u8)]
@@ -111,7 +112,7 @@ impl<'a> Compiler<'a> {
 
 impl<'a> Parser<'a> {
     #[must_use]
-    pub fn new(content: &'a str) -> Self {
+    pub fn new(content: &'a str, printcode: bool) -> Self {
         Self {
             tokens: Lexer::new(content),
             current: Rc::new(RefCell::new(Token::Eof)),
@@ -122,6 +123,7 @@ impl<'a> Parser<'a> {
                 "script",
             ))),
             class_compiler: None,
+            printcode,
         }
     }
 
@@ -1185,8 +1187,7 @@ impl<'a> Parser<'a> {
     fn end_compiler(&mut self) -> Function {
         self.emit_return();
         let function = self.compiler.borrow().function.clone();
-        #[cfg(feature = "printcode")]
-        {
+        if self.printcode {
             function.disassembly();
         }
         let Some(enclosing) = self.compiler.borrow().enclosing.clone() else {

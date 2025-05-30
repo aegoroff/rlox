@@ -15,4 +15,3 @@ miette = { workspace = true, features = ["fancy"] }
 
 [features]
 disassembly = ["compiler/disassembly"]
-printcode = ["compiler/printcode"]
