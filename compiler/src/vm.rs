@@ -205,7 +205,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             let result = a.to_string() + r;
                             self.push(LoxValue::String(result));
                         }
-                    } else if let Ok(l) = a.try_num() {
+                    } else {
+                        let l = a.try_num()?;
                         let r = b.try_num()?;
                         self.push(LoxValue::Number(l + r));
                     }
