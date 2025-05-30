@@ -11,6 +11,7 @@ use crate::{
 use fnv::FnvHashMap;
 use miette::LabeledSpan;
 use std::cell::{Ref, RefCell};
+use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
 const FRAMES_MAX: usize = 64;
@@ -55,7 +56,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             writer,
             globals: FnvHashMap::with_capacity_and_hasher(
                 INITIAL_GLOBALS_CAPACITY,
-                Default::default(),
+                BuildHasherDefault::default(),
             ),
             frames: vec![CallFrame::new(); FRAMES_MAX].into_boxed_slice(),
             frame_count: 0,
