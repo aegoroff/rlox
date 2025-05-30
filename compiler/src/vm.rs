@@ -16,8 +16,11 @@ use std::rc::Rc;
 const FRAMES_MAX: usize = 64;
 const CONST_SIZE: usize = 1;
 const CONST_LONG_SIZE: usize = 3;
+const INITIAL_STACK_CAPACITY: usize = 256;
+const INITIAL_GLOBALS_CAPACITY: usize = 32;
+const INITIAL_UPVALUES_CAPACITY: usize = 16;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct CallFrame {
     closure: Closure,
     ip: usize,               // caller's ip
@@ -38,7 +41,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     stack: Vec<LoxValue>,
     writer: W,
     globals: FnvHashMap<String, LoxValue>,
-    frames: [CallFrame; FRAMES_MAX],
+    frames: Box<[CallFrame]>,
     frame_count: usize,
     open_upvalues: Vec<Rc<RefCell<Upvalue>>>,
     line: usize,
@@ -48,12 +51,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         Self {
-            stack: Vec::new(),
+            stack: Vec::with_capacity(INITIAL_STACK_CAPACITY),
             writer,
-            globals: FnvHashMap::default(),
-            frames: core::array::from_fn(|_| CallFrame::new()),
+            globals: FnvHashMap::with_capacity_and_hasher(
+                INITIAL_GLOBALS_CAPACITY,
+                Default::default(),
+            ),
+            frames: vec![CallFrame::new(); FRAMES_MAX].into_boxed_slice(),
             frame_count: 0,
-            open_upvalues: vec![],
+            open_upvalues: Vec::with_capacity(INITIAL_UPVALUES_CAPACITY),
             line: 0,
         }
     }
@@ -106,9 +112,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn pop_stack_n_times(&mut self, num_to_pop: usize) -> Result<(), RuntimeError> {
-        for _ in 0..num_to_pop {
-            self.pop()?;
+        if self.stack.len() < num_to_pop {
+            return Err(RuntimeError::NotEnoughStackCapacity(
+                num_to_pop,
+                self.stack.len(),
+            ));
         }
+        self.stack.truncate(self.stack.len() - num_to_pop);
         Ok(())
     }
 
