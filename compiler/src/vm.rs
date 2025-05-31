@@ -170,7 +170,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             #[cfg(feature = "disassembly")]
             {
                 for value in &self.stack {
-                    print!(" [{value}]");
+                    print!(" [ {value} ]");
                 }
                 println!();
                 self.chunk().disassembly_instruction(ip);
@@ -194,7 +194,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.close_upvalues(idx);
                     }
 
-                    let num_to_pop = self.frame().closure.function.arity + 1;
+                    let num_to_pop = self.stack.len() - self.frame().slots_offset + 1;
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
                         self.pop()?;
