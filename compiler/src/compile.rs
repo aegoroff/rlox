@@ -504,8 +504,8 @@ impl<'a> Parser<'a> {
             exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse));
             self.emit_opcode(OpCode::Pop);
         }
-        // Increment
 
+        // Increment
         if !self.matches(&Token::RightParen)? {
             let body_jump = self.emit_jump(OpCode::Jump);
             let increment_start = self.chunk_code_size();
