@@ -520,8 +520,8 @@ impl<'a> Parser<'a> {
         self.statement()?;
         self.emit_loop(loop_start)?;
 
-        if let Some(jmp) = exit_jump {
-            self.patch_jump(jmp);
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump);
             self.emit_opcode(OpCode::Pop);
         }
         self.end_scope();
