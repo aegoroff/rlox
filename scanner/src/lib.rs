@@ -267,7 +267,12 @@ impl<'a> Iterator for Lexer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let (i, current) = self.chars.next()?;
+            let Some((i, current)) = self.chars.next() else {
+                self.lines_start
+                    .entry(self.line)
+                    .and_modify(|e| *e = e.start..self.whole.len() - 1);
+                return None;
+            };
             let t = match current {
                 '(' => Some(Ok((i, Token::LeftParen, i))),
                 ')' => Some(Ok((i, Token::RightParen, i))),
