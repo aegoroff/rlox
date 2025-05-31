@@ -69,7 +69,7 @@ impl LoxValue {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(RuntimeError::ExpectedNumber)
+            Err(RuntimeError::ExpectedNumber(self.clone()))
         }
     }
 
@@ -77,7 +77,7 @@ impl LoxValue {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(RuntimeError::ExpectedString)
+            Err(RuntimeError::ExpectedString(self.clone()))
         }
     }
 
@@ -85,7 +85,7 @@ impl LoxValue {
         match self {
             LoxValue::Bool(b) => Ok(*b),
             LoxValue::Nil => Ok(false),
-            _ => Err(RuntimeError::ExpectedBool),
+            _ => Err(RuntimeError::ExpectedBool(self.clone())),
         }
     }
 
@@ -93,7 +93,7 @@ impl LoxValue {
         if let LoxValue::Class(c) = self {
             Ok(c)
         } else {
-            Err(RuntimeError::ExpectedClass)
+            Err(RuntimeError::ExpectedClass(self.clone()))
         }
     }
 
@@ -101,7 +101,7 @@ impl LoxValue {
         if let LoxValue::Instance(instance) = self {
             Ok(instance)
         } else {
-            Err(RuntimeError::ExpectedInstance)
+            Err(RuntimeError::ExpectedInstance(self.clone()))
         }
     }
 
