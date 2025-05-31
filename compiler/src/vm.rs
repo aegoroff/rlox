@@ -680,11 +680,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
         if !self.globals.contains_key(name) {
             return Err(RuntimeError::UndefinedGlobal(name.clone()));
         }
-        let value = self.peek(0)?;
-        let value = value.clone();
         let name = name.clone();
         drop(chunk);
-        self.globals.insert(name, value);
+
+        let value = self.peek(0)?;
+        self.globals.insert(name, value.clone());
         Ok(())
     }
 
