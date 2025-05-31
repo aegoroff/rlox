@@ -24,7 +24,6 @@ const INITIAL_UPVALUES_CAPACITY: usize = 16;
 #[derive(Default, Clone)]
 struct CallFrame {
     closure: Closure,
-    ip: usize,               // caller's ip
     pub slots_offset: usize, // points to vm's value's stack first value it can use
 }
 
@@ -32,7 +31,6 @@ impl CallFrame {
     fn new() -> Self {
         Self {
             closure: Closure::new(Function::new("")),
-            ip: 0,
             slots_offset: 1, // caller function itself
         }
     }
@@ -163,7 +161,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         {
             println!("--- start run ---");
         }
-        let mut ip = self.frame().ip;
+        let mut ip = 0;
         let code_size = self.chunk().code.len();
         while ip < code_size {
             let code = self.chunk().read_opcode(ip)?;
