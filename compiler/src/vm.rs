@@ -172,8 +172,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
             #[cfg(feature = "disassembly")]
             {
                 for value in &self.stack {
-                    println!("[{value}]");
+                    print!(" [{value}]");
                 }
+                println!();
                 self.chunk().disassembly_instruction(ip);
             }
             ip += 1; // shift opcode offset itself
