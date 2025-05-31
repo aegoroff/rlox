@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, str::CharIndices};
+use std::{collections::HashMap, fmt::Display, ops::Range, str::CharIndices};
 
 use miette::LabeledSpan;
 
@@ -8,7 +8,7 @@ pub struct Lexer<'a> {
     chars: std::iter::Peekable<CharIndices<'a>>,
     whole: &'a str,
     pub line: usize,
-    lines_start: HashMap<usize, usize>,
+    lines_start: HashMap<usize, Range<usize>>,
     pub begin: usize,
     pub end: usize,
 }
@@ -70,7 +70,7 @@ impl<'a> Lexer<'a> {
     #[must_use]
     pub fn new(content: &'a str) -> Self {
         let mut lines_start = HashMap::new();
-        lines_start.insert(1, 0);
+        lines_start.insert(1, 0..0);
         Self {
             chars: content.char_indices().peekable(),
             whole: content,
@@ -82,8 +82,12 @@ impl<'a> Lexer<'a> {
     }
 
     #[must_use]
-    pub fn line_starts_at(&self, line: usize) -> usize {
-        *self.lines_start.get(&line).unwrap_or(&0)
+    pub fn line_span(&self, line: usize) -> Range<usize> {
+        if let Some(range) = self.lines_start.get(&line) {
+            range.start..range.end
+        } else {
+            0..0
+        }
     }
 
     fn two_char_token(
@@ -117,7 +121,7 @@ impl<'a> Lexer<'a> {
                 for (i, c) in self.chars.by_ref() {
                     if c == '\n' {
                         self.line += 1;
-                        self.lines_start.insert(self.line, i + 1);
+                        self.insert_line_info(i);
                         break;
                     }
                 }
@@ -247,6 +251,15 @@ impl<'a> Lexer<'a> {
         };
         (start, tok, finish + 1)
     }
+
+    fn insert_line_info(&mut self, i: usize) {
+        self.lines_start
+            .entry(self.line - 1)
+            .and_modify(|e| *e = e.start..i);
+        // +1 because next line will be started from next char
+        let i = i + 1;
+        self.lines_start.insert(self.line, i..i);
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -303,7 +316,7 @@ impl<'a> Iterator for Lexer<'a> {
                 ' ' | '\t' | '\r' => continue, // skip whitespaces
                 '\n' => {
                     self.line += 1;
-                    self.lines_start.insert(self.line, i + 1); // +1 because next line will be started from next char
+                    self.insert_line_info(i);
                     continue; // skip line break
                 }
                 _ => Some(Err(miette::miette!(
