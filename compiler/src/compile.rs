@@ -429,9 +429,9 @@ impl<'a> Parser<'a> {
             self.print_statement()
         } else if self.matches(&Token::LeftBrace)? {
             self.begin_scope();
-            let block_result = self.block();
+            self.block()?;
             self.end_scope();
-            block_result
+            Ok(())
         } else if self.matches(&Token::For)? {
             self.for_statement()
         } else if self.matches(&Token::If)? {
@@ -824,12 +824,10 @@ impl<'a> Parser<'a> {
 
         while !self.compiler.borrow().locals.is_empty() {
             let i = self.compiler.borrow().locals.len() - 1;
-            if self.compiler.borrow().locals[i].depth.unwrap_or(0)
+            if self.compiler.borrow().locals[i].depth.unwrap_or_default()
                 > self.compiler.borrow().scope_depth
             {
-                if self.compiler.borrow().locals[self.compiler.borrow().locals.len() - 1]
-                    .is_captured
-                {
+                if self.compiler.borrow().locals[i].is_captured {
                     self.emit_opcode(OpCode::CloseUpvalue);
                 } else {
                     self.emit_opcode(OpCode::Pop);
