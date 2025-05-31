@@ -114,9 +114,10 @@ impl<'a> Lexer<'a> {
         if let Some((_, peek)) = self.chars.peek() {
             if '/' == *peek {
                 // skip all char until EOL (end of line)
-                for (_, c) in self.chars.by_ref() {
+                for (i, c) in self.chars.by_ref() {
                     if c == '\n' {
                         self.line += 1;
+                        self.lines_start.insert(self.line, i + 1);
                         break;
                     }
                 }
