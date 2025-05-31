@@ -14,6 +14,6 @@ pub fn sqrt(args: &[LoxValue]) -> crate::Result<LoxValue, RuntimeError> {
     if let LoxValue::Number(num) = args[0] {
         Ok(LoxValue::Number(num.sqrt()))
     } else {
-        Err(RuntimeError::ExpectedNumber(Box::new(args[0].clone())))
+        Err(RuntimeError::ExpectedNumber(args[0].clone()))
     }
 }
