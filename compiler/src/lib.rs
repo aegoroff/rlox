@@ -17,14 +17,14 @@ pub enum RuntimeError {
     InvalidInstruction(usize),
     InstructionsStackEmpty,
     NotEnoughStackCapacity(usize, usize),
-    InvalidCallable(LoxValue),
-    OperandsMustBeNumbers,
-    ExpectedNumber(LoxValue),
-    ExpectedString(LoxValue),
-    ExpectedClass(LoxValue),
-    ExpectedBool(LoxValue),
-    ExpectedFunction(LoxValue),
-    ExpectedInstance(LoxValue),
+    InvalidCallable(Box<LoxValue>),
+    OperandsMustBeNumbers(Box<LoxValue>, Box<LoxValue>),
+    ExpectedNumber(Box<LoxValue>),
+    ExpectedString(Box<LoxValue>),
+    ExpectedClass(Box<LoxValue>),
+    ExpectedBool(Box<LoxValue>),
+    ExpectedFunction(Box<LoxValue>),
+    ExpectedInstance(Box<LoxValue>),
     InvalidFunctionArgsCount(usize, usize),
     UndefinedGlobal(String),
     UndefinedMethodOrProperty(String),
@@ -48,8 +48,11 @@ impl Display for RuntimeError {
             RuntimeError::InvalidCallable(value) => {
                 write!(f, "Can only call functions and classes not '{value:?}'")
             }
-            RuntimeError::OperandsMustBeNumbers => {
-                write!(f, "Operands must be numbers")
+            RuntimeError::OperandsMustBeNumbers(first, second) => {
+                write!(
+                    f,
+                    "Operands must be numbers. But first is '{first}' and second is '{second}'"
+                )
             }
             RuntimeError::ExpectedNumber(val) => write!(f, "Expected number but was '{val:?}'"),
             RuntimeError::ExpectedString(val) => write!(f, "Expected string but was '{val:?}'"),

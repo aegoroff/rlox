@@ -367,7 +367,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Closure => {
                     let function_value = self.chunk().read_constant(ip, 1);
                     let LoxValue::Function(function) = function_value else {
-                        return Err(RuntimeError::ExpectedFunction(function_value));
+                        return Err(RuntimeError::ExpectedFunction(Box::new(function_value)));
                     };
                     let upvalues_count = function.upvalue_count;
                     ip += 1;
@@ -558,7 +558,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 .methods
                 .insert(name.to_owned(), method_closure);
         } else {
-            return Err(RuntimeError::ExpectedInstance(class.clone()));
+            return Err(RuntimeError::ExpectedInstance(Box::new(class.clone())));
         }
         Ok(())
     }
@@ -598,7 +598,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             LoxValue::Class(class) => self.call_class(&class, args_count),
             LoxValue::Bound(receiver, method) => self.call_method(receiver, *method, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
-            _ => Err(RuntimeError::InvalidCallable(callee)),
+            _ => Err(RuntimeError::InvalidCallable(Box::new(callee))),
         }
     }
 

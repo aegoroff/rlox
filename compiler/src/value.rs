@@ -61,7 +61,10 @@ impl LoxValue {
             let r = other.try_str()?;
             Ok(l < r)
         } else {
-            Err(RuntimeError::OperandsMustBeNumbers)
+            Err(RuntimeError::OperandsMustBeNumbers(
+                Box::new(self.clone()),
+                Box::new(other.clone()),
+            ))
         }
     }
 
@@ -69,7 +72,7 @@ impl LoxValue {
         if let LoxValue::Number(n) = self {
             Ok(*n)
         } else {
-            Err(RuntimeError::ExpectedNumber(self.clone()))
+            Err(RuntimeError::ExpectedNumber(Box::new(self.clone())))
         }
     }
 
@@ -77,7 +80,7 @@ impl LoxValue {
         if let LoxValue::String(s) = self {
             Ok(s)
         } else {
-            Err(RuntimeError::ExpectedString(self.clone()))
+            Err(RuntimeError::ExpectedString(Box::new(self.clone())))
         }
     }
 
@@ -85,7 +88,7 @@ impl LoxValue {
         match self {
             LoxValue::Bool(b) => Ok(*b),
             LoxValue::Nil => Ok(false),
-            _ => Err(RuntimeError::ExpectedBool(self.clone())),
+            _ => Err(RuntimeError::ExpectedBool(Box::new(self.clone()))),
         }
     }
 
@@ -93,7 +96,7 @@ impl LoxValue {
         if let LoxValue::Class(c) = self {
             Ok(c)
         } else {
-            Err(RuntimeError::ExpectedClass(self.clone()))
+            Err(RuntimeError::ExpectedClass(Box::new(self.clone())))
         }
     }
 
@@ -101,7 +104,7 @@ impl LoxValue {
         if let LoxValue::Instance(instance) = self {
             Ok(instance)
         } else {
-            Err(RuntimeError::ExpectedInstance(self.clone()))
+            Err(RuntimeError::ExpectedInstance(Box::new(self.clone())))
         }
     }
 
