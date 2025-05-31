@@ -117,6 +117,10 @@ impl Chunk {
         }
     }
 
+    pub fn first_line(&self) -> usize {
+        *self.lines.first().unwrap_or(&1)
+    }
+
     pub fn write_code(&mut self, code: OpCode, line: usize) {
         self.write_operand(code as usize, line);
     }

@@ -73,10 +73,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.pop().map_err(|e| miette::miette!(e.to_string()))?;
         self.push(LoxValue::Closure(closure.clone()));
         self.call_function(closure, 0).map_err(|e| {
+            let mut stack_trace = Vec::with_capacity(self.frame_count);
+            for i in 0..self.frame_count {
+                stack_trace.push(format!(
+                    " at {}:{}",
+                    self.frames[i].closure.function.name,
+                    self.frames[i].closure.function.start()
+                ));
+            }
+            stack_trace.reverse();
             miette::miette!(
                 labels = vec![LabeledSpan::at(
                     parser.get_line_range(self.line),
-                    e.to_string()
+                    format!("{e}. Stack trace:\n{}", stack_trace.join("\n"))
                 )],
                 "Runtime error"
             )

@@ -159,6 +159,10 @@ impl Function {
     pub fn disassembly(&self) {
         self.chunk.borrow().disassembly(self.name.as_str());
     }
+
+    pub fn start(&self) -> usize {
+        self.chunk.borrow().first_line()
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
