@@ -502,6 +502,7 @@ impl<'a> Parser<'a> {
             self.expression()?;
             self.consume(&Token::Semicolon)?;
             exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse));
+            self.emit_opcode(OpCode::Pop);
         }
         // Increment
 
