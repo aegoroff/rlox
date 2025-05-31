@@ -160,6 +160,7 @@ impl Function {
         self.chunk.borrow().disassembly(self.name.as_str());
     }
 
+    #[must_use]
     pub fn start(&self) -> usize {
         self.chunk.borrow().first_line()
     }
