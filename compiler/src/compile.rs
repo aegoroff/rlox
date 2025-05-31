@@ -1148,7 +1148,7 @@ impl<'a> Parser<'a> {
             .function
             .chunk
             .borrow_mut()
-            .write_two_bytes(offset);
+            .write_two_bytes(offset, self.tokens.line);
         Ok(())
     }
 

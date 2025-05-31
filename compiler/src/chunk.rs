@@ -139,8 +139,8 @@ impl Chunk {
         if value > MAX_SHORT_VALUE {
             for b in into_three_bytes(value) {
                 self.code.push(b);
+                self.lines.push(line);
             }
-            self.lines.push(line);
         } else {
             self.code.push(value as u8);
             self.lines.push(line);
@@ -193,10 +193,12 @@ impl Chunk {
         self.code[offset + 1] = bytes[1];
     }
 
-    pub fn write_two_bytes(&mut self, value: usize) {
+    pub fn write_two_bytes(&mut self, value: usize, line: usize) {
         let bytes = into_two_bytes(value);
         self.code.push(bytes[0]);
+        self.lines.push(line);
         self.code.push(bytes[1]);
+        self.lines.push(line);
     }
 
     pub fn disassembly(&self, name: &str) {
@@ -212,7 +214,7 @@ impl Chunk {
             return offset + 1;
         };
         print!("{offset:04} ");
-        let line_ix = self.line_index(offset);
+        let line_ix = offset;
         if line_ix > 0 && self.lines[line_ix] == self.lines[line_ix - 1] {
             print!("   | ");
         } else {
@@ -265,13 +267,7 @@ impl Chunk {
 
     #[inline]
     pub fn line(&self, offset: usize) -> usize {
-        let line_ix = self.line_index(offset);
-        self.lines[line_ix]
-    }
-
-    #[inline]
-    fn line_index(&self, offset: usize) -> usize {
-        offset.min(self.lines.len() - 1)
+        self.lines[offset]
     }
 
     fn disassembly_byte_instruction(&self, offset: usize, code: &OpCode) -> usize {
