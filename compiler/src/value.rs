@@ -117,7 +117,7 @@ impl Display for LoxValue {
             LoxValue::String(s) => write!(f, "{s}"),
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
-            LoxValue::Nil => write!(f, ""),
+            LoxValue::Nil => write!(f, "nil"),
             LoxValue::Function(func) => write!(f, "{func}"),
             LoxValue::Native(native) => write!(f, "{native}"),
             LoxValue::Closure(closure) => write!(f, "{closure}"),

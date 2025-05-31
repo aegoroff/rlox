@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use value::LoxValue;
+
 mod builtin;
 mod chunk;
 pub mod compile;
@@ -15,7 +17,7 @@ pub enum RuntimeError {
     InvalidInstruction(usize),
     InstructionsStackEmpty,
     NotEnoughStackCapacity(usize, usize),
-    InvalidCallable,
+    InvalidCallable(LoxValue),
     OperandsMustBeNumbers,
     ExpectedNumber,
     ExpectedString,
@@ -43,8 +45,8 @@ impl Display for RuntimeError {
                 f,
                 "Not enough stack capacity for distance {distance}. Current stack size is {size}"
             ),
-            RuntimeError::InvalidCallable => {
-                write!(f, "Can only call functions and classes")
+            RuntimeError::InvalidCallable(value) => {
+                write!(f, "Can only call functions and classes but was '{value}'")
             }
             RuntimeError::OperandsMustBeNumbers => {
                 write!(f, "Operands must be numbers")

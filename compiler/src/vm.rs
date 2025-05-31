@@ -219,10 +219,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     if lr.is_ok() || rr.is_ok() {
                         // concat strings here if any of the operands is a string
                         if let Ok(l) = lr {
-                            let result = l.to_owned() + &b.to_string();
+                            let r = if let LoxValue::Nil = b {
+                                String::new()
+                            } else {
+                                b.to_string()
+                            };
+                            let result = l.to_owned() + &r;
                             self.push(LoxValue::String(result));
                         } else if let Ok(r) = rr {
-                            let result = a.to_string() + r;
+                            let l = if let LoxValue::Nil = a {
+                                String::new()
+                            } else {
+                                a.to_string()
+                            };
+                            let result = l + r;
                             self.push(LoxValue::String(result));
                         }
                     } else {
@@ -588,7 +598,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             LoxValue::Class(class) => self.call_class(&class, args_count),
             LoxValue::Bound(receiver, method) => self.call_method(receiver, *method, args_count),
             LoxValue::Native(func) => self.call_native(&func, args_count),
-            _ => Err(RuntimeError::InvalidCallable),
+            _ => Err(RuntimeError::InvalidCallable(callee)),
         }
     }
 
@@ -772,8 +782,8 @@ mod tests {
     #[test_case("var i = 0; while (i < 10) i = i + 1; print i;", "10" ; "while test")]
     #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
-    #[test_case("fun foo() { print 10; } print foo();", "10" ; "simple call no args")]
-    #[test_case("fun foo(v) { print v; } print foo(10);", "10" ; "simple call one arg")]
+    #[test_case("fun foo() { print 10; } foo();", "10" ; "simple call no args")]
+    #[test_case("fun foo(v) { print v; } foo(10);", "10" ; "simple call one arg")]
     #[test_case("fun sum(a1, a2) { print a1 + a2; } sum(1, 2);", "3" ; "simple call two args")]
     #[test_case("fun foo(x) { return x + 1; } print foo(1);", "2" ; "function with return")]
     #[test_case("fun fib(n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); } print fib(8);", "21" ; "fibonacci")]
@@ -816,9 +826,9 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
     #[test_case("class Oops { init() { fun f() { print 10; } this.field = f; } } var oops = Oops(); oops.field();", "10" ; "call on field")]
-    #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } print B().af();", "10" ; "Call inherited method")]
+    #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } B().af();", "10" ; "Call inherited method")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } B().bf();", "5" ; "Call own method with inherited present")]
-    #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } print B().bf();", "10" ; "Call inherited method inside other")]
+    #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } B().bf();", "10" ; "Call inherited method inside other")]
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { super.method(); }} class C < B {} C().test();", "A" ; "Call super method inside grandchild class")]
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { super.method(); }} class C < B {} var c =C(); c.test();", "A" ; "Call super method inside grandchild class var variant")]
     #[test_case("class A { method() { print \"A\"; }} class B < A {  method() { print \"B\";  } test() { super.method(); }} B().test();", "A" ; "Call super method when shadowed defined in class")]
@@ -844,6 +854,6 @@ outer();"#, "10" ; "closure2")]
         }
         assert!(actual.is_ok());
         let actual = String::from_utf8(stdout).unwrap();
-        assert_eq!(actual.trim_end(), expected);
+        assert_eq!(actual.trim_end_matches('\n'), expected);
     }
 }
