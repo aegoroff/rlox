@@ -119,7 +119,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn pop_stack_n_times(&mut self, num_to_pop: usize) -> Result<(), RuntimeError> {
+    fn pop_n_times(&mut self, num_to_pop: usize) -> Result<(), RuntimeError> {
         if self.stack.len() < num_to_pop {
             return Err(RuntimeError::NotEnoughStackCapacity(
                 num_to_pop,
@@ -199,11 +199,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
                         self.pop()?;
-                        break;
+                    } else {
+                        self.pop_n_times(num_to_pop)?;
+                        self.push(value);
                     }
-
-                    self.pop_stack_n_times(num_to_pop)?;
-                    self.push(value);
                     break;
                 }
                 OpCode::Negate => {
