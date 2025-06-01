@@ -109,8 +109,12 @@ impl LoxValue {
     }
 
     #[must_use]
-    pub fn is_truthy(&self) -> bool {
-        self.try_bool().unwrap_or(true)
+    pub fn is_falsey(&self) -> bool {
+        match self {
+            LoxValue::Bool(b) => !*b,
+            LoxValue::Nil => true,
+            _ => false,
+        }
     }
 }
 

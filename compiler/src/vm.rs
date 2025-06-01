@@ -270,8 +270,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::False => self.push(LoxValue::Bool(false)),
                 OpCode::Not => {
                     let value = self.pop()?;
-                    let val = value.try_bool()?;
-                    self.push(LoxValue::Bool(!val));
+                    let val = value.is_falsey();
+                    self.push(LoxValue::Bool(val));
                 }
                 OpCode::Equal => {
                     let b = self.pop()?;
@@ -341,7 +341,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::JumpIfFalse => {
                     let offset = self.chunk().read_short(ip);
                     let top = self.peek(0)?;
-                    let falsey = !top.is_truthy();
+                    let falsey = top.is_falsey();
                     ip += 2;
                     if falsey {
                         ip += offset;
