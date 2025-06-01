@@ -838,6 +838,30 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class A { init(x) { this.f1 = x; } test() { return this.f1; } } class B < A { init(x, y) { this.f1 = x; this.f2 = y; } sum() { return this.test() + this.f1 + this.f2; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with less init parameters then subclass")]
     #[test_case("class Foo{ init(arg) { print 1; } } fun init() { print 0; } init();", "0" ; "Plain function with init name")]
     #[test_case("class Foo { foo(arg) { this.arg1 = arg; } fooPrint() { print this.arg1; } } class Bar < Foo { bar(arg) { this.arg1 = arg; } barPrint() { print this.arg1; } } var b = Bar(); b.bar(1); b.fooPrint(); b.barPrint();", "1\n1" ; "Sets fields from base class")]
+    #[test_case(r#"
+var f1;
+var f2;
+var f3;
+
+for (var i = 1; i < 4; i = i + 1) {
+  var j = i;
+  fun f() {
+    print i;
+    print j;
+  }
+
+  if (j == 1) f1 = f;
+  else if (j == 2) f2 = f;
+  else f3 = f;
+}
+
+f1(); // expect: 4
+      // expect: 1
+f2(); // expect: 4
+      // expect: 2
+f3(); // expect: 4
+      // expect: 3
+"#, "4\n1\n4\n2\n4\n3" ; "closure in body")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
