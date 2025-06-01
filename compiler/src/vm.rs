@@ -566,7 +566,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn close_upvalues(&mut self, location: usize) {
         while let Some(upval) = self.open_upvalues.last() {
             if upval.borrow().is_open_with_index(location) {
-                upval.replace(Upvalue::Closed(self.stack[location].clone()));
+                upval.replace(Upvalue::Closed(self.stack[location].clone())); // move value to the heap
                 self.open_upvalues.pop();
             } else {
                 break;
