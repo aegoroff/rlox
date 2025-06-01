@@ -564,14 +564,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn close_upvalues(&mut self, location: usize) {
-        let value = &self.stack[location];
-        for upval in &self.open_upvalues {
-            if upval.borrow().is_open_with_index(location) {
-                upval.replace(Upvalue::Closed(value.clone()));
+        while !self.open_upvalues.is_empty() {
+            if let Some(upval) = self.open_upvalues.last() {
+                let is_open = upval.borrow().is_open_with_index(location);
+                if is_open {
+                    upval.replace(Upvalue::Closed(self.stack[location].clone()));
+                    self.open_upvalues.pop();
+                } else {
+                    break;
+                }
             }
         }
-
-        self.open_upvalues.retain(|u| u.borrow().is_open());
     }
 
     #[inline]
