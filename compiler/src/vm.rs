@@ -862,6 +862,27 @@ f2(); // expect: 4
 f3(); // expect: 4
       // expect: 3
 "#, "4\n1\n4\n2\n4\n3" ; "closure in body")]
+    #[test_case(r#"
+class Foo {
+  getClosure() {
+    fun f() {
+      fun g() {
+        fun h() {
+          return this.toString();
+        }
+        return h;
+      }
+      return g;
+    }
+    return f;
+  }
+
+  toString() { return "Foo"; }
+}
+
+var closure = Foo().getClosure();
+print closure()()(); // expect: Foo
+"#, "Foo" ; "nested closure")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
