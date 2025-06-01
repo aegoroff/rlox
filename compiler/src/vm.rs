@@ -882,7 +882,7 @@ class Foo {
 
 var closure = Foo().getClosure();
 print closure()()(); // expect: Foo
-"#, "Foo" ; "nested closure")]
+"#, "Foo" ; "this nested closure")]
     #[test_case(r#"
 // Single-expression body.
 for (var c = 0; c < 3;) print c = c + 1;
