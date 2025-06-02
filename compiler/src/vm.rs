@@ -537,10 +537,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn get_member(property: &String, instance: &Rc<RefCell<Instance>>) -> Option<LoxValue> {
-        if let Some(field) = instance.borrow().fields.get(property) {
+        let inst = instance.borrow();
+        if let Some(field) = inst.fields.get(property) {
             Some(field.clone())
         } else {
-            let inst = instance.borrow();
             let class = inst.class.borrow();
             let method = class.methods.get(property);
             method.map(|val| LoxValue::Bound(instance.clone(), Box::new(val.clone())))
