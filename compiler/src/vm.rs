@@ -888,6 +888,21 @@ var closure = Foo().getClosure();
 print closure()()(); // expect: Foo
 "#, "Foo" ; "this nested closure")]
     #[test_case(r#"
+class Foo {
+  getClosure() {
+    fun closure() {
+      return this.toString();
+    }
+    return closure;
+  }
+
+  toString() { return "Foo"; }
+}
+
+var closure = Foo().getClosure();
+print closure(); // expect: Foo
+"#, "Foo" ; "this closure")]
+    #[test_case(r#"
 // Single-expression body.
 for (var c = 0; c < 3;) print c = c + 1;
 // expect: 1
