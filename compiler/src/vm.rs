@@ -564,9 +564,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn close_upvalues(&mut self, location: usize) {
         while let Some(upval) = self.open_upvalues.last() {
-            if upval.borrow().is_open_above_or_equal_index(location) && location < self.stack.len()
-            {
-                upval.replace(Upvalue::Closed(self.stack[location].clone())); // move value to the heap
+            if upval.borrow().is_open_above_or_equal_index(location) {
+                if location < self.stack.len() {
+                    upval.replace(Upvalue::Closed(self.stack[location].clone())); // move value to the heap    
+                }
                 self.open_upvalues.pop();
             } else {
                 break;
