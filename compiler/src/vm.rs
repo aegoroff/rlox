@@ -190,9 +190,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Return => {
                     let value = self.pop()?;
 
-                    for idx in self.frame().slots_offset..self.stack.len() {
-                        self.close_upvalues(idx);
-                    }
+                    let location = self.frame().slots_offset;
+                    self.close_upvalues(location);
 
                     let num_to_pop = self.stack.len() - self.frame().slots_offset + 1;
 
@@ -565,7 +564,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn close_upvalues(&mut self, location: usize) {
         while let Some(upval) = self.open_upvalues.last() {
-            if upval.borrow().is_open_with_index(location) {
+            if upval.borrow().is_open_above_or_equal_index(location) {
                 upval.replace(Upvalue::Closed(self.stack[location].clone())); // move value to the heap
                 self.open_upvalues.pop();
             } else {
