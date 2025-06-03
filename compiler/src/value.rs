@@ -233,15 +233,7 @@ impl Upvalue {
     #[must_use]
     pub fn is_open_with_index(&self, index: usize) -> bool {
         match self {
-            Upvalue::Open(idx) => *idx == index,
-            Upvalue::Closed(_) => false,
-        }
-    }
-
-    #[must_use]
-    pub fn is_open_above_or_equal_index(&self, index: usize) -> bool {
-        match self {
-            Upvalue::Open(idx) => *idx >= index,
+            Upvalue::Open(idx) => index == *idx,
             Upvalue::Closed(_) => false,
         }
     }
