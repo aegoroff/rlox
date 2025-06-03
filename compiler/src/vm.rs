@@ -902,6 +902,25 @@ var closure = Foo().getClosure();
 print closure(); // expect: Foo
 "#, "Foo" ; "this closure")]
     #[test_case(r#"
+class Base {
+  toString() { return "Base"; }
+}
+
+class Derived < Base {
+  getClosure() {
+    fun closure() {
+      return super.toString();
+    }
+    return closure;
+  }
+
+  toString() { return "Derived"; }
+}
+
+var closure = Derived().getClosure();
+print closure(); // expect: Base
+"#, "Base" ; "super closure")]
+    #[test_case(r#"
 // Single-expression body.
 for (var c = 0; c < 3;) print c = c + 1;
 // expect: 1
