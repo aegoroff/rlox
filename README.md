@@ -34,10 +34,6 @@
 - **Bug reporting:**  
   Built-in command to generate a bug report with environment and version information.
 
-## Repository
-
-- Source: [https://git.egoroff.spb.ru/root/rlox](https://git.egoroff.spb.ru/root/rlox)
-
 ## Authors
 
 - Alexander Egorov <egoroff@gmail.com> 
