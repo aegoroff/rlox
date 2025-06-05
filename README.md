@@ -1,6 +1,6 @@
 # rlox
 
-**rlox** is a Rust implementation of the Lox programming language, featuring both a tree-walk interpreter and a bytecode virtual machine. The project is modular, with separate crates for the scanner, interpreter, compiler, and the main CLI application.
+**rlox** is a Rust implementation of the Lox programming language from [Crafting Interpreters book](https://craftinginterpreters.com/) , featuring both a tree-walk interpreter and a bytecode virtual machine. The project is modular, with separate crates for the scanner, interpreter, compiler, and the main CLI application.
 
 ## Project Structure
 
