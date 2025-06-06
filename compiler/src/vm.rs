@@ -1003,6 +1003,7 @@ for (; false;) for (;;) 1;
 
         // Assert
         if actual.is_err() {
+            println!("{input}");
             println!("{actual:?}");
         }
         assert!(actual.is_ok());
