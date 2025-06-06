@@ -210,40 +210,15 @@ impl Closure {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Upvalue {
-    Open(usize),
-    Closed(LoxValue),
+pub struct Upvalue {
+    pub location: usize,
+    pub closed: Option<Rc<RefCell<LoxValue>>>,
+    pub next: Option<Rc<RefCell<Upvalue>>>,
 }
 
 impl Display for Upvalue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "upvalue")
-    }
-}
-
-impl Upvalue {
-    #[must_use]
-    pub fn is_open(&self) -> bool {
-        match self {
-            Upvalue::Open(_) => true,
-            Upvalue::Closed(_) => false,
-        }
-    }
-
-    #[must_use]
-    pub fn is_open_with_index(&self, index: usize) -> bool {
-        match self {
-            Upvalue::Open(idx) => *idx == index,
-            Upvalue::Closed(_) => false,
-        }
-    }
-
-    #[must_use]
-    pub fn is_open_above_or_equal_index(&self, index: usize) -> bool {
-        match self {
-            Upvalue::Open(idx) => *idx >= index,
-            Upvalue::Closed(_) => false,
-        }
     }
 }
 
