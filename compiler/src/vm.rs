@@ -156,10 +156,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn run(&mut self) -> Result<(), RuntimeError> {
-        #[cfg(feature = "disassembly")]
-        {
-            println!("--- start run ---");
-        }
         let mut ip = 0;
         let code_size = self.chunk().code.len();
         while ip < code_size {
