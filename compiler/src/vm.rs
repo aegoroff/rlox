@@ -166,7 +166,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             {
                 print!("         ");
                 for value in &self.stack {
-                    print!(" [ {value} ]");
+                    print!("[ {value} ]");
                 }
                 println!();
                 self.chunk().disassembly_instruction(ip);
