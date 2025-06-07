@@ -359,6 +359,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.call_value(func.clone(), args_count as usize)?;
                     ip += 1;
                 }
+                OpCode::Invoke => {
+                    let method_name = self.chunk().read_constant(ip, CONST_SIZE);
+                    let method_name = method_name.try_str()?;
+                    let argc = self.chunk().read_byte(ip + 1);
+                    self.invoke(method_name, argc)?;
+                    ip += 2;
+                }
                 OpCode::Closure => {
                     let function_value = self.chunk().read_constant(ip, 1);
                     let LoxValue::Function(function) = function_value else {
@@ -452,14 +459,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let method_name = method_name.try_str()?;
                     self.define_method(method_name)?;
                     ip += 1;
-                }
-                OpCode::Invoke => {
-                    let method_name = self.chunk().read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str()?;
-                    let argc = self.chunk().read_byte(ip + 1);
-                    self.invoke(method_name, argc)?;
-
-                    ip += 2;
                 }
                 OpCode::Inherit => {
                     let super_class = self.peek(1)?;
