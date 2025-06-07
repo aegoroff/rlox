@@ -164,6 +164,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             self.line = line;
             #[cfg(feature = "disassembly")]
             {
+                print!("         ");
                 for value in &self.stack {
                     print!(" [ {value} ]");
                 }
