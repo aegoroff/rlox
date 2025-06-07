@@ -520,8 +520,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let callable = if let Some(method) = instance.class.borrow().methods.get(method_name) {
             method.clone()
         } else if let Some(field) = instance.fields.get(method_name) {
-            let len = self.stack.len();
-            self.stack[len - argc as usize - 1] = field.clone();
+            let stack_size = self.stack.len();
+            self.stack[stack_size - argc as usize - 1] = field.clone();
             field.clone()
         } else {
             return Err(RuntimeError::UndefinedMethodOrProperty(method_name.clone()));
@@ -644,10 +644,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
     ) -> Result<(), RuntimeError> {
         let instance = Instance::new(class.clone());
         let receiver = Rc::new(RefCell::new(instance));
-        let instance = LoxValue::Instance(receiver.clone());
-        let stack_size = self.stack.len();
 
-        self.stack[stack_size - args_count - 1] = instance;
+        let stack_size = self.stack.len();
+        self.stack[stack_size - args_count - 1] = LoxValue::Instance(receiver.clone());
         if let Some(init) = class.borrow().methods.get(scanner::INIT) {
             self.call_value(init.clone(), args_count)
         } else if args_count > 0 {
