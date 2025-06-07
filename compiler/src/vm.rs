@@ -367,12 +367,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 1;
 
                     let mut closure = Closure::new(function);
+                    let slots_offset = self.frame().slots_offset;
                     for _ in 0..upvalues_count {
                         let is_local = self.chunk().read_byte(ip);
                         let index = self.chunk().read_byte(ip + 1);
                         ip += 2;
                         let upvalue = if is_local == 1 {
-                            let slots_offset = self.frame().slots_offset;
                             self.capture_upvalue(slots_offset + index as usize - 1)
                         } else {
                             self.frame().closure.upvalues[index as usize].clone()
