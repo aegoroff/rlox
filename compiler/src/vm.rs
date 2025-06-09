@@ -479,10 +479,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let name = name.try_str()?;
                     let super_class = self.pop()?;
                     let super_class = super_class.try_class()?;
+                    let super_class = super_class.borrow();
 
                     let instance = self.pop()?;
                     let instance = instance.try_instance()?;
-                    let super_class = super_class.borrow();
+
                     let method = super_class
                         .methods
                         .get(name)
