@@ -195,6 +195,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
                         self.pop()?;
+                        return Ok(());
                     } else {
                         self.pop_n_times(num_to_pop)?;
                         self.push(value);
