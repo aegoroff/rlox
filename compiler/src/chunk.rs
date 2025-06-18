@@ -357,7 +357,7 @@ impl Chunk {
 fn into_three_bytes(value: usize) -> [u8; 3] {
     let op1 = (value & 0xFF) as u8;
     let op2 = ((value & 0xFF00) >> 8) as u8;
-    let op3 = ((value & 0xFF0000) >> 16) as u8;
+    let op3 = ((value & 0x00FF_0000) >> 16) as u8;
     [op1, op2, op3]
 }
 
