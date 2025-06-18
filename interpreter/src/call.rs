@@ -1,4 +1,5 @@
 #![allow(clippy::borrowed_box)]
+#![allow(clippy::cast_precision_loss)]
 
 use miette::miette;
 use std::{

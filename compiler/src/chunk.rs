@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_possible_truncation)]
 use std::fmt::Display;
 
 use num_derive::FromPrimitive;
