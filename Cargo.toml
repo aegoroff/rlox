@@ -19,6 +19,9 @@ codegen-units = 1
 panic = 'abort'
 lto = true
 
+[profile.darwin-release]
+inherits = "release"
+strip = false
 
 [workspace.dependencies]
 miette = { version = "7.6.0", features = ["fancy"] }
