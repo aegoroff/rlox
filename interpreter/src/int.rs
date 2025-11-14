@@ -516,7 +516,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             return Ok(LoxValue::Callable(
                 "fn",
                 (*identifier).to_string(),
-                Some(class_name.to_string()),
+                Some(class_name.clone()),
             ));
         }
         let field = closure.borrow().get(identifier)?;

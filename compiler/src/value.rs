@@ -173,12 +173,22 @@ impl Function {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct NativeFunction {
     pub arity: usize,
     pub name: String,
     pub func: fn(&[LoxValue]) -> crate::Result<LoxValue, RuntimeError>,
 }
+
+impl PartialEq for NativeFunction {
+    /// Two `NativeFunction`s are considered equal when their *arity* and *name*
+    /// match.  The actual function pointer (`func`) is **not** compared.
+    fn eq(&self, other: &Self) -> bool {
+        self.arity == other.arity && self.name == other.name
+    }
+}
+
+impl Eq for NativeFunction {}
 
 impl Display for NativeFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
