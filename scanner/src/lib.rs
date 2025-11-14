@@ -177,15 +177,14 @@ impl<'a> Lexer<'a> {
     fn number(&mut self, start: usize) -> Spanned<Token<'a>, usize> {
         let mut finish = self.skip_digits(start);
 
-        if let Some((i, next)) = self.chars.peek() {
-            if *next == '.' {
+        if let Some((i, next)) = self.chars.peek()
+            && *next == '.' {
                 let next_ix = *i + 1;
                 if let Some('0'..='9') = self.whole.chars().nth(next_ix) {
                     self.chars.next(); // consume dot
                     finish = self.skip_digits(next_ix);
                 }
             }
-        }
         let result = self.whole[start..=finish].parse().map_err(|e| {
             miette::miette!(
                 labels = vec![LabeledSpan::at(

@@ -55,13 +55,13 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
 
         let mut spans = HashSet::new();
         let mut add_error = |e: LoxError| {
-            if let LoxError::Error(report) = e {
-                if let Some(label) = report.labels() {
-                    for l in label {
-                        if !spans.contains(&(l.len(), l.offset())) {
-                            spans.insert((l.len(), l.offset()));
-                            errors.push(l);
-                        }
+            if let LoxError::Error(report) = e
+                && let Some(label) = report.labels()
+            {
+                for l in label {
+                    if !spans.contains(&(l.len(), l.offset())) {
+                        spans.insert((l.len(), l.offset()));
+                        errors.push(l);
                     }
                 }
             }
@@ -103,10 +103,10 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
     }
 
     fn add_id_to_scope(&mut self, token: &Token<'a>, defined: bool) {
-        if let Some(scope) = self.scopes.last_mut() {
-            if let Token::Identifier(id) = token {
-                scope.insert(id, defined);
-            }
+        if let Some(scope) = self.scopes.last_mut()
+            && let Token::Identifier(id) = token
+        {
+            scope.insert(id, defined);
         }
     }
 
@@ -173,18 +173,17 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
         if let Some(superclass) = superclass {
             self.current_class = ClassKind::Subclass;
             self.resolve_expression(superclass)?;
-            if let ExprKind::Variable(Token::Identifier(super_name)) = &superclass.kind {
-                if let Token::Identifier(name) = name {
-                    if *super_name == *name {
-                        return Err(LoxError::Error(miette!(
-                            labels = vec![LabeledSpan::at(
-                                superclass.location.clone(),
-                                "A class cannot inherit from itself"
-                            )],
-                            "Invalid superclass"
-                        )));
-                    }
-                }
+            if let ExprKind::Variable(Token::Identifier(super_name)) = &superclass.kind
+                && let Token::Identifier(name) = name
+                && *super_name == *name
+            {
+                return Err(LoxError::Error(miette!(
+                    labels = vec![LabeledSpan::at(
+                        superclass.location.clone(),
+                        "A class cannot inherit from itself"
+                    )],
+                    "Invalid superclass"
+                )));
             }
             self.begin_scope();
             self.define(&Token::Identifier(SUPER));
@@ -402,20 +401,18 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, 
     }
 
     fn visit_variable_expr(&mut self, obj: &Expr<'a>, name: &Token<'a>) -> crate::Result<()> {
-        if let Some(scope) = self.scopes.last() {
-            if let Token::Identifier(id) = name {
-                if let Some(defined) = scope.get(id) {
-                    if !(*defined) {
-                        return Err(LoxError::Error(miette!(
-                            labels = vec![LabeledSpan::at(
-                                obj.location.clone(),
-                                format!("Cant read local variable '{id}' in its own initializer")
-                            )],
-                            "Variable is not defined"
-                        )));
-                    }
-                }
-            }
+        if let Some(scope) = self.scopes.last()
+            && let Token::Identifier(id) = name
+            && let Some(defined) = scope.get(id)
+            && !(*defined)
+        {
+            return Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(
+                    obj.location.clone(),
+                    format!("Cant read local variable '{id}' in its own initializer")
+                )],
+                "Variable is not defined"
+            )));
         }
         self.resolve_local(obj, name);
         Ok(())

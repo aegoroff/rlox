@@ -198,10 +198,10 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
         // if var without an initializer check semicolon
-        if self.tokens.peek().is_none() {
-            if let Err(e) = self.consume_semicolon(finish) {
-                return Some(Err(e));
-            }
+        if self.tokens.peek().is_none()
+            && let Err(e) = self.consume_semicolon(finish)
+        {
+            return Some(Err(e));
         }
         let current = self.tokens.peek()?;
         let stmt = if let Ok((_, Token::Equal, _)) = current {
@@ -1107,7 +1107,7 @@ impl<'a> Parser<'a> {
 
     /// Validates current token matches any of tokens specifies and if so
     /// consumes it advancing iterator
-    fn matches(&mut self, tokens: &[Token]) -> Option<(Token, Range<usize>)> {
+    fn matches(&mut self, tokens: &[Token]) -> Option<(Token<'_>, Range<usize>)> {
         let Some(Ok((_, next_tok, _))) = self.tokens.peek() else {
             return None;
         };

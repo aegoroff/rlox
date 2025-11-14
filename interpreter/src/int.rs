@@ -125,13 +125,13 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             Err(err) => {
                 let mut errors = vec![];
                 let mut spans = HashSet::new();
-                if let LoxError::Error(e) = err {
-                    if let Some(label) = e.labels() {
-                        for l in label {
-                            if !spans.contains(&(l.len(), l.offset())) {
-                                spans.insert((l.len(), l.offset()));
-                                errors.push(l);
-                            }
+                if let LoxError::Error(e) = err
+                    && let Some(label) = e.labels()
+                {
+                    for l in label {
+                        if !spans.contains(&(l.len(), l.offset())) {
+                            spans.insert((l.len(), l.offset()));
+                            errors.push(l);
                         }
                     }
                 }
@@ -510,14 +510,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 "Only instances have properties or methods"
             )));
         };
-        if let Ok(class) = self.callables.get(class_name) {
-            if class.borrow().get(identifier).is_some() {
-                return Ok(LoxValue::Callable(
-                    "fn",
-                    (*identifier).to_string(),
-                    Some(class_name.to_string()),
-                ));
-            }
+        if let Ok(class) = self.callables.get(class_name)
+            && class.borrow().get(identifier).is_some()
+        {
+            return Ok(LoxValue::Callable(
+                "fn",
+                (*identifier).to_string(),
+                Some(class_name.to_string()),
+            ));
         }
         let field = closure.borrow().get(identifier)?;
         Ok(field)

@@ -148,7 +148,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn chunk(&self) -> Ref<Chunk> {
+    fn chunk(&self) -> Ref<'_, Chunk> {
         self.frames[self.frame_count - 1]
             .closure
             .function
