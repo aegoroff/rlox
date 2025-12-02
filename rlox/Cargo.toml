@@ -10,7 +10,7 @@ repository = "https://git.egoroff.spb.ru/root/rlox"
 interpreter = { path = "../interpreter" }
 compiler = { path = "../compiler" }
 bugreport = "0.5.1"
-clap = { version = "4.5.51", features = ["std", "color", "suggestions", "cargo"] }
+clap = { version = "4.5.53", features = ["std", "color", "suggestions", "cargo"] }
 miette = { workspace = true, features = ["fancy"] }
 
 [features]
