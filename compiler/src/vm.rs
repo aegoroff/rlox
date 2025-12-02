@@ -187,10 +187,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Return => {
                     let value = self.pop()?;
 
-                    let location = self.frame().slots_offset;
-                    self.close_upvalues(location);
+                    let slots_offset = self.frame().slots_offset;
+                    // Close 'this' if it exists (for methods, 'this' is at slots_offset - 1)
+                    if slots_offset > 0 {
+                        self.close_upvalue_at(slots_offset - 1);
+                    }
+                    // Close upvalues starting from slots_offset (local variables of this function)
+                    self.close_upvalues(slots_offset);
 
-                    let num_to_pop = self.stack.len() - self.frame().slots_offset + 1;
+                    let num_to_pop = self.stack.len() - slots_offset + 1;
 
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
@@ -568,6 +573,22 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 self.open_upvalues.pop();
             } else {
                 break;
+            }
+        }
+    }
+
+    #[inline]
+    fn close_upvalue_at(&mut self, location: usize) {
+        // Close upvalues that point to exactly this location (used for 'this' in methods)
+        let mut i = 0;
+        while i < self.open_upvalues.len() {
+            if self.open_upvalues[i].borrow().is_open_with_index(location) {
+                if location < self.stack.len() {
+                    self.open_upvalues[i].replace(Upvalue::Closed(self.stack[location].clone()));
+                }
+                self.open_upvalues.remove(i);
+            } else {
+                i += 1;
             }
         }
     }
