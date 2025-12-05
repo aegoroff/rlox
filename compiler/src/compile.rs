@@ -235,6 +235,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Compiles a method declaration.
     fn method(&mut self) -> crate::Result<()> {
         let Token::Identifier(id) = *self.current.borrow() else {
             return Err(miette::miette!(
