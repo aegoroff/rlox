@@ -252,6 +252,7 @@ impl<'a> Lexer<'a> {
         (start, tok, finish + 1)
     }
 
+    /// Updates current line spanning information and inserts new line info with the given end position.
     fn insert_line_info(&mut self, end: usize) {
         self.lines_start
             .entry(self.line - 1)
