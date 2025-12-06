@@ -178,13 +178,14 @@ impl<'a> Lexer<'a> {
         let mut finish = self.skip_digits(start);
 
         if let Some((i, next)) = self.chars.peek()
-            && *next == '.' {
-                let next_ix = *i + 1;
-                if let Some('0'..='9') = self.whole.chars().nth(next_ix) {
-                    self.chars.next(); // consume dot
-                    finish = self.skip_digits(next_ix);
-                }
+            && *next == '.'
+        {
+            let next_ix = *i + 1;
+            if let Some('0'..='9') = self.whole.chars().nth(next_ix) {
+                self.chars.next(); // consume dot
+                finish = self.skip_digits(next_ix);
             }
+        }
         let result = self.whole[start..=finish].parse().map_err(|e| {
             miette::miette!(
                 labels = vec![LabeledSpan::at(
@@ -251,12 +252,12 @@ impl<'a> Lexer<'a> {
         (start, tok, finish + 1)
     }
 
-    fn insert_line_info(&mut self, i: usize) {
+    fn insert_line_info(&mut self, end: usize) {
         self.lines_start
             .entry(self.line - 1)
-            .and_modify(|e| *e = e.start..i);
+            .and_modify(|e| *e = e.start..end);
         // +1 because next line will be started from next char
-        let i = i + 1;
+        let i = end + 1;
         self.lines_start.insert(self.line, i..i);
     }
 }
