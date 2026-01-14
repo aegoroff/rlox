@@ -60,6 +60,7 @@ jobs:
 
   generate-changelog:
     name: Generate changelog
+    if: startsWith(forgejo.ref, 'refs/tags/v')
     runs-on: docker
     outputs:
       release_body: ${{ steps.git-cliff.outputs.content }}
