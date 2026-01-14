@@ -2,6 +2,7 @@ name: CI Build
 
 env:
   RELEASE_DIR: artifacts
+  GITCLIFF_VER: 2.11.0
 
 on:
   push:
@@ -71,9 +72,9 @@ jobs:
       - name: Install git-cliff
         run: |
           curl -fL \
-            https://github.com/orhun/git-cliff/releases/download/v2.6.1/git-cliff-2.6.1-x86_64-unknown-linux-musl.tar.gz \
+            https://github.com/orhun/git-cliff/releases/download/v${{ env.GITCLIFF_VER }}/git-cliff-${{ env.GITCLIFF_VER }}-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz
-          install git-cliff-2.6.1/git-cliff /usr/local/bin/git-cliff
+          install git-cliff-${{ env.GITCLIFF_VER }}/git-cliff /usr/local/bin/git-cliff
 
       - name: Generate a changelog
         run: |
