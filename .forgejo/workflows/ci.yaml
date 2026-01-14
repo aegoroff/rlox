@@ -63,7 +63,7 @@ jobs:
     # if: startsWith(forgejo.ref, 'refs/tags/v')
     runs-on: docker
     outputs:
-      release_body: ${{ steps.git-cliff.outputs.content }}
+      release_body: ${{ steps.changelog.outputs.release_body }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -78,7 +78,9 @@ jobs:
           install git-cliff-${{ env.GITCLIFF_VER }}/git-cliff /usr/local/bin/git-cliff
 
       - name: Generate a changelog
+        id: changelog
         run: |
-          git cliff --latest --strip header > CHANGES.md
-        env:
-          OUTPUT: CHANGES.md
+          BODY="$(git cliff --latest --strip header)"
+          echo "release_body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
