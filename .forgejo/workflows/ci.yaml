@@ -57,3 +57,21 @@ jobs:
         run: |
           cargo test --target="${{ matrix.target }}" --profile "${{ matrix.profile }}" --workspace
 
+  generate-changelog:
+    name: Generate changelog
+    runs-on: docker
+    outputs:
+      release_body: ${{ steps.git-cliff.outputs.content }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: -vv --latest --strip header
+        env:
+          OUTPUT: CHANGES.md
