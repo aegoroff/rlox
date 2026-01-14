@@ -1,0 +1,59 @@
+name: CI Build
+
+env:
+  RELEASE_DIR: artifacts
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  cross_build:
+    runs-on: ${{ matrix.os }}
+    container:
+      image:  ${{ matrix.image }}
+    strategy:
+      matrix:
+        include:
+          - os: docker
+            target: x86_64-unknown-linux-musl
+            image: "rust:latest"
+            profile: release
+            use_cross: false
+            run_tests: true
+            tool: cargo
+            exe: jsavlt
+
+    steps:
+      - name: Install Node.js
+        run: |
+          apt-get update
+          apt-get install -y nodejs
+
+      - name: Install Cross
+        if: matrix.use_cross
+        run: cargo install cross
+
+      - name: Install Cross-Compilation Tools
+        run: |
+          apt-get update
+          apt-get install -y gcc-aarch64-linux-gnu musl-tools
+          ln -s /usr/bin/aarch64-linux-gnu-gcc /usr/bin/aarch64-linux-musl-gcc
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          rustup target add ${{ matrix.target }}
+          ${{ matrix.tool }} build --target="${{ matrix.target }}" --profile "${{ matrix.profile }}"
+        env:
+          CROSS_CONTAINER_IN_CONTAINER: true
+
+      - name: Test
+        if: matrix.run_tests
+        run: |
+          cargo test --target="${{ matrix.target }}" --profile "${{ matrix.profile }}"
+
