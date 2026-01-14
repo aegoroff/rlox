@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Lox language rust implementation"
 authors = ["Alexander Egorov <egoroff@gmail.com>"]
-repository = "https://git.egoroff.spb.ru/root/rlox"
+repository = "https://git.egoroff.spb.ru/egr/rlox"
 
 [dependencies]
 interpreter = { path = "../interpreter" }
