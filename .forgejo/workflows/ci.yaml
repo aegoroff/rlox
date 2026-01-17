@@ -31,10 +31,6 @@ jobs:
           apt-get update
           apt-get install -y nodejs
 
-      - name: Install Cross
-        if: matrix.use_cross
-        run: cargo install cross
-
       - name: Install Cross-Compilation Tools
         run: |
           apt-get update
@@ -46,7 +42,7 @@ jobs:
       - name: Build
         run: |
           rustup target add ${{ matrix.target }}
-          ${{ matrix.tool }} build --target="${{ matrix.target }}" --profile "${{ matrix.profile }}" --workspace
+          tool build --target="${{ matrix.target }}" --profile "${{ matrix.profile }}" --workspace
         env:
           CROSS_CONTAINER_IN_CONTAINER: true
 
