@@ -1,7 +1,6 @@
 name: CI Build
 
 env:
-  RELEASE_DIR: artifacts
   GITCLIFF_VER: 2.11.0
 
 on:
@@ -25,8 +24,6 @@ jobs:
             profile: release
             use_cross: false
             run_tests: true
-            tool: cargo
-            exe: jsavlt
 
     steps:
       - name: Install Node.js
