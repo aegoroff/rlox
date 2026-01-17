@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: |
           rustup target add ${{ matrix.target }}
-          tool build --target="${{ matrix.target }}" --profile "${{ matrix.profile }}" --workspace
+          cargo build --target="${{ matrix.target }}" --profile "${{ matrix.profile }}" --workspace
         env:
           CROSS_CONTAINER_IN_CONTAINER: true
 
