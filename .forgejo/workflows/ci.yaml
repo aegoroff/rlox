@@ -14,7 +14,7 @@ on:
 
 jobs:
   cross_build:
-    runs-on: ${{ matrix.os }}
+    runs-on: docker
     container:
       image:  registry.egoroff.spb.ru/rustcross:1.93
     strategy:
