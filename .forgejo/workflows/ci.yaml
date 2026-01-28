@@ -95,7 +95,7 @@ jobs:
       - name: Tests
         if: matrix.run_tests
         run: |
-          cargo zigbuild --target="${{ matrix.target }}" --profile "${{ env.PROFILE }}" --tests
+          cargo zigbuild --target="${{ matrix.target }}" --profile "${{ env.PROFILE }}" --workspace --tests
           find target/${{ matrix.target }}/${{ env.PROFILE }}/deps/ -regex '^[^.]*$' -type f -executable -exec {} \;
 
       # -------------------
