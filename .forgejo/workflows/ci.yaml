@@ -2,6 +2,8 @@ name: CI Build
 
 env:
   GITCLIFF_VER: 2.11.0
+  PROFILE: release
+  RELEASE_BIN: rlox
 
 on:
   push:
@@ -14,66 +16,102 @@ jobs:
   cross_build:
     runs-on: ${{ matrix.os }}
     container:
-      image:  ${{ matrix.image }}
+      image:  registry.egoroff.spb.ru/rustcross:1.93
     strategy:
       matrix:
         include:
-          - os: docker
-            target: x86_64-unknown-linux-musl
-            image: "rust:latest"
-            profile: release
-            use_cross: false
+          - target: aarch64-apple-darwin
+            run_tests: false
+            osx: true
+            windows: false
+            exe: rlox
+          - target: x86_64-apple-darwin
+            run_tests: false
+            osx: true
+            windows: false
+            exe: rlox
+          - target: x86_64-unknown-linux-musl
             run_tests: true
+            osx: false
+            windows: false
+            exe: rlox
+          - target: aarch64-unknown-linux-musl
+            run_tests: false
+            osx: false
+            windows: false
+            exe: rlox
+          - target: x86_64-pc-windows-msvc
+            run_tests: false
+            osx: false
+            windows: true
+            exe: rlox.exe
+          - target: aarch64-pc-windows-msvc
+            run_tests: false
+            osx: false
+            windows: true
+            exe: rlox.exe
 
     steps:
-      - name: Install Node.js
+      - name: Query version number
+        id: get_version
+        shell: bash
         run: |
-          apt-get update
-          apt-get install -y nodejs
+          echo "using version tag ${GITHUB_REF:11}"
+          echo "version=${GITHUB_REF:11}" >> $GITHUB_OUTPUT
 
-      - name: Install Cross-Compilation Tools
+      # -------------------
+      # Checkout the repository after Node.js is installed
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          token: ${{ secrets.READ_PEPOS_TOKEN }}
+
+      # -------------------
+      # Set macOS environment variables for SDK
+      - name: Set macOS build env
+        if: matrix.osx
         run: |
-          apt-get update
-          apt-get install -y gcc-aarch64-linux-gnu musl-tools
-          ln -s /usr/bin/aarch64-linux-gnu-gcc /usr/bin/aarch64-linux-musl-gcc
+          echo RUSTFLAGS=-Lframework=/opt/MacOSX11.3.sdk/System/Library/Frameworks >> $GITHUB_ENV
+          echo MACOSX_DEPLOYMENT_TARGET=10.12 >> $GITHUB_ENV
+          echo SDKROOT=/opt/MacOSX11.3.sdk >> $GITHUB_ENV
 
-      - uses: actions/checkout@v4
-
-      - name: Build
+      # -------------------
+      # Build Linux or Mac
+      - name: Build Linux or Mac
+        if: ${{ !matrix.windows }}
         run: |
-          rustup target add ${{ matrix.target }}
-          cargo build --target="${{ matrix.target }}" --profile "${{ matrix.profile }}" --workspace
-        env:
-          CROSS_CONTAINER_IN_CONTAINER: true
+          env
+          cargo zigbuild --target="${{ matrix.target }}" --profile "${{ env.PROFILE }}"
 
-      - name: Test
+      # -------------------
+      # Build Windows
+      - name: Build Windows
+        if: matrix.windows
+        run: |
+          cargo xwin build --target="${{ matrix.target }}" --profile "${{ env.PROFILE }}"
+
+      # -------------------
+      # Run tests
+      - name: Tests
         if: matrix.run_tests
         run: |
-          cargo test --target="${{ matrix.target }}" --profile "${{ matrix.profile }}" --workspace
+          cargo zigbuild --target="${{ matrix.target }}" --profile "${{ env.PROFILE }}" --tests
+          find target/${{ matrix.target }}/${{ env.PROFILE }}/deps/ -regex '^[^.]*$' -type f -executable -exec {} \;
 
-  generate-changelog:
-    name: Generate changelog
-    if: startsWith(forgejo.ref, 'refs/tags/v')
-    runs-on: docker
-    outputs:
-      release_body: ${{ steps.changelog.outputs.release_body }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      # -------------------
+      # Package the build artifacts
+      - name: Packaging
+        id: packaging
+        run: |
+          artefact=${{ env.RELEASE_BIN }}-${{ steps.get_version.outputs.VERSION }}-${{ matrix.target }}.tar.gz
+          target_dir=./target/${{ matrix.target }}/${{ env.PROFILE }}/
+          (cd "$target_dir" && tar czvf "$artefact" "${{ matrix.exe }}")
+          echo "artefact=$artefact" >> $GITHUB_OUTPUT
+
+      # -------------------
+      # Upload artifacts
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
         with:
-          fetch-depth: 0
-
-      - name: Install git-cliff
-        run: |
-          curl -fL \
-            https://github.com/orhun/git-cliff/releases/download/v${{ env.GITCLIFF_VER }}/git-cliff-${{ env.GITCLIFF_VER }}-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz
-          install git-cliff-${{ env.GITCLIFF_VER }}/git-cliff /usr/local/bin/git-cliff
-
-      - name: Generate a changelog
-        id: changelog
-        run: |
-          BODY="$(git cliff --latest --strip header)"
-          echo "release_body<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$BODY" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          name: ${{ matrix.target }}
+          path: ./target/${{ matrix.target }}/${{ env.PROFILE }}/${{ steps.packaging.outputs.artefact }}
