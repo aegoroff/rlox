@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 scanner = { path = "../scanner" }
 miette = { workspace = true, features = ["fancy"] }
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 
 [dev-dependencies]
 test-case = "3.3.1"
