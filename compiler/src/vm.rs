@@ -811,6 +811,7 @@ mod tests {
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(1);", "1" ; "conditional return success")]
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
+    #[test_case("print sqrt(9);", "3" ; "use sqrt call")]
     #[test_case("fun foo() { var i = 1; fun bar(x) { return i + x; } return bar; } print foo()(2);", "3" ; "closure")]
     #[test_case("var f; { var local = \"local\"; fun f_() { print local; } f = f_; } f();", "local" ; "closure1")]
     #[test_case(r#"fun outer() {
