@@ -17,3 +17,29 @@ pub fn sqrt(args: &[LoxValue]) -> crate::Result<LoxValue, RuntimeError> {
         Err(RuntimeError::ExpectedNumber(args[0].clone()))
     }
 }
+
+#[inline]
+pub fn min(args: &[LoxValue]) -> crate::Result<LoxValue, RuntimeError> {
+    if let LoxValue::Number(a) = args[0] {
+        if let LoxValue::Number(b) = args[1] {
+            Ok(LoxValue::Number(a.min(b)))
+        } else {
+            Err(RuntimeError::ExpectedNumber(args[1].clone()))
+        }
+    } else {
+        Err(RuntimeError::ExpectedNumber(args[0].clone()))
+    }
+}
+
+#[inline]
+pub fn max(args: &[LoxValue]) -> crate::Result<LoxValue, RuntimeError> {
+    if let LoxValue::Number(a) = args[0] {
+        if let LoxValue::Number(b) = args[1] {
+            Ok(LoxValue::Number(a.max(b)))
+        } else {
+            Err(RuntimeError::ExpectedNumber(args[1].clone()))
+        }
+    } else {
+        Err(RuntimeError::ExpectedNumber(args[0].clone()))
+    }
+}

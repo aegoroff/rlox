@@ -104,8 +104,22 @@ impl<W: std::io::Write> VirtualMachine<W> {
             name: sqrt_name.clone(),
             func: builtin::sqrt,
         });
+        let min_name = "min".to_string();
+        let min = LoxValue::Native(NativeFunction {
+            arity: 2,
+            name: min_name.clone(),
+            func: builtin::min,
+        });
+        let max_name = "max".to_string();
+        let max = LoxValue::Native(NativeFunction {
+            arity: 2,
+            name: max_name.clone(),
+            func: builtin::max,
+        });
         self.globals.insert(clock_name, clock);
         self.globals.insert(sqrt_name, sqrt);
+        self.globals.insert(min_name, min);
+        self.globals.insert(max_name, max);
     }
 
     #[inline]
@@ -812,6 +826,8 @@ mod tests {
     #[test_case("fun foo(n) { if (n < 2) return n; return 10; } print foo(5);", "10" ; "conditional return fail")]
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
     #[test_case("print sqrt(9);", "3" ; "use sqrt call")]
+    #[test_case("print min(1, 2);", "1" ; "use min call")]
+    #[test_case("print max(1, 2);", "2" ; "use max call")]
     #[test_case("fun foo() { var i = 1; fun bar(x) { return i + x; } return bar; } print foo()(2);", "3" ; "closure")]
     #[test_case("var f; { var local = \"local\"; fun f_() { print local; } f = f_; } f();", "local" ; "closure1")]
     #[test_case(r#"fun outer() {
