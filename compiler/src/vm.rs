@@ -92,34 +92,25 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     pub fn init(&mut self) {
         self.stack.clear();
-        let clock_name = "clock".to_string();
-        let clock = LoxValue::Native(NativeFunction {
-            arity: 0,
-            name: clock_name.clone(),
-            func: builtin::clock,
+        self.add_global("clock", 0, builtin::clock);
+        self.add_global("sqrt", 1, builtin::sqrt);
+        self.add_global("min", 2, builtin::min);
+        self.add_global("max", 2, builtin::max);
+    }
+
+    fn add_global(
+        &mut self,
+        name: &str,
+        arity: usize,
+        func: fn(&[LoxValue]) -> crate::Result<LoxValue, RuntimeError>,
+    ) {
+        let builtin_name = name.to_string();
+        let builtin = LoxValue::Native(NativeFunction {
+            arity,
+            name: builtin_name.clone(),
+            func,
         });
-        let sqrt_name = "sqrt".to_string();
-        let sqrt = LoxValue::Native(NativeFunction {
-            arity: 1,
-            name: sqrt_name.clone(),
-            func: builtin::sqrt,
-        });
-        let min_name = "min".to_string();
-        let min = LoxValue::Native(NativeFunction {
-            arity: 2,
-            name: min_name.clone(),
-            func: builtin::min,
-        });
-        let max_name = "max".to_string();
-        let max = LoxValue::Native(NativeFunction {
-            arity: 2,
-            name: max_name.clone(),
-            func: builtin::max,
-        });
-        self.globals.insert(clock_name, clock);
-        self.globals.insert(sqrt_name, sqrt);
-        self.globals.insert(min_name, min);
-        self.globals.insert(max_name, max);
+        self.globals.insert(builtin_name, builtin);
     }
 
     #[inline]
@@ -582,7 +573,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         while let Some(upval) = self.open_upvalues.last() {
             if upval.borrow().is_open_above_or_equal_index(location) {
                 if location < self.stack.len() {
-                    upval.replace(Upvalue::Closed(self.stack[location].clone())); // move value to the heap    
+                    upval.replace(Upvalue::Closed(self.stack[location].clone())); // move value to the heap
                 }
                 self.open_upvalues.pop();
             } else {
