@@ -18,12 +18,9 @@ extern crate clap;
 
 const INTERPRET_CMD: &str = "n";
 const COMPILE_CMD: &str = "c";
-const FILE_CMD: &str = "f";
-const STDIN_CMD: &str = "i";
 const BUGREPORT_CMD: &str = "bugreport";
 const PRINTCODE_OPT: &str = "printcode";
-
-const PATH: &str = "PATH";
+const PATH_OPT: &str = "PATH";
 
 fn main() -> miette::Result<()> {
     let app = build_cli();
@@ -41,19 +38,21 @@ fn main() -> miette::Result<()> {
 }
 
 fn interpretation(cmd: &ArgMatches) -> miette::Result<()> {
-    match cmd.subcommand() {
-        Some((FILE_CMD, cmd)) => from_file(cmd, interpret),
-        Some((STDIN_CMD, cmd)) => from_stdin(cmd, interpret),
-        _ => Ok(()),
+    let path = cmd.get_one::<String>(PATH_OPT);
+    if let Some(p) = path {
+        from_file(p, interpret)
+    } else {
+        from_stdin(interpret)
     }
 }
 
 fn compilation(cmd: &ArgMatches) -> miette::Result<()> {
     let printcode = cmd.get_flag(PRINTCODE_OPT);
-    match cmd.subcommand() {
-        Some((FILE_CMD, cmd)) => from_file(cmd, |s| compile(s, printcode)),
-        Some((STDIN_CMD, cmd)) => from_stdin(cmd, |s| compile(s, printcode)),
-        _ => Ok(()),
+    let path = cmd.get_one::<String>(PATH_OPT);
+    if let Some(p) = path {
+        from_file(p, |s| compile(s, printcode))
+    } else {
+        from_stdin(|s| compile(s, printcode))
     }
 }
 
@@ -62,13 +61,7 @@ fn compilation(cmd: &ArgMatches) -> miette::Result<()> {
 /// # Errors
 ///
 /// This function will return an error if scanning failed.
-fn from_file<F: Fn(String) -> miette::Result<()>>(
-    cmd: &ArgMatches,
-    action: F,
-) -> miette::Result<()> {
-    let path = cmd
-        .get_one::<String>(PATH)
-        .ok_or(miette! {"Path required"})?;
+fn from_file<F: Fn(String) -> miette::Result<()>>(path: &String, action: F) -> miette::Result<()> {
     let content = fs::read_to_string(path)
         .into_diagnostic()
         .wrap_err(format!("Failed to read: {path}"))?;
@@ -81,10 +74,7 @@ fn from_file<F: Fn(String) -> miette::Result<()>>(
 /// # Errors
 ///
 /// This function will return an error if scanning failed.
-fn from_stdin<F: Fn(String) -> miette::Result<()>>(
-    _cmd: &ArgMatches,
-    action: F,
-) -> miette::Result<()> {
+fn from_stdin<F: Fn(String) -> miette::Result<()>>(action: F) -> miette::Result<()> {
     let mut content = String::new();
     io::stdin()
         .read_to_string(&mut content)
@@ -139,33 +129,14 @@ fn compile_cmd() -> Command {
         .aliases(["compile"])
         .about("Use bytecode compiler")
         .arg(printcode_arg())
-        .subcommand(file_cmd())
-        .subcommand(stdin_cmd())
+        .arg(path_arg())
 }
 
 fn interpret_cmd() -> Command {
     Command::new(INTERPRET_CMD)
         .aliases(["interpret"])
         .about("Use interpreter")
-        .subcommand(file_cmd())
-        .subcommand(stdin_cmd())
-}
-
-fn file_cmd() -> Command {
-    Command::new(FILE_CMD)
-        .aliases(["file"])
-        .about("Interpret file specified")
-        .arg(
-            arg!([PATH])
-                .help("Sets file path to interpret")
-                .required(true),
-        )
-}
-
-fn stdin_cmd() -> Command {
-    Command::new(STDIN_CMD)
-        .aliases(["stdin"])
-        .about("Use data from standard input")
+        .arg(path_arg())
 }
 
 fn bugreport_cmd() -> Command {
@@ -179,4 +150,10 @@ fn printcode_arg() -> Arg {
         .required(false)
         .action(ArgAction::SetTrue)
         .help("Output generated code")
+}
+
+fn path_arg() -> Arg {
+    Arg::new(PATH_OPT)
+        .required(false)
+        .help("Code file path. If not provided, read from stdin.")
 }
