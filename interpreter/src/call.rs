@@ -31,6 +31,9 @@ pub trait LoxCallable<'a> {
 }
 
 pub const CLOCK: &str = "clock";
+pub const SQRT: &str = "sqrt";
+pub const MIN: &str = "min";
+pub const MAX: &str = "max";
 
 #[derive(Default)]
 pub struct Catalogue<'a> {
@@ -58,7 +61,7 @@ impl<'a> Catalogue<'a> {
     }
 }
 
-pub struct Clock {}
+pub struct Clock;
 
 impl<'a> LoxCallable<'a> for Clock {
     fn arity(&self) -> usize {
@@ -79,6 +82,98 @@ impl<'a> LoxCallable<'a> for Clock {
         let seconds = since_the_epoch.as_secs();
         let val = LoxValue::Number(seconds as f64);
         Ok(CallResult::Value(val))
+    }
+
+    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        None
+    }
+}
+
+pub struct Sqrt;
+
+impl<'a> LoxCallable<'a> for Sqrt {
+    fn arity(&self) -> usize {
+        1
+    }
+
+    fn name(&self) -> &'a str {
+        SQRT
+    }
+
+    fn parent(&self) -> Option<&'a str> {
+        None
+    }
+
+    fn call(&self, args: &[LoxValue]) -> crate::Result<CallResult<'a>> {
+        if let LoxValue::Number(num) = args[0] {
+            Ok(CallResult::Value(LoxValue::Number(num.sqrt())))
+        } else {
+            let report = miette!("Expected number but was '{:?}'", args[0]);
+            Err(LoxError::Error(report))
+        }
+    }
+
+    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        None
+    }
+}
+
+pub struct Min;
+
+impl<'a> LoxCallable<'a> for Min {
+    fn arity(&self) -> usize {
+        2
+    }
+
+    fn name(&self) -> &'a str {
+        MIN
+    }
+
+    fn parent(&self) -> Option<&'a str> {
+        None
+    }
+
+    fn call(&self, args: &[LoxValue]) -> crate::Result<CallResult<'a>> {
+        if let LoxValue::Number(num) = args[0] {
+            Ok(CallResult::Value(LoxValue::Number(num.sqrt())))
+        } else {
+            let report = miette!("Expected number but was '{:?}'", args[0]);
+            Err(LoxError::Error(report))
+        }
+    }
+
+    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
+        None
+    }
+}
+
+pub struct Max;
+
+impl<'a> LoxCallable<'a> for Max {
+    fn arity(&self) -> usize {
+        2
+    }
+
+    fn name(&self) -> &'a str {
+        MAX
+    }
+
+    fn parent(&self) -> Option<&'a str> {
+        None
+    }
+
+    fn call(&self, args: &[LoxValue]) -> crate::Result<CallResult<'a>> {
+        if let LoxValue::Number(a) = args[0] {
+            if let LoxValue::Number(b) = args[1] {
+                Ok(CallResult::Value(LoxValue::Number(a.max(b))))
+            } else {
+                let report = miette!("Expected number but was '{:?}'", args[1]);
+                Err(LoxError::Error(report))
+            }
+        } else {
+            let report = miette!("Expected number but was '{:?}'", args[0]);
+            Err(LoxError::Error(report))
+        }
     }
 
     fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {

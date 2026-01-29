@@ -11,7 +11,7 @@ use miette::{LabeledSpan, SourceSpan, miette};
 use crate::{
     LoxError,
     ast::{Expr, ExprKind, ExprVisitor, FunctionKind, LoxValue, Stmt, StmtVisitor},
-    call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable},
+    call::{self, CallResult, Catalogue, Class, Clock, Function, LoxCallable, Max, Min, Sqrt},
     env::Environment,
 };
 
@@ -37,7 +37,22 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             call::CLOCK.to_string(),
             LoxValue::Callable("native", call::CLOCK.to_owned(), None),
         );
-        callables.define(call::CLOCK, Rc::new(RefCell::new(Clock {})));
+        globals.borrow_mut().define(
+            call::SQRT.to_string(),
+            LoxValue::Callable("native", call::SQRT.to_owned(), None),
+        );
+        globals.borrow_mut().define(
+            call::MIN.to_string(),
+            LoxValue::Callable("native", call::MIN.to_owned(), None),
+        );
+        globals.borrow_mut().define(
+            call::MAX.to_string(),
+            LoxValue::Callable("native", call::MAX.to_owned(), None),
+        );
+        callables.define(call::CLOCK, Rc::new(RefCell::new(Clock)));
+        callables.define(call::SQRT, Rc::new(RefCell::new(Sqrt)));
+        callables.define(call::MIN, Rc::new(RefCell::new(Min)));
+        callables.define(call::MAX, Rc::new(RefCell::new(Max)));
         Self {
             environment,
             globals,
@@ -890,6 +905,9 @@ mod tests {
     #[test_case("for(var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test")]
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
+    #[test_case("print sqrt(9);", "3" ; "use sqrt call")]
+    #[test_case("print min(1, 2);", "1" ; "use min call")]
+    #[test_case("print max(1, 2);", "2" ; "use max call")]
     #[test_case("if (clock() > 0) print \"good\"; else print \"impossible\";", "good" ; "call in predicate")]
     #[test_case("fun x(v) { } print x(10);", "" ; "empty function body")]
     #[test_case("fun x(v) { print v; } print x(10);", "10" ; "simple call one arg")]
