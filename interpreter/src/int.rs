@@ -35,19 +35,19 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         let mut callables = Box::new(Catalogue::new());
         globals.borrow_mut().define(
             call::CLOCK.to_string(),
-            LoxValue::Callable("native", call::CLOCK.to_owned(), None),
+            LoxValue::Callable("native", call::CLOCK.to_owned(), None, None),
         );
         globals.borrow_mut().define(
             call::SQRT.to_string(),
-            LoxValue::Callable("native", call::SQRT.to_owned(), None),
+            LoxValue::Callable("native", call::SQRT.to_owned(), None, None),
         );
         globals.borrow_mut().define(
             call::MIN.to_string(),
-            LoxValue::Callable("native", call::MIN.to_owned(), None),
+            LoxValue::Callable("native", call::MIN.to_owned(), None, None),
         );
         globals.borrow_mut().define(
             call::MAX.to_string(),
-            LoxValue::Callable("native", call::MAX.to_owned(), None),
+            LoxValue::Callable("native", call::MAX.to_owned(), None, None),
         );
         callables.define(call::CLOCK, Rc::new(RefCell::new(Clock)));
         callables.define(call::SQRT, Rc::new(RefCell::new(Sqrt)));
@@ -180,10 +180,14 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
         &mut self,
         arguments: &[LoxValue],
         callee: &std::cell::Ref<'_, dyn LoxCallable<'a>>,
+        this_binding: Option<LoxValue>,
     ) -> crate::Result<LoxValue> {
         match callee.call(arguments)? {
             CallResult::Value(lox_value) => Ok(lox_value),
             CallResult::Code(stmt, closure) => {
+                if let Some(ref this_val) = this_binding {
+                    closure.borrow_mut().define(THIS.to_string(), this_val.clone());
+                }
                 let result = {
                     let prev = self.begin_scope(closure);
                     let result = self.interpret_one(stmt);
@@ -401,7 +405,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             let a = self.evaluate(a)?;
             arguments.push(a);
         }
-        let LoxValue::Callable(kind, ref function, parent) = receiver else {
+        let LoxValue::Callable(kind, ref function, parent, receiver) = receiver else {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     location,
@@ -422,13 +426,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             };
 
             if let "class" = kind {
-                // Call superclass ctor to init it's this instance
-                let super_callee = class.borrow();
-                self.call_code(&arguments, &super_callee)?;
+                // Create subclass instance first so superclass init can use same this
+                let callee = self.callables.get(function)?;
+                let callee = callee.borrow();
+                let instance = self.call_code(&arguments, &callee, None)?;
 
+                let super_callee = class.borrow();
                 if let Some(method) = super_callee.get(INIT) {
-                    // Create instance of the class: Class()
-                    // Call constructor if available
                     let initializer = method.borrow();
 
                     // superclass may have initializer with lower number of parameters then subclass
@@ -443,15 +447,14 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                             "Invalid parameters"
                         )));
                     };
-                    self.call_code(&arguments[..args_len], &initializer)?;
+                    self.call_code(
+                        &arguments[..args_len],
+                        &initializer,
+                        Some(instance.clone()),
+                    )?;
                 }
 
-                let callee = self.callables.get(function)?;
-                let callee = callee.borrow();
                 if let Some(method) = callee.get(INIT) {
-                    // Create instance of the class: Class()
-                    // Call constructor if available
-                    let instance = self.call_code(&arguments, &callee);
                     let initializer = method.borrow();
 
                     // subclass may have initializer with lower parameters number then superclass
@@ -467,12 +470,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                         )));
                     };
 
-                    self.call_code(&arguments[..args_len], &initializer)?;
-                    instance
-                } else {
-                    // plain function call
-                    self.call_code(&arguments, &callee)
+                    self.call_code(
+                        &arguments[..args_len],
+                        &initializer,
+                        Some(instance.clone()),
+                    )?;
                 }
+                Ok(instance)
             } else {
                 let Some(method) = class.borrow().get(function) else {
                     return Err(LoxError::Error(miette!(
@@ -487,13 +491,21 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 let callee = callee.borrow();
 
                 if function == INIT {
-                    // handle var c = Class(0).init(10);
-                    let class = class.borrow();
-                    let instance = self.call_code(&arguments, &class);
-                    self.call_code(&arguments, &callee)?;
-                    instance
+                    // handle var c = Class(0).init(10); use receiver as instance when calling init on existing instance
+                    let instance = if let Some(ref recv) = receiver {
+                        (**recv).clone()
+                    } else {
+                        let class = class.borrow();
+                        self.call_code(&arguments, &class, None)?
+                    };
+                    self.call_code(&arguments, &callee, Some(instance.clone()))?;
+                    Ok(instance)
                 } else {
-                    self.call_code(&arguments, &callee)
+                    self.call_code(
+                        &arguments,
+                        &callee,
+                        receiver.as_ref().map(|b| (**b).clone()),
+                    )
                 }
             }
         } else {
@@ -502,13 +514,13 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
             if let Some(method) = callee.get(INIT) {
                 // Create instance of the class: Class()
                 // Call constructor if available
-                let instance = self.call_code(&arguments, &callee);
+                let instance = self.call_code(&arguments, &callee, None)?;
                 let ctor = method.borrow();
-                self.call_code(&arguments, &ctor)?;
-                instance
+                self.call_code(&arguments, &ctor, Some(instance.clone()))?;
+                Ok(instance)
             } else {
                 // plain function call
-                self.call_code(&arguments, &callee)
+                self.call_code(&arguments, &callee, None)
             }
         }
     }
@@ -532,6 +544,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 "fn",
                 (*identifier).to_string(),
                 Some(class_name.clone()),
+                Some(Box::new(obj.clone())),
             ));
         }
         let field = closure.borrow().get(identifier)?;
@@ -625,6 +638,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                 "fn",
                 method.borrow().name().to_string(),
                 Some(class_to_call.clone()),
+                None,
             ))
         } else {
             Ok(instance)
@@ -668,7 +682,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         let superclass = if let Some(superclass) = superclass {
             let location = superclass.location.clone();
             let superclass = self.evaluate(superclass)?;
-            let LoxValue::Callable(kind, name, _) = superclass else {
+            let LoxValue::Callable(kind, name, _, _) = superclass else {
                 return Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
                         location,
@@ -701,7 +715,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         }
 
         let superclass_name = superclass.as_ref().map(|s| s.borrow().name().to_string());
-        let definition = LoxValue::Callable("class", (*id).to_string(), superclass_name);
+        let definition = LoxValue::Callable("class", (*id).to_string(), superclass_name, None);
         enclosing.borrow_mut().define((*id).to_string(), definition);
 
         let mut methods = vec![];
@@ -738,7 +752,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
         if let FunctionKind::Function = kind {
             self.environment.borrow_mut().define(
                 (*id).to_string(),
-                LoxValue::Callable("fn", (*id).to_string(), None),
+                LoxValue::Callable("fn", (*id).to_string(), None, None),
             );
         }
 
@@ -801,7 +815,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             }
             LoxValue::String(_)
             | LoxValue::Number(_)
-            | LoxValue::Callable(_, _, _)
+            | LoxValue::Callable(_, _, _, _)
             | LoxValue::Instance(_, _) => {
                 let then = match then {
                     Ok(s) => s,
@@ -951,22 +965,22 @@ mod tests {
     #[test_case("class A { init(x) { this.f1 = x; } test() { return this.f1; } } class B < A { init(x, y) { this.f1 = x; this.f2 = y; } sum() { return this.test() + this.f1 + this.f2; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with less init parameters then subclass")]
     #[test_case("class A { init(x, y) { this.f1 = x; this.f2 = y; } test() { return this.f1 + this.f2; } } class B < A { init(x) { this.f1 = x; } sum() { return this.test() + this.f1; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with greater init parameters then subclass")]
     #[test_case("class Foo{ init(arg) { print 1; } } fun init() { print 0; } init();", "0" ; "Plain function with init name")]
-    // TODO:     #[test_case(r#"class Base {
-    //   init(a) {
-    //     this.a = a;
-    //   }
-    // }
+    #[test_case(r#"class Base {
+      init(a) {
+        this.a = a;
+      }
+    }
 
-    // class Derived < Base {
-    //   init(a, b) {
-    //     super.init(a);
-    //     this.b = b;
-    //   }
-    // }
+    class Derived < Base {
+      init(a, b) {
+        super.init(a);
+        this.b = b;
+      }
+    }
 
-    // var derived = Derived("a", "b");
-    // print derived.a; // expect: a
-    // print derived.b; // expect: b"#, "a\nb" ; "this in superclass method")]
+    var derived = Derived("a", "b");
+    print derived.a; // expect: a
+    print derived.b; // expect: b"#, "a\nb" ; "this in superclass method")]
     fn interpretation_positive(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
