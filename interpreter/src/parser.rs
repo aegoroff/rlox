@@ -559,10 +559,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        loop {
-            let Some((_, loc)) = self.matches(&[Token::Or]) else {
-                break;
-            };
+        while let Some((_, loc)) = self.matches(&[Token::Or]) {
             let Some(and) = self.and_expression() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
@@ -593,11 +590,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        loop {
-            let Some((_, loc)) = self.matches(&[Token::And]) else {
-                break;
-            };
-
+        while let Some((_, loc)) = self.matches(&[Token::And]) {
             let Some(equality) = self.equality() else {
                 return Some(Err(LoxError::Error(miette!(
                     labels = vec![LabeledSpan::at(
@@ -628,10 +621,9 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        loop {
-            let Some((operator, loc)) = self.matches(&[Token::EqualEqual, Token::BangEqual]) else {
-                break;
-            };
+        while let Some((operator, loc)) =
+            self.matches(&[Token::EqualEqual, Token::BangEqual])
+        {
             // Awkward, but we cannot borrow self as mutable in a loop
             let operator = match operator {
                 Token::BangEqual => Token::BangEqual,
@@ -669,15 +661,12 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        loop {
-            let Some((operator, loc)) = self.matches(&[
-                Token::Greater,
-                Token::GreaterEqual,
-                Token::Less,
-                Token::LessEqual,
-            ]) else {
-                break;
-            };
+        while let Some((operator, loc)) = self.matches(&[
+            Token::Greater,
+            Token::GreaterEqual,
+            Token::Less,
+            Token::LessEqual,
+        ]) {
             // Awkward, but we cannot borrow self as mutable in a loop
             let operator = match operator {
                 Token::Greater => Token::Greater,
@@ -717,10 +706,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        loop {
-            let Some((operator, loc)) = self.matches(&[Token::Plus, Token::Minus]) else {
-                break;
-            };
+        while let Some((operator, loc)) = self.matches(&[Token::Plus, Token::Minus]) {
             // Awkward, but we cannot borrow self as mutable in a loop
             let operator = match operator {
                 Token::Plus => Token::Plus,
@@ -757,10 +743,7 @@ impl<'a> Parser<'a> {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
         };
-        loop {
-            let Some((operator, loc)) = self.matches(&[Token::Star, Token::Slash]) else {
-                break;
-            };
+        while let Some((operator, loc)) = self.matches(&[Token::Star, Token::Slash]) {
             // Awkward, but we cannot borrow self as mutable in a loop
             let operator = match operator {
                 Token::Star => Token::Star,
