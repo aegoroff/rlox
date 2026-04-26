@@ -981,6 +981,10 @@ mod tests {
     var derived = Derived("a", "b");
     print derived.a; // expect: a
     print derived.b; // expect: b"#, "a\nb" ; "this in superclass method")]
+    #[test_case(
+        "fun make() { var a = \"A\"; var b = \"B\"; fun read() { print a; print b; } return read; } var f = make(); f();",
+        "A\nB" ; "closure return captures two locals"
+    )]
     fn interpretation_positive(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
