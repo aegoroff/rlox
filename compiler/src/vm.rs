@@ -572,8 +572,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn close_upvalues(&mut self, location: usize) {
         while let Some(upval) = self.open_upvalues.last() {
             if upval.borrow().is_open_above_or_equal_index(location) {
-                if location < self.stack.len() {
-                    upval.replace(Upvalue::Closed(self.stack[location].clone())); // move value to the heap
+                let upvalue_index = match *upval.borrow() {
+                    Upvalue::Open(index) => index,
+                    Upvalue::Closed(_) => break,
+                };
+                if upvalue_index < self.stack.len() {
+                    upval.replace(Upvalue::Closed(self.stack[upvalue_index].clone())); // move value to the heap
                 }
                 self.open_upvalues.pop();
             } else {
@@ -820,6 +824,10 @@ mod tests {
     #[test_case("print min(1, 2);", "1" ; "use min call")]
     #[test_case("print max(1, 2);", "2" ; "use max call")]
     #[test_case("fun foo() { var i = 1; fun bar(x) { return i + x; } return bar; } print foo()(2);", "3" ; "closure")]
+    #[test_case(
+        "fun make() { var a = \"A\"; var b = \"B\"; fun read() { print a; print b; } return read; } var f = make(); f();",
+        "A\nB" ; "closure return captures two locals"
+    )]
     #[test_case("var f; { var local = \"local\"; fun f_() { print local; } f = f_; } f();", "local" ; "closure1")]
     #[test_case(r#"fun outer() {
   var a = 1;
