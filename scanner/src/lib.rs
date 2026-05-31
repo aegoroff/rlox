@@ -227,15 +227,12 @@ impl<'a> Lexer<'a> {
     fn identifier_or_keyword(&mut self, start: usize) -> (usize, Token<'a>, usize) {
         let mut finish = start;
         while let Some((i, next)) = self.chars.peek() {
-            finish = *i;
             match *next {
                 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' => {
+                    finish = *i; // update only on match
                     self.chars.next();
                 }
-                _ => {
-                    finish -= 1;
-                    break;
-                }
+                _ => break,
             }
         }
         let id = &self.whole[start..=finish];
