@@ -1037,6 +1037,12 @@ for (; false;) if (true) 1; else 2;
 for (; false;) while (true) 1;
 for (; false;) for (;;) 1;
 "#, "1\n2\n3\n0\n1\n2\ndone\n0\n1\n0\n1\n2\n0\n1" ; "syntax")]
+    #[test_case(r#"
+class A { m() { print this.x; } }
+var a = A(); a.x = 1;
+var b = A(); b.x = 2;
+a.m();
+"#, "1" ; "this test")]
     fn vm_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut stdout = Vec::new();
