@@ -163,8 +163,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     fn run(&mut self) -> Result<(), RuntimeError> {
         let mut ip = 0;
-        let code_size = self.chunk().code.len();
-        while ip < code_size {
+        while ip < self.chunk().code.len() {
             let code = self.chunk().read_opcode(ip)?;
             let line = self.chunk().line(ip);
             self.line = line;
@@ -652,22 +651,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
         func: &NativeFunction,
         args_count: usize,
     ) -> Result<(), RuntimeError> {
-        let mut args = Vec::new();
-        for _ in 0..args_count {
-            args.push(self.pop()?); // pop args
-        }
-        args.reverse();
-        let args = args;
-        self.pop()?; // native function value
-
         if func.arity != args_count {
             return Err(RuntimeError::InvalidFunctionArgsCount(
                 func.arity, args_count,
             ));
         }
+        let stack_len = self.stack.len();
+        let args_start = stack_len - args_count;
+        let result = (func.func)(&self.stack[args_start..])?;
 
-        let result = (func.func)(&args)?;
-
+        self.stack.truncate(args_start - 1);
         self.push(result);
         Ok(())
     }
