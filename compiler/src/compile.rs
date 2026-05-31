@@ -192,7 +192,7 @@ impl<'a> Parser<'a> {
             self.advance()?;
             self.variable(false)?;
 
-            if self.previous == class_name_token {
+            if *self.previous.borrow() == *class_name_token.borrow() {
                 return Err(miette::miette!(
                     labels = vec![LabeledSpan::at(
                         self.current_span(),
