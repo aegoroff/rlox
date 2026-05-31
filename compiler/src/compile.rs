@@ -706,7 +706,6 @@ impl<'a> Parser<'a> {
     }
 
     fn number(&mut self) -> crate::Result<()> {
-        self.current_span();
         let Token::Number(number) = *self.previous.borrow() else {
             return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
