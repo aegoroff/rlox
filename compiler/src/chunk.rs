@@ -263,7 +263,8 @@ impl Chunk {
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
             OpCode::Closure => self.disassembly_closure_instruction(offset),
-            OpCode::Invoke | OpCode::SuperInvoke => self.disassembly_invoke_instruction(offset),
+            OpCode::Invoke => self.disassembly_invoke_instruction(offset, &code),
+            OpCode::SuperInvoke => self.disassembly_invoke_instruction(offset, &code),
         }
     }
 
@@ -278,13 +279,13 @@ impl Chunk {
         offset + 2
     }
 
-    fn disassembly_invoke_instruction(&self, offset: usize) -> usize {
+    fn disassembly_invoke_instruction(&self, offset: usize, code: &OpCode) -> usize {
         let constant = self.code[offset + 1];
         let arg_count = self.code[offset + 2];
         let val = &self.constants[constant as usize];
         println!(
             "{:<16}    ({arg_count} args) {constant:4} '{val}'",
-            OpCode::Invoke.to_string()
+            code.to_string()
         );
         offset + 3
     }
