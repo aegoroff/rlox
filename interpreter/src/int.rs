@@ -979,6 +979,12 @@ mod tests {
         "fun make() { var a = \"A\"; var b = \"B\"; fun read() { print a; print b; } return read; } var f = make(); f();",
         "A\nB" ; "closure return captures two locals"
     )]
+    #[test_case(r#"
+class A { m() { print this.x; } }
+var a = A(); a.x = 1;
+var b = A(); b.x = 2;
+a.m();
+"#, "1" ; "this test")]
     fn interpretation_positive(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
