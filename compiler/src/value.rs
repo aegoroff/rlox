@@ -26,27 +26,16 @@ const ERROR_MARGIN: f64 = 0.00001;
 impl LoxValue {
     #[must_use]
     pub fn equal(&self, other: &LoxValue) -> bool {
-        if let Ok(l) = self.try_num() {
-            let Ok(r) = other.try_num() else {
-                return false;
-            };
-            (l - r).abs() < ERROR_MARGIN
-        } else if let Ok(l) = self.try_bool() {
-            let Ok(r) = other.try_bool() else {
-                return false;
-            };
-            l == r
-        } else if let Ok(l) = self.try_str() {
-            let Ok(r) = other.try_str() else {
-                return false;
-            };
-            l == r
-        } else if let LoxValue::Nil = self {
-            matches!(other, LoxValue::Nil)
-        } else if let LoxValue::Nil = other {
-            matches!(self, LoxValue::Nil)
-        } else {
-            false
+        match (self, other) {
+            (LoxValue::Number(l), LoxValue::Number(r)) => (l - r).abs() < ERROR_MARGIN,
+            (LoxValue::String(l), LoxValue::String(r)) => l == r,
+            // nil and false considered same (both falsey bool-like values)
+            (LoxValue::Bool(_) | LoxValue::Nil, LoxValue::Bool(_) | LoxValue::Nil) => {
+                let l = self.try_bool().unwrap_or(false);
+                let r = other.try_bool().unwrap_or(false);
+                l == r
+            }
+            _ => false,
         }
     }
 
