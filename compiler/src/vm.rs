@@ -660,6 +660,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let args = args;
         self.pop()?; // native function value
 
+        if func.arity != args_count {
+            return Err(RuntimeError::InvalidFunctionArgsCount(
+                func.arity, args_count,
+            ));
+        }
+
         let result = (func.func)(&args)?;
 
         self.push(result);
