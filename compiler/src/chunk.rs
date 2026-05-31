@@ -263,8 +263,9 @@ impl Chunk {
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
             OpCode::Closure => self.disassembly_closure_instruction(offset),
-            OpCode::Invoke => self.disassembly_invoke_instruction(offset, &code),
-            OpCode::SuperInvoke => self.disassembly_invoke_instruction(offset, &code),
+            OpCode::Invoke | OpCode::SuperInvoke => {
+                self.disassembly_invoke_instruction(offset, &code)
+            }
         }
     }
 
