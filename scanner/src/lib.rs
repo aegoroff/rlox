@@ -62,7 +62,16 @@ pub enum Token<'a> {
 
 impl std::hash::Hash for Token<'_> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // 1. Token type
         core::mem::discriminant(self).hash(state);
+
+        // 2. Token content if any
+        match self {
+            Token::String(s) | Token::Identifier(s) => s.hash(state),
+            Token::Number(n) => n.to_bits().hash(state),
+            // Others has no content
+            _ => {}
+        }
     }
 }
 
