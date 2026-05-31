@@ -134,8 +134,13 @@ impl<'a> LoxCallable<'a> for Min {
     }
 
     fn call(&self, args: &[LoxValue]) -> crate::Result<CallResult<'a>> {
-        if let LoxValue::Number(num) = args[0] {
-            Ok(CallResult::Value(LoxValue::Number(num.sqrt())))
+        if let LoxValue::Number(a) = args[0] {
+            if let LoxValue::Number(b) = args[1] {
+                Ok(CallResult::Value(LoxValue::Number(a.min(b))))
+            } else {
+                let report = miette!("Expected number but was '{:?}'", args[1]);
+                Err(LoxError::Error(report))
+            }
         } else {
             let report = miette!("Expected number but was '{:?}'", args[0]);
             Err(LoxError::Error(report))
