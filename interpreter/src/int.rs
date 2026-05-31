@@ -186,7 +186,9 @@ impl<'a, W: std::io::Write> Interpreter<'a, W> {
             CallResult::Value(lox_value) => Ok(lox_value),
             CallResult::Code(stmt, closure) => {
                 if let Some(ref this_val) = this_binding {
-                    closure.borrow_mut().define(THIS.to_string(), this_val.clone());
+                    closure
+                        .borrow_mut()
+                        .define(THIS.to_string(), this_val.clone());
                 }
                 let result = {
                     let prev = self.begin_scope(closure);
@@ -447,11 +449,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                             "Invalid parameters"
                         )));
                     };
-                    self.call_code(
-                        &arguments[..args_len],
-                        &initializer,
-                        Some(instance.clone()),
-                    )?;
+                    self.call_code(&arguments[..args_len], &initializer, Some(instance.clone()))?;
                 }
 
                 if let Some(method) = callee.get(INIT) {
@@ -470,11 +468,7 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<LoxValue>> for Interpr
                         )));
                     };
 
-                    self.call_code(
-                        &arguments[..args_len],
-                        &initializer,
-                        Some(instance.clone()),
-                    )?;
+                    self.call_code(&arguments[..args_len], &initializer, Some(instance.clone()))?;
                 }
                 Ok(instance)
             } else {
@@ -920,8 +914,8 @@ mod tests {
     #[test_case("var i = 0; for(; i < 3; i = i + 1) print i;", "0\n1\n2" ; "for test without initializer")]
     #[test_case("print clock() - clock();", "0" ; "simple clock call")]
     #[test_case("print sqrt(9);", "3" ; "use sqrt call")]
-    #[test_case("print min(1, 2);", "1" ; "use min call")]
-    #[test_case("print max(1, 2);", "2" ; "use max call")]
+    #[test_case("print min(10, 20);", "10" ; "use min call")]
+    #[test_case("print max(10, 20);", "20" ; "use max call")]
     #[test_case("if (clock() > 0) print \"good\"; else print \"impossible\";", "good" ; "call in predicate")]
     #[test_case("fun x(v) { } print x(10);", "" ; "empty function body")]
     #[test_case("fun x(v) { print v; } print x(10);", "10" ; "simple call one arg")]
