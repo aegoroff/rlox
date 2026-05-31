@@ -335,14 +335,12 @@ impl<'a, W: std::io::Write> ExprVisitor<'a, crate::Result<()>> for Resolver<'a, 
 
     fn visit_logical_expr(
         &mut self,
-        operator: &Token<'a>,
+        _operator: &Token<'a>,
         left: &Expr<'a>,
         right: &Expr<'a>,
     ) -> crate::Result<()> {
-        let _ = right;
-        let _ = left;
-        let _ = operator;
-        Ok(())
+        self.resolve_expression(left)?;
+        self.resolve_expression(right)
     }
 
     fn visit_set_expr(
