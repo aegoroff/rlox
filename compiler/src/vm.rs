@@ -662,12 +662,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance = receiver.try_instance()?;
         let instance = instance.clone(); // to avoid borrowing mut while borrowing
         let instance = instance.borrow();
-        let callable = if let Some(method) = instance.class.borrow().methods.get(method_name) {
-            method.clone()
-        } else if let Some(field) = instance.fields.get(method_name) {
+        let callable = if let Some(field) = instance.fields.get(method_name) {
             let stack_size = self.stack.len();
             self.stack[stack_size - argc as usize - 1] = field.clone();
             field.clone()
+        } else if let Some(method) = instance.class.borrow().methods.get(method_name) {
+            method.clone()
         } else {
             return Err(RuntimeError::UndefinedMethodOrProperty(method_name.clone()));
         };
@@ -1006,6 +1006,7 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0); c.init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly")]
     #[test_case("class Class { init(x) { this.some = x; } method() { print this.some; } } var c = Class(0).init(10); c.method();", "10" ; "class constructor with arg and invoking ctor directly from instance")]
     #[test_case("class Oops { init() { fun f() { print 10; } this.field = f; } } var oops = Oops(); oops.field();", "10" ; "call on field")]
+    #[test_case("class Foo { method(a) { print \"method\"; print a; } other(a) { print \"other\"; print a; } } var foo = Foo(); var method = foo.method; foo.method = foo.other; foo.method(1); method(2);", "other\n1\nmethod\n2" ; "field shadows bound method on invoke")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } B().af();", "10" ; "Call inherited method")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { print 5; } } B().bf();", "5" ; "Call own method with inherited present")]
     #[test_case("class A { af() { print 10; }} class B < A { bf() { this.af(); } } B().bf();", "10" ; "Call inherited method inside other")]
