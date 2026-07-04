@@ -315,7 +315,7 @@ impl<'a> Parser<'a> {
         let function = self.end_compiler();
         self.emit_opcode(OpCode::Closure);
 
-        let constant = self.make_constant(LoxValue::Function(function));
+        let constant = self.make_constant(LoxValue::Function(Rc::new(function)));
         self.emit_operand(constant);
         for (is_local, index) in uvals {
             self.emit_operand(is_local);
@@ -1104,7 +1104,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .patch_jump(exit_jump);
     }
 
@@ -1113,7 +1112,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_constant(value, self.tokens.line);
     }
 
@@ -1122,7 +1120,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .add_constant(value)
     }
 
@@ -1147,13 +1144,12 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_two_bytes(offset, self.tokens.line);
         Ok(())
     }
 
     fn chunk_code_size(&self) -> usize {
-        self.compiler.borrow().function.chunk.borrow().code.len()
+        self.compiler.borrow().function.chunk.code.len()
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) {
@@ -1161,7 +1157,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_code(opcode, self.tokens.line);
     }
 
@@ -1170,7 +1165,6 @@ impl<'a> Parser<'a> {
             .borrow_mut()
             .function
             .chunk
-            .borrow_mut()
             .write_operand(value, self.tokens.line);
     }
 
