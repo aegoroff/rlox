@@ -11,9 +11,9 @@ pub enum LoxValue {
     String(String),
     Number(f64),
     Bool(bool),
-    Function(Function),
+    Function(Rc<Function>),
     Native(NativeFunction),
-    Closure(Closure),
+    Closure(Rc<Closure>),
     Class(Rc<RefCell<Class>>),
     Instance(Rc<RefCell<Instance>>),
     Bound(Rc<RefCell<Instance>>, Box<LoxValue>),
@@ -130,7 +130,7 @@ impl Display for LoxValue {
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Function {
     pub arity: usize,
-    pub chunk: Rc<RefCell<Chunk>>,
+    pub chunk: Chunk,
     pub name: String,
     pub upvalue_count: usize,
 }
@@ -146,19 +146,19 @@ impl Function {
     pub fn new(name: &str) -> Self {
         Self {
             arity: 0,
-            chunk: Rc::new(RefCell::new(Chunk::new())),
+            chunk: Chunk::new(),
             name: name.to_owned(),
             upvalue_count: 0,
         }
     }
 
     pub fn disassembly(&self) {
-        self.chunk.borrow().disassembly(self.name.as_str());
+        self.chunk.disassembly(self.name.as_str());
     }
 
     #[must_use]
     pub fn start(&self) -> usize {
-        self.chunk.borrow().first_line()
+        self.chunk.first_line()
     }
 }
 
@@ -185,9 +185,9 @@ impl Display for NativeFunction {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct Closure {
-    pub function: Function,
+    pub function: Rc<Function>,
     pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
 }
 
@@ -199,7 +199,7 @@ impl Display for Closure {
 
 impl Closure {
     #[must_use]
-    pub fn new(function: Function) -> Self {
+    pub fn new(function: Rc<Function>) -> Self {
         let upvalues_count = function.upvalue_count;
         Self {
             function,
