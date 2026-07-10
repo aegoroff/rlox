@@ -16,7 +16,7 @@ jobs:
   cross_build:
     runs-on: docker
     container:
-      image: registry.egoroff.spb.ru/rustcross:1.96
+      image: registry.egoroff.spb.ru/rustcross:1.97
     strategy:
       matrix:
         include:
