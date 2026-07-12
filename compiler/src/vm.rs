@@ -309,8 +309,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let ret_slot = self.stack_top - 1;
                     let value = self.stack[ret_slot];
                     self.stack_top = ret_slot;
-                    let returns_slot0 =
-                        slots > 0 && value == self.stack[slots.saturating_sub(1)];
+                    let returns_slot0 = slots > 0 && value == self.stack[slots.saturating_sub(1)];
 
                     if slots > 0 {
                         self.close_upvalue_at(slots - 1)?;
