@@ -621,9 +621,7 @@ impl<'a> Parser<'a> {
             Err(e) => return Some(Err(e)),
         };
 
-        while let Some((operator, loc)) =
-            self.matches(&[Token::EqualEqual, Token::BangEqual])
-        {
+        while let Some((operator, loc)) = self.matches(&[Token::EqualEqual, Token::BangEqual]) {
             // Awkward, but we cannot borrow self as mutable in a loop
             let operator = match operator {
                 Token::BangEqual => Token::BangEqual,
