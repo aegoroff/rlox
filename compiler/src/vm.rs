@@ -306,14 +306,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(constants[ix]);
                 }
                 OpCode::Return => {
-                    let function_id = self.objects.closure(closure_id)?.function;
-                    let is_init = self.objects.function(function_id)?.name == self.init_string;
-                    let value = if is_init {
-                        self.stack[slots.saturating_sub(1)]
-                    } else {
-                        self.stack_top -= 1;
-                        self.stack[self.stack_top]
-                    };
+                    self.stack_top -= 1;
+                    let value = self.stack[self.stack_top];
 
                     if slots > 0 {
                         self.close_upvalue_at(slots - 1)?;
@@ -322,25 +316,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
                     self.frame_count -= 1;
 
-                    let release_from = if is_init {
-                        slots
-                    } else {
-                        slots.saturating_sub(1)
-                    };
+                    let release_from = slots.saturating_sub(1);
                     self.release_stack_range(release_from, self.stack_top);
                     if self.frame_count == 0 {
-                        if !is_init {
-                            self.stack_top = slots.saturating_sub(1);
-                            self.push(value);
-                        }
-                        return Ok(());
-                    }
-                    if is_init {
-                        self.stack_top = if slots > 0 { slots } else { 1 };
-                    } else {
                         self.stack_top = slots.saturating_sub(1);
                         self.push(value);
+                        return Ok(());
                     }
+                    self.stack_top = slots.saturating_sub(1);
+                    self.push(value);
                     continue;
                 }
                 OpCode::Negate => {
@@ -1103,6 +1087,7 @@ outer();"#, "10" ; "closure2")]
     #[test_case("class A { init(param) { this.field = param; } test() { print this.field; } } class B < A {} var b = B(10); b.test();", "10" ; "Call superclass with parameter init subclass without parameter init")]
     #[test_case("class A { init(x) { this.f1 = x; } test() { return this.f1; } } class B < A { init(x, y) { this.f1 = x; this.f2 = y; } sum() { return this.test() + this.f1 + this.f2; } } var b = B(10, 20); print b.sum();", "40" ; "Call superclass with less init parameters then subclass")]
     #[test_case("class Foo{ init(arg) { print 1; } } fun init() { print 0; } init();", "0" ; "Plain function with init name")]
+    #[test_case("fun init() { return \"bar\"; } print init();", "bar" ; "init return value")]
     #[test_case("class Foo { foo(arg) { this.arg1 = arg; } fooPrint() { print this.arg1; } } class Bar < Foo { bar(arg) { this.arg1 = arg; } barPrint() { print this.arg1; } } var b = Bar(); b.bar(1); b.fooPrint(); b.barPrint();", "1\n1" ; "Sets fields from base class")]
     #[test_case(r#"
 var f1;

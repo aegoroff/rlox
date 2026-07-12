@@ -70,7 +70,7 @@ pub struct Compiler<'a> {
     locals: Vec<Local<'a>>,
     scope_depth: usize,
     pub function: Function,
-    pub function_type: FunctionType,
+    function_type: FunctionType,
     upvalues: Vec<Upvalue>,
 }
 
@@ -86,7 +86,7 @@ struct Upvalue {
 }
 
 #[derive(Default, Clone)]
-pub enum FunctionType {
+enum FunctionType {
     Function,
     #[default]
     Script,
@@ -96,7 +96,7 @@ pub enum FunctionType {
 
 impl<'a> Compiler<'a> {
     #[must_use]
-    pub fn new(
+    fn new(
         function_type: FunctionType,
         enclosing: Option<Rc<RefCell<Compiler<'a>>>>,
         name: &'a str,
@@ -1178,11 +1178,15 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_return(&mut self) {
-        let function_type = self.compiler.borrow().function_type.clone();
-        if !matches!(function_type, FunctionType::TypeInitializer) {
+        if matches!(
+            self.compiler.borrow().function_type,
+            FunctionType::TypeInitializer
+        ) {
+            self.emit_opcode(OpCode::GetLocal);
+            self.emit_operand(0);
+        } else {
             self.emit_opcode(OpCode::Nil);
         }
-
         self.emit_opcode(OpCode::Return);
     }
 
