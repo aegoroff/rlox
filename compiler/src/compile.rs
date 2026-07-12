@@ -12,9 +12,15 @@ use num_traits::FromPrimitive;
 use scanner::{Lexer, Token};
 
 use crate::{
+    RuntimeError,
     chunk::{MAX_SHORT_VALUE, OpCode},
+    object::ObjectStore,
     value::{Function, LoxValue},
 };
+
+fn heap_value<T>(result: Result<T, RuntimeError>) -> crate::Result<T> {
+    result.map_err(|err| miette::miette!("{err}"))
+}
 
 pub struct Parser<'a> {
     tokens: Lexer<'a>,
@@ -23,6 +29,7 @@ pub struct Parser<'a> {
     current: Rc<RefCell<Token<'a>>>,
     previous: Rc<RefCell<Token<'a>>>,
     printcode: bool,
+    objects: &'a mut ObjectStore,
 }
 
 #[repr(u8)]
@@ -112,7 +119,7 @@ impl<'a> Compiler<'a> {
 
 impl<'a> Parser<'a> {
     #[must_use]
-    pub fn new(content: &'a str, printcode: bool) -> Self {
+    pub fn new(content: &'a str, printcode: bool, objects: &'a mut ObjectStore) -> Self {
         Self {
             tokens: Lexer::new(content),
             current: Rc::new(RefCell::new(Token::Eof)),
@@ -124,6 +131,7 @@ impl<'a> Parser<'a> {
             ))),
             class_compiler: None,
             printcode,
+            objects,
         }
     }
 
@@ -167,7 +175,7 @@ impl<'a> Parser<'a> {
         };
         self.advance()?;
 
-        let constant = self.identifier_constant(class_name);
+        let constant = self.identifier_constant(class_name)?;
         self.declare_variable(class_name)?;
 
         self.emit_opcode(OpCode::Class);
@@ -245,7 +253,7 @@ impl<'a> Parser<'a> {
         };
         self.advance()?;
 
-        let constant = self.identifier_constant(id);
+        let constant = self.identifier_constant(id)?;
         let function_type = if id == scanner::INIT {
             FunctionType::TypeInitializer
         } else {
@@ -315,7 +323,8 @@ impl<'a> Parser<'a> {
         let function = self.end_compiler();
         self.emit_opcode(OpCode::Closure);
 
-        let constant = self.make_constant(LoxValue::Function(Rc::new(function)));
+        let func_val = heap_value(self.objects.alloc_function(function))?;
+        let constant = self.make_constant(func_val);
         self.emit_operand(constant);
         for (is_local, index) in uvals {
             self.emit_operand(is_local);
@@ -351,7 +360,7 @@ impl<'a> Parser<'a> {
             return Ok(0);
         }
 
-        let constant = self.identifier_constant(id);
+        let constant = self.identifier_constant(id)?;
         Ok(constant)
     }
 
@@ -398,8 +407,9 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn identifier_constant(&mut self, id: &str) -> usize {
-        self.make_constant(LoxValue::String(id.to_string()))
+    fn identifier_constant(&mut self, id: &str) -> crate::Result<usize> {
+        let name = heap_value(self.objects.intern_string(id.to_string()))?;
+        Ok(self.make_constant(name))
     }
 
     fn define_variable(&mut self, global: usize) {
@@ -646,7 +656,7 @@ impl<'a> Parser<'a> {
         };
         self.advance()?;
 
-        let name_ix = self.identifier_constant(id);
+        let name_ix = self.identifier_constant(id)?;
         if can_assign && self.matches(&Token::Equal)? {
             self.expression()?;
             self.emit_opcode(OpCode::SetProperty);
@@ -718,7 +728,7 @@ impl<'a> Parser<'a> {
                 "Number error"
             ));
         };
-        self.emit_constant(LoxValue::Number(number));
+        self.emit_constant(LoxValue::number(number));
         Ok(())
     }
 
@@ -739,8 +749,7 @@ impl<'a> Parser<'a> {
                 "String error"
             ));
         };
-        let s = str.to_owned();
-        let value = LoxValue::String(s);
+        let value = heap_value(self.objects.intern_string(str.to_owned()))?;
         self.emit_constant(value);
         Ok(())
     }
@@ -798,7 +807,7 @@ impl<'a> Parser<'a> {
             ));
         };
         self.advance()?;
-        let name = self.identifier_constant(id);
+        let name = self.identifier_constant(id)?;
         self.named_variable(Rc::new(RefCell::new(Token::This)), false)?;
 
         if self.matches(&Token::LeftParen)? {
@@ -878,7 +887,7 @@ impl<'a> Parser<'a> {
             get_code = OpCode::GetUpvalue;
             i
         } else {
-            self.identifier_constant(id)
+            self.identifier_constant(id)?
         };
 
         if can_assign && self.matches(&Token::Equal)? {
@@ -1170,10 +1179,7 @@ impl<'a> Parser<'a> {
 
     fn emit_return(&mut self) {
         let function_type = self.compiler.borrow().function_type.clone();
-        if let FunctionType::TypeInitializer = function_type {
-            self.emit_opcode(OpCode::GetLocal);
-            self.emit_operand(0);
-        } else {
+        if !matches!(function_type, FunctionType::TypeInitializer) {
             self.emit_opcode(OpCode::Nil);
         }
 
@@ -1184,7 +1190,7 @@ impl<'a> Parser<'a> {
         self.emit_return();
         let function = self.compiler.borrow().function.clone();
         if self.printcode {
-            function.disassembly();
+            function.disassembly(self.objects);
         }
         let Some(enclosing) = self.compiler.borrow().enclosing.clone() else {
             return function;

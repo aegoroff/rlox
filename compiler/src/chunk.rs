@@ -1,11 +1,12 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_possible_truncation)]
 use std::fmt::Display;
+use std::rc::Rc;
 
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-use crate::{RuntimeError, value::LoxValue};
+use crate::{RuntimeError, object::ObjectStore, value::LoxValue};
 
 #[repr(u8)]
 #[derive(FromPrimitive)]
@@ -103,19 +104,27 @@ impl Display for OpCode {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Chunk {
-    pub code: Vec<u8>,
-    pub constants: Vec<LoxValue>,
-    lines: Vec<usize>,
+    pub code: Rc<Vec<u8>>,
+    pub constants: Rc<Vec<LoxValue>>,
+    lines: Rc<Vec<usize>>,
+}
+
+impl PartialEq for Chunk {
+    fn eq(&self, other: &Self) -> bool {
+        self.code.as_ref() == other.code.as_ref()
+            && self.constants.as_ref() == other.constants.as_ref()
+            && self.lines.as_ref() == other.lines.as_ref()
+    }
 }
 
 impl Chunk {
     pub fn new() -> Self {
         Self {
-            code: vec![],
-            constants: vec![],
-            lines: vec![],
+            code: Rc::new(vec![]),
+            constants: Rc::new(vec![]),
+            lines: Rc::new(vec![]),
         }
     }
 
@@ -140,12 +149,12 @@ impl Chunk {
     pub fn write_operand(&mut self, value: usize, line: usize) {
         if value > MAX_SHORT_VALUE {
             for b in into_three_bytes(value) {
-                self.code.push(b);
-                self.lines.push(line);
+                Rc::make_mut(&mut self.code).push(b);
+                Rc::make_mut(&mut self.lines).push(line);
             }
         } else {
-            self.code.push(value as u8);
-            self.lines.push(line);
+            Rc::make_mut(&mut self.code).push(value as u8);
+            Rc::make_mut(&mut self.lines).push(line);
         }
     }
 
@@ -157,7 +166,7 @@ impl Chunk {
     #[inline]
     pub fn read_constant(&self, offset: usize, constant_size: usize) -> LoxValue {
         let ix = self.get_constant_ix(offset, constant_size);
-        self.constants[ix].clone()
+        self.constants[ix]
     }
 
     #[inline]
@@ -189,29 +198,32 @@ impl Chunk {
 
     pub fn patch_jump(&mut self, offset: usize) {
         // -2 to adjust for the bytecode for the jump offset itself.
-        let jump = self.code.len() - 2 - offset;
+        let code = Rc::make_mut(&mut self.code);
+        let jump = code.len() - 2 - offset;
         let bytes = into_two_bytes(jump);
-        self.code[offset] = bytes[0];
-        self.code[offset + 1] = bytes[1];
+        code[offset] = bytes[0];
+        code[offset + 1] = bytes[1];
     }
 
     pub fn write_two_bytes(&mut self, value: usize, line: usize) {
         let bytes = into_two_bytes(value);
-        self.code.push(bytes[0]);
-        self.lines.push(line);
-        self.code.push(bytes[1]);
-        self.lines.push(line);
+        let code = Rc::make_mut(&mut self.code);
+        let lines = Rc::make_mut(&mut self.lines);
+        code.push(bytes[0]);
+        lines.push(line);
+        code.push(bytes[1]);
+        lines.push(line);
     }
 
-    pub fn disassembly(&self, name: &str) {
+    pub fn disassembly(&self, name: &str, store: &ObjectStore) {
         println!("=== {name} ===");
         let mut offset = 0;
         while offset < self.code.len() {
-            offset = self.disassembly_instruction(offset);
+            offset = self.disassembly_instruction(offset, store);
         }
     }
 
-    pub fn disassembly_instruction(&self, offset: usize) -> usize {
+    pub fn disassembly_instruction(&self, offset: usize, store: &ObjectStore) -> usize {
         let Some(code) = OpCode::from_u8(self.code[offset]) else {
             return offset + 1;
         };
@@ -262,7 +274,7 @@ impl Chunk {
                 self.disassembly_jump_instruction(offset, &code, 1)
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
-            OpCode::Closure => self.disassembly_closure_instruction(offset),
+            OpCode::Closure => self.disassembly_closure_instruction(offset, store),
             OpCode::Invoke | OpCode::SuperInvoke => {
                 self.disassembly_invoke_instruction(offset, &code)
             }
@@ -272,6 +284,17 @@ impl Chunk {
     #[inline]
     pub fn line(&self, offset: usize) -> usize {
         self.lines[offset]
+    }
+
+    pub fn add_constant(&mut self, value: LoxValue) -> usize {
+        let constants = Rc::make_mut(&mut self.constants);
+        if let Some((constant_index, _)) = constants.iter().enumerate().find(|(_, c)| *c == &value)
+        {
+            constant_index
+        } else {
+            constants.push(value);
+            constants.len() - 1
+        }
     }
 
     fn disassembly_byte_instruction(&self, offset: usize, code: &OpCode) -> usize {
@@ -291,19 +314,30 @@ impl Chunk {
         offset + 3
     }
 
-    fn disassembly_closure_instruction(&self, offset: usize) -> usize {
+    fn disassembly_closure_instruction(&self, offset: usize, store: &ObjectStore) -> usize {
         let function_ix = self.code[offset + 1];
 
         let mut offset = offset + 2;
-        let val = &self.constants[function_ix as usize];
-        if let LoxValue::Function(func) = val {
-            println!("{:<16} {function_ix:4} {func}", OpCode::Closure.to_string());
-            for _ in 0..func.upvalue_count {
-                let is_local = self.code[offset];
-                let is_local = if is_local == 1 { "local" } else { "upvalue" };
-                let index = self.code[offset + 1];
-                println!("{offset:04}    |                     {is_local} {index}");
-                offset += 2;
+        let val = self.constants[function_ix as usize];
+        if let Ok(function_id) = val.try_function(store) {
+            if let (Ok(function), Ok(name)) = (
+                store.function(function_id),
+                store
+                    .function(function_id)
+                    .and_then(|function| store.string(function.name)),
+            ) {
+                let name = name.chars.as_str();
+                println!("{:<16} {function_ix:4} {name}", OpCode::Closure.to_string());
+                let upvalue_count = function.upvalue_count;
+                for _ in 0..upvalue_count {
+                    let is_local = self.code[offset];
+                    let is_local = if is_local == 1 { "local" } else { "upvalue" };
+                    let index = self.code[offset + 1];
+                    println!("{offset:04}    |                     {is_local} {index}");
+                    offset += 2;
+                }
+            } else {
+                println!("{:<16} {function_ix:4}", OpCode::Closure.to_string());
             }
         } else {
             println!("{:<16} {function_ix:4}", OpCode::Closure.to_string());
@@ -332,20 +366,6 @@ impl Chunk {
     fn disassembly_simple_instruction(&self, offset: usize, code: &OpCode) -> usize {
         println!("{code}");
         offset + 1
-    }
-
-    pub fn add_constant(&mut self, value: LoxValue) -> usize {
-        if let Some((constant_index, _)) = self
-            .constants
-            .iter()
-            .enumerate()
-            .find(|(_, c)| *c == &value)
-        {
-            constant_index
-        } else {
-            self.constants.push(value);
-            self.constants.len() - 1
-        }
     }
 
     #[inline]

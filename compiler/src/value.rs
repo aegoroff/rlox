@@ -1,139 +1,225 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::fmt::{self, Display};
 
-use fnv::FnvHashMap;
+use num_traits::FromPrimitive;
 
-use crate::{RuntimeError, chunk::Chunk};
+use crate::{
+    RuntimeError,
+    chunk::Chunk,
+    object::{
+        ObjId, ObjType, ObjectStore, string_chars, try_bound_method_id, try_class_id,
+        try_closure_id, try_function_id, try_instance_id, try_native_id, try_string_id,
+    },
+};
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum LoxValue {
-    String(String),
-    Number(f64),
-    Bool(bool),
-    Function(Rc<Function>),
-    Native(NativeFunction),
-    Closure(Rc<Closure>),
-    Class(Rc<RefCell<Class>>),
-    Instance(Rc<RefCell<Instance>>),
-    Bound(Rc<RefCell<Instance>>, Box<LoxValue>),
-    Nil,
-    NaN,
-}
+const SIGN_BIT: u64 = 0x8000_0000_0000_0000;
+const QNAN: u64 = 0x7ffc_0000_0000_0000;
+const TAG_NIL: u64 = 1;
+const TAG_FALSE: u64 = 2;
+const TAG_TRUE: u64 = 3;
+const OBJ_TYPE_SHIFT: u64 = 32;
+const OBJ_ID_MASK: u64 = (1u64 << OBJ_TYPE_SHIFT) - 1;
 
-const ERROR_MARGIN: f64 = 0.00001;
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[repr(transparent)]
+pub struct LoxValue(u64);
 
 impl LoxValue {
+    pub const NIL: Self = Self(QNAN | TAG_NIL);
+    pub const FALSE: Self = Self(QNAN | TAG_FALSE);
+    pub const TRUE: Self = Self(QNAN | TAG_TRUE);
+
     #[inline]
     #[must_use]
-    pub fn equal(&self, other: &LoxValue) -> bool {
-        use LoxValue::{
-            Bool, Bound, Class, Closure, Function, Instance, NaN, Native, Nil, Number, String,
-        };
-        use core::mem::discriminant;
-
-        match (self, other) {
-            (Bool(b), Nil) | (Nil, Bool(b)) => !b,
-            _ if discriminant(self) != discriminant(other) => false,
-            (Number(l), Number(r)) => (l - r).abs() < ERROR_MARGIN,
-            (String(l), String(r)) => l == r,
-            (Bool(l), Bool(r)) => l == r,
-            (Nil, Nil) => true,
-            (Function(l), Function(r)) => Rc::ptr_eq(l, r),
-            (Closure(l), Closure(r)) => Rc::ptr_eq(l, r),
-            (Class(l), Class(r)) => Rc::ptr_eq(l, r),
-            (Instance(l), Instance(r)) => Rc::ptr_eq(l, r),
-            (Native(l), Native(r)) => l == r,
-            (Bound(l, m), Bound(r, n)) => Rc::ptr_eq(l, r) && *m == *n,
-            (NaN, NaN) => true,
-            _ => false,
-        }
+    pub fn number(value: f64) -> Self {
+        Self(value.to_bits())
     }
 
-    pub fn less(&self, other: &LoxValue) -> Result<bool, RuntimeError> {
-        if let Ok(l) = self.try_num() {
-            let r = other.try_num()?;
-            Ok(l < r)
-        } else if let Ok(l) = self.try_bool() {
-            let r = other.try_bool()?;
-            Ok(!l & r)
-        } else if let Ok(l) = self.try_str() {
-            let r = other.try_str()?;
-            Ok(l < r)
+    #[inline]
+    #[must_use]
+    pub fn from_obj(id: ObjId, ty: ObjType) -> Self {
+        Self(SIGN_BIT | QNAN | (u64::from(ty as u8) << OBJ_TYPE_SHIFT) | u64::from(id))
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn obj_id(self) -> Option<ObjId> {
+        if self.is_obj() {
+            Some(self.obj_id_unchecked())
         } else {
-            Err(RuntimeError::OperandsMustBeNumbers(
-                Box::new(self.clone()),
-                Box::new(other.clone()),
-            ))
+            None
         }
     }
 
-    pub fn try_num(&self) -> Result<f64, RuntimeError> {
-        if let LoxValue::Number(n) = self {
-            Ok(*n)
+    #[inline]
+    #[must_use]
+    pub fn obj_id_unchecked(self) -> ObjId {
+        debug_assert!(self.is_obj());
+        (self.0 & OBJ_ID_MASK) as ObjId
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn obj_type(self) -> Option<ObjType> {
+        if !self.is_obj() {
+            return None;
+        }
+        ObjType::from_u8(((self.0 >> OBJ_TYPE_SHIFT) & 0xFF) as u8)
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_number(self) -> bool {
+        (self.0 & QNAN) != QNAN
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_nil(self) -> bool {
+        self.0 == Self::NIL.0
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_bool(self) -> bool {
+        (self.0 | 1) == Self::TRUE.0
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_obj(self) -> bool {
+        (self.0 & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT)
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_refcounted(self) -> bool {
+        self.is_obj()
+            && matches!(
+                self.obj_type(),
+                Some(ObjType::Instance | ObjType::BoundMethod)
+            )
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn as_number(self) -> f64 {
+        f64::from_bits(self.0)
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn as_bool(self) -> bool {
+        self.0 == Self::TRUE.0
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn bool_val(value: bool) -> Self {
+        if value { Self::TRUE } else { Self::FALSE }
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn equal(self, other: Self) -> bool {
+        if self.is_number() && other.is_number() {
+            return self.as_number() == other.as_number();
+        }
+        if (self.is_bool() || self.is_nil()) && (other.is_bool() || other.is_nil()) {
+            let left = self.is_bool() && self.as_bool();
+            let right = other.is_bool() && other.as_bool();
+            return left == right;
+        }
+        self.0 == other.0
+    }
+
+    pub fn less(self, other: Self, store: &ObjectStore) -> Result<bool, RuntimeError> {
+        if self.is_number() && other.is_number() {
+            return Ok(self.as_number() < other.as_number());
+        }
+        if (self.is_bool() || self.is_nil()) && (other.is_bool() || other.is_nil()) {
+            let left = self.is_bool() && self.as_bool();
+            let right = other.is_bool() && other.as_bool();
+            return Ok(!left & right);
+        }
+        if let (Ok(left_id), Ok(right_id)) =
+            (try_string_id(store, self), try_string_id(store, other))
+        {
+            return Ok(string_chars(store, left_id)? < string_chars(store, right_id)?);
+        }
+        Err(RuntimeError::OperandsMustBeNumbers(self, other))
+    }
+
+    pub fn try_num(self) -> Result<f64, RuntimeError> {
+        if self.is_number() {
+            Ok(self.as_number())
         } else {
-            Err(RuntimeError::ExpectedNumber(self.clone()))
+            Err(RuntimeError::ExpectedNumber(self))
         }
     }
 
-    pub fn try_str(&self) -> Result<&String, RuntimeError> {
-        if let LoxValue::String(s) = self {
-            Ok(s)
+    pub fn try_str(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
+        try_string_id(store, self)
+    }
+
+    pub fn try_bool(self) -> Result<bool, RuntimeError> {
+        if self.is_bool() {
+            Ok(self.as_bool())
+        } else if self.is_nil() {
+            Ok(false)
         } else {
-            Err(RuntimeError::ExpectedString(self.clone()))
+            Err(RuntimeError::ExpectedBool(self))
         }
     }
 
-    pub fn try_bool(&self) -> Result<bool, RuntimeError> {
-        match self {
-            LoxValue::Bool(b) => Ok(*b),
-            LoxValue::Nil => Ok(false),
-            _ => Err(RuntimeError::ExpectedBool(self.clone())),
-        }
+    pub fn try_class(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
+        try_class_id(store, self)
     }
 
-    pub fn try_class(&self) -> Result<&Rc<RefCell<Class>>, RuntimeError> {
-        if let LoxValue::Class(c) = self {
-            Ok(c)
-        } else {
-            Err(RuntimeError::ExpectedClass(self.clone()))
-        }
+    pub fn try_instance(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
+        try_instance_id(store, self)
     }
 
-    pub fn try_instance(&self) -> Result<&Rc<RefCell<Instance>>, RuntimeError> {
-        if let LoxValue::Instance(instance) = self {
-            Ok(instance)
-        } else {
-            Err(RuntimeError::ExpectedInstance(self.clone()))
-        }
+    pub fn try_function(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
+        try_function_id(store, self)
+    }
+
+    pub fn try_closure(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
+        try_closure_id(store, self)
+    }
+
+    pub fn try_native(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
+        try_native_id(store, self)
+    }
+
+    pub fn try_bound_method(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
+        try_bound_method_id(store, self)
     }
 
     #[must_use]
-    pub fn is_falsey(&self) -> bool {
-        match self {
-            LoxValue::Bool(b) => !*b,
-            LoxValue::Nil => true,
-            _ => false,
-        }
+    pub fn is_falsey(self) -> bool {
+        self.is_nil() || (self.is_bool() && !self.as_bool())
     }
 }
 
 impl Display for LoxValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LoxValue::String(s) => write!(f, "{s}"),
-            LoxValue::Number(n) => write!(f, "{n}"),
-            LoxValue::Bool(b) => write!(f, "{b}"),
-            LoxValue::Nil => write!(f, "nil"),
-            LoxValue::Function(func) => write!(f, "{func}"),
-            LoxValue::Native(native) => write!(f, "{native}"),
-            LoxValue::Closure(closure) => write!(f, "{closure}"),
-            LoxValue::NaN => write!(f, "NaN"),
-            LoxValue::Class(class) => write!(f, "{}", class.borrow()),
-            LoxValue::Instance(instance) => write!(f, "{}", instance.borrow()),
-            LoxValue::Bound(receiver, method) => {
-                write!(f, "{} -> {}", receiver.borrow(), method)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_number() {
+            let number = self.as_number();
+            if number.is_nan() {
+                write!(f, "NaN")
+            } else {
+                write!(f, "{number}")
             }
+        } else if self.is_bool() {
+            write!(f, "{}", self.as_bool())
+        } else if self.is_nil() {
+            write!(f, "nil")
+        } else if self.is_obj() {
+            write!(f, "<object>")
+        } else {
+            write!(f, "unknown")
         }
     }
 }
@@ -144,12 +230,6 @@ pub struct Function {
     pub chunk: Chunk,
     pub name: String,
     pub upvalue_count: usize,
-}
-
-impl Display for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<fn {}>", self.name)
-    }
 }
 
 impl Function {
@@ -163,139 +243,12 @@ impl Function {
         }
     }
 
-    pub fn disassembly(&self) {
-        self.chunk.disassembly(self.name.as_str());
+    pub fn disassembly(&self, store: &ObjectStore) {
+        self.chunk.disassembly(self.name.as_str(), store);
     }
 
     #[must_use]
     pub fn start(&self) -> usize {
         self.chunk.first_line()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NativeFunction {
-    pub arity: usize,
-    pub name: String,
-    pub func: fn(&[LoxValue]) -> crate::Result<LoxValue, RuntimeError>,
-}
-
-impl PartialEq for NativeFunction {
-    /// Two `NativeFunction`s are considered equal when their *arity* and *name*
-    /// match.  The actual function pointer (`func`) is **not** compared.
-    fn eq(&self, other: &Self) -> bool {
-        self.arity == other.arity && self.name == other.name
-    }
-}
-
-impl Eq for NativeFunction {}
-
-impl Display for NativeFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<native fn {}>", self.name)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Closure {
-    pub function: Rc<Function>,
-    pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
-}
-
-impl Display for Closure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<fn {}>", self.function.name)
-    }
-}
-
-impl Closure {
-    #[must_use]
-    pub fn new(function: Rc<Function>) -> Self {
-        let upvalues_count = function.upvalue_count;
-        Self {
-            function,
-            upvalues: Vec::with_capacity(upvalues_count),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Upvalue {
-    Open(usize),
-    Closed(LoxValue),
-}
-
-impl Display for Upvalue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "upvalue")
-    }
-}
-
-impl Upvalue {
-    #[must_use]
-    pub fn is_open(&self) -> bool {
-        match self {
-            Upvalue::Open(_) => true,
-            Upvalue::Closed(_) => false,
-        }
-    }
-
-    #[must_use]
-    pub fn is_open_with_index(&self, index: usize) -> bool {
-        match self {
-            Upvalue::Open(idx) => *idx == index,
-            Upvalue::Closed(_) => false,
-        }
-    }
-
-    #[must_use]
-    pub fn is_open_above_or_equal_index(&self, index: usize) -> bool {
-        match self {
-            Upvalue::Open(idx) => *idx >= index,
-            Upvalue::Closed(_) => false,
-        }
-    }
-}
-
-#[derive(Default, Debug, PartialEq, Clone)]
-pub struct Class {
-    pub methods: FnvHashMap<String, LoxValue>,
-    pub name: String,
-}
-
-impl Class {
-    #[must_use]
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            methods: FnvHashMap::default(),
-        }
-    }
-}
-
-impl Display for Class {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
-#[derive(Default, Debug, PartialEq, Clone)]
-pub struct Instance {
-    pub fields: FnvHashMap<String, LoxValue>,
-    pub class: Rc<RefCell<Class>>,
-}
-
-impl Instance {
-    pub fn new(class: Rc<RefCell<Class>>) -> Self {
-        Self {
-            class,
-            fields: FnvHashMap::default(),
-        }
-    }
-}
-
-impl Display for Instance {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} instance", self.class.borrow().name)
     }
 }

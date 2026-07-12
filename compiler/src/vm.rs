@@ -1,111 +1,149 @@
 #![allow(clippy::missing_errors_doc)]
 
-use crate::value::{Class, Closure, Instance, Upvalue};
+use std::fmt;
+use std::hash::BuildHasherDefault;
+use std::rc::Rc;
+
+use fnv::FnvHashMap;
+use miette::LabeledSpan;
+use num_traits::FromPrimitive;
+
+use crate::object::{ObjId, ObjType, ObjectStore, string_chars, string_key};
+use crate::value::LoxValue;
 use crate::{RuntimeError, builtin};
 use crate::{
     chunk::{Chunk, OpCode},
     compile::Parser,
-    value::{Function, LoxValue, NativeFunction},
 };
-use fnv::FnvHashMap;
-use miette::LabeledSpan;
-use num_traits::FromPrimitive;
-use std::cell::RefCell;
-use std::hash::BuildHasherDefault;
-use std::rc::Rc;
 
 const FRAMES_MAX: usize = 64;
 const CONST_SIZE: usize = 1;
 const CONST_LONG_SIZE: usize = 3;
-const INITIAL_STACK_CAPACITY: usize = 256;
-const INITIAL_GLOBALS_CAPACITY: usize = 32;
-const INITIAL_UPVALUES_CAPACITY: usize = 16;
+const STACK_MAX: usize = FRAMES_MAX * 256;
 
-enum CallTarget {
-    Closure(Rc<Closure>),
-    Class(Rc<RefCell<Class>>),
-    Bound(Rc<RefCell<Instance>>, LoxValue),
-    Native(NativeFunction),
-    Invalid(LoxValue),
-}
-
-#[derive(Clone)]
 struct CallFrame {
-    closure: Rc<Closure>,
-    slots_offset: usize, // points to vm's value's stack first value it can use
+    closure: ObjId,
     ip: usize,
-}
-
-impl CallFrame {
-    fn new() -> Self {
-        Self {
-            closure: Rc::new(Closure::new(Rc::new(Function::new("")))),
-            slots_offset: 1, // caller function itself
-            ip: 0,
-        }
-    }
+    slots: usize,
+    chunk: Rc<Chunk>,
 }
 
 pub struct VirtualMachine<W: std::io::Write> {
-    stack: Vec<LoxValue>,
-    writer: W,
-    globals: FnvHashMap<String, LoxValue>,
-    frames: Box<[CallFrame]>,
+    stack: [LoxValue; STACK_MAX],
+    stack_top: usize,
+    objects: ObjectStore,
+    globals: FnvHashMap<ObjId, LoxValue>,
+    frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
-    open_upvalues: Vec<Rc<RefCell<Upvalue>>>,
+    open_upvalues: Option<ObjId>,
+    init_string: ObjId,
+    writer: W,
     line: usize,
+}
+
+struct FormattedValue<'a> {
+    store: &'a ObjectStore,
+    value: LoxValue,
+}
+
+impl fmt::Display for FormattedValue<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.store.format(self.value, f)
+    }
 }
 
 impl<W: std::io::Write> VirtualMachine<W> {
     #[must_use]
     pub fn new(writer: W) -> Self {
         Self {
-            stack: Vec::with_capacity(INITIAL_STACK_CAPACITY),
-            writer,
-            globals: FnvHashMap::with_capacity_and_hasher(
-                INITIAL_GLOBALS_CAPACITY,
-                BuildHasherDefault::default(),
-            ),
-            frames: vec![CallFrame::new(); FRAMES_MAX].into_boxed_slice(),
+            stack: [LoxValue::NIL; STACK_MAX],
+            stack_top: 0,
+            objects: ObjectStore::new(),
+            globals: FnvHashMap::with_capacity_and_hasher(32, BuildHasherDefault::default()),
+            frames: std::array::from_fn(|_| CallFrame {
+                closure: 0,
+                ip: 0,
+                slots: 0,
+                chunk: Rc::new(Chunk::new()),
+            }),
             frame_count: 0,
-            open_upvalues: Vec::with_capacity(INITIAL_UPVALUES_CAPACITY),
+            open_upvalues: None,
+            init_string: 0,
+            writer,
             line: 0,
         }
     }
 
-    pub fn interpret(&mut self, content: &str, printcode: bool) -> crate::Result<()> {
-        let mut parser = Parser::new(content, printcode);
-        let function = Rc::new(parser.compile()?);
-        let closure = Rc::new(Closure::new(function));
-        self.push(LoxValue::Closure(closure.clone()));
-        self.call_function(closure, 0)
-            .and_then(|()| self.run())
-            .map_err(|e| {
-            let mut stack_trace = Vec::with_capacity(self.frame_count);
-            for i in 0..self.frame_count {
-                stack_trace.push(format!(
-                    " at {}:{}",
-                    self.frames[i].closure.function.name,
-                    self.frames[i].closure.function.start()
-                ));
-            }
-            stack_trace.reverse();
-            miette::miette!(
-                labels = vec![LabeledSpan::at(
-                    parser.get_line_range(self.line),
-                    format!("{e}. Stack trace:\n{}", stack_trace.join("\n"))
-                )],
-                "Runtime error"
-            )
-        })
+    pub fn init(&mut self) -> Result<(), RuntimeError> {
+        for i in 0..self.stack_top {
+            self.objects.release(self.stack[i]);
+        }
+        self.stack_top = 0;
+        self.frame_count = 0;
+        self.open_upvalues = None;
+        for value in self.globals.values() {
+            self.objects.release(*value);
+        }
+        self.globals.clear();
+        self.init_string = self
+            .objects
+            .intern_string(scanner::INIT)?
+            .obj_id_unchecked();
+        self.add_global("clock", 0, builtin::clock)?;
+        self.add_global("sqrt", 1, builtin::sqrt)?;
+        self.add_global("min", 2, builtin::min)?;
+        self.add_global("max", 2, builtin::max)?;
+        Ok(())
     }
 
-    pub fn init(&mut self) {
-        self.stack.clear();
-        self.add_global("clock", 0, builtin::clock);
-        self.add_global("sqrt", 1, builtin::sqrt);
-        self.add_global("min", 2, builtin::min);
-        self.add_global("max", 2, builtin::max);
+    pub fn interpret(&mut self, content: &str, printcode: bool) -> crate::Result<()> {
+        let function = {
+            let mut parser = Parser::new(content, printcode, &mut self.objects);
+            parser.compile()?
+        };
+        let function_val = self
+            .objects
+            .alloc_function(function)
+            .map_err(|e| miette::miette!("{e}"))?;
+        let function_id = function_val
+            .try_function(&self.objects)
+            .map_err(|e| miette::miette!("{e}"))?;
+        let closure_val = self
+            .objects
+            .alloc_closure(function_id)
+            .map_err(|e| miette::miette!("{e}"))?;
+        self.push(closure_val);
+        self.call_function(closure_val, 0)
+            .map_err(|e| miette::miette!("{e}"))?;
+        self.run()
+            .map_err(|e| {
+                let mut stack_trace = Vec::with_capacity(self.frame_count);
+                for i in 0..self.frame_count {
+                    if let Ok(frame_name) = self.format_frame(i) {
+                        stack_trace.push(frame_name);
+                    }
+                }
+                stack_trace.reverse();
+                miette::miette!(
+                    labels = vec![LabeledSpan::at(
+                        scanner::Lexer::new(content).line_span(self.line),
+                        format!("{e}. Stack trace:\n{}", stack_trace.join("\n"))
+                    )],
+                    "Runtime error"
+                )
+            })
+    }
+
+    fn format_frame(&self, index: usize) -> Result<String, RuntimeError> {
+        let closure_id = self.frames[index].closure;
+        let function_id = self.objects.closure(closure_id)?.function;
+        let name = self
+            .objects
+            .string(self.objects.function(function_id)?.name)?
+            .chars
+            .clone();
+        let start = self.objects.function(function_id)?.chunk.first_line();
+        Ok(format!(" at {name}:{start}"))
     }
 
     fn add_global(
@@ -113,53 +151,60 @@ impl<W: std::io::Write> VirtualMachine<W> {
         name: &str,
         arity: usize,
         func: fn(&[LoxValue]) -> crate::Result<LoxValue, RuntimeError>,
-    ) {
-        let builtin_name = name.to_string();
-        let builtin = LoxValue::Native(NativeFunction {
-            arity,
-            name: builtin_name.clone(),
-            func,
-        });
-        self.globals.insert(builtin_name, builtin);
-    }
-
-    #[inline]
-    fn push(&mut self, value: LoxValue) {
-        self.stack.push(value);
-    }
-
-    #[inline]
-    fn pop(&mut self) -> Result<LoxValue, RuntimeError> {
-        self.stack.pop().ok_or(RuntimeError::InstructionsStackEmpty)
-    }
-
-    #[inline]
-    fn pop_n_times(&mut self, num_to_pop: usize) -> Result<(), RuntimeError> {
-        if self.stack.len() < num_to_pop {
-            return Err(RuntimeError::NotEnoughStackCapacity(
-                num_to_pop,
-                self.stack.len(),
-            ));
-        }
-        self.stack.truncate(self.stack.len() - num_to_pop);
+    ) -> Result<(), RuntimeError> {
+        let name_val = self.objects.intern_string(name)?;
+        let key = name_val.obj_id_unchecked();
+        let native = self.objects.alloc_native(name, arity, func)?;
+        self.objects.retain(native);
+        self.globals.insert(key, native);
         Ok(())
     }
 
     #[inline]
-    fn peek(&self, distance: usize) -> Result<&LoxValue, RuntimeError> {
-        if self.stack.len() < distance + 1 {
-            Err(RuntimeError::NotEnoughStackCapacity(
-                distance,
-                self.stack.len(),
-            ))
-        } else {
-            Ok(&self.stack[self.stack.len() - 1 - distance])
+    fn push(&mut self, value: LoxValue) {
+        self.objects.retain(value);
+        self.stack[self.stack_top] = value;
+        self.stack_top += 1;
+    }
+
+    #[inline]
+    fn pop(&mut self) -> Result<LoxValue, RuntimeError> {
+        if self.stack_top == 0 {
+            return Err(RuntimeError::InstructionsStackEmpty);
+        }
+        self.stack_top -= 1;
+        let value = self.stack[self.stack_top];
+        self.objects.release(value);
+        Ok(value)
+    }
+
+    #[inline]
+    fn set_stack(&mut self, index: usize, value: LoxValue) {
+        if self.stack[index] == value {
+            return;
+        }
+        self.objects.release(self.stack[index]);
+        self.objects.retain(value);
+        self.stack[index] = value;
+    }
+
+    #[inline]
+    fn release_stack_range(&mut self, start: usize, end: usize) {
+        for index in start..end {
+            self.objects.release(self.stack[index]);
         }
     }
 
     #[inline]
-    fn frame_mut(&mut self) -> &mut CallFrame {
-        &mut self.frames[self.frame_count - 1]
+    fn peek(&self, distance: usize) -> Result<LoxValue, RuntimeError> {
+        if self.stack_top < distance + 1 {
+            Err(RuntimeError::NotEnoughStackCapacity(
+                distance,
+                self.stack_top,
+            ))
+        } else {
+            Ok(self.stack[self.stack_top - 1 - distance])
+        }
     }
 
     #[inline]
@@ -169,38 +214,53 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn read_u24(code: &[u8], offset: usize) -> usize {
-        (code[offset + 2] as usize) << 16
-            | (code[offset + 1] as usize) << 8
-            | code[offset] as usize
+        (code[offset + 2] as usize) << 16 | (code[offset + 1] as usize) << 8 | code[offset] as usize
     }
 
     #[inline]
-    fn constant_index(code: &[u8], offset: usize, size: usize) -> usize {
+    fn constant_index(code: &[u8], offset: usize, size: usize) -> Result<usize, RuntimeError> {
         match size {
-            CONST_SIZE => code[offset] as usize,
-            CONST_LONG_SIZE => Self::read_u24(code, offset),
-            _ => unreachable!(),
+            CONST_SIZE => Ok(code[offset] as usize),
+            CONST_LONG_SIZE => Ok(Self::read_u24(code, offset)),
+            _ => Err(RuntimeError::InvalidInstruction(offset)),
         }
     }
 
     #[inline]
-    fn runtime_error(
-        &mut self,
-        chunk: &Chunk,
-        instruction_ip: usize,
-        err: RuntimeError,
-    ) -> Result<(), RuntimeError> {
-        self.line = chunk.line(instruction_ip);
+    fn runtime_error(&mut self, line: usize, err: RuntimeError) -> Result<(), RuntimeError> {
+        self.line = line;
         Err(err)
+    }
+
+    fn write_value(&mut self, value: LoxValue) -> Result<(), RuntimeError> {
+        let formatted = FormattedValue {
+            store: &self.objects,
+            value,
+        };
+        writeln!(self.writer, "{}", format_args!("{formatted}"))
+            .map_err(|e| RuntimeError::Common(e.to_string()))
+    }
+
+    fn value_to_string(&self, value: LoxValue) -> String {
+        format!(
+            "{}",
+            format_args!(
+                "{}",
+                FormattedValue {
+                    store: &self.objects,
+                    value,
+                }
+            )
+        )
     }
 
     fn run(&mut self) -> Result<(), RuntimeError> {
         while self.frame_count > 0 {
             let frame_index = self.frame_count - 1;
             let mut ip = self.frames[frame_index].ip;
-            let slots_offset = self.frames[frame_index].slots_offset;
-            let closure = self.frames[frame_index].closure.clone();
-            let chunk = &closure.function.chunk;
+            let slots = self.frames[frame_index].slots;
+            let closure_id = self.frames[frame_index].closure;
+            let chunk = Rc::clone(&self.frames[frame_index].chunk);
             let bytecode = chunk.code.as_slice();
             let constants = chunk.constants.as_slice();
 
@@ -211,96 +271,116 @@ impl<W: std::io::Write> VirtualMachine<W> {
             let instruction_ip = ip;
             self.line = chunk.line(instruction_ip);
             let Some(opcode) = OpCode::from_u8(bytecode[ip]) else {
-                return self.runtime_error(chunk, instruction_ip, RuntimeError::InvalidInstruction(instruction_ip));
+                return self
+                    .runtime_error(self.line, RuntimeError::InvalidInstruction(instruction_ip));
             };
             ip += 1;
 
             #[cfg(feature = "disassembly")]
             {
                 print!("          ");
-                for value in &self.stack {
-                    print!("[ {value} ]");
+                for i in 0..self.stack_top {
+                    print!(
+                        "[ {} ]",
+                        FormattedValue {
+                            store: &self.objects,
+                            value: self.stack[i],
+                        }
+                    );
                 }
                 println!();
-                chunk.disassembly_instruction(instruction_ip);
+                let closure_id = self.frames[frame_index].closure;
+                let function_id = self.objects.closure(closure_id)?.function;
+                let disasm_chunk = self.objects.function(function_id)?.chunk.clone();
+                disasm_chunk.disassembly_instruction(instruction_ip, &self.objects);
             }
 
             match opcode {
                 OpCode::Constant => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    self.push(constants[ix].clone());
+                    self.push(constants[ix]);
                 }
                 OpCode::ConstantLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    self.push(constants[ix].clone());
+                    self.push(constants[ix]);
                 }
                 OpCode::Return => {
-                    let value = self.pop()?;
+                    let function_id = self.objects.closure(closure_id)?.function;
+                    let is_init = self.objects.function(function_id)?.name == self.init_string;
+                    let value = if is_init {
+                        self.stack[slots.saturating_sub(1)]
+                    } else {
+                        self.stack_top -= 1;
+                        self.stack[self.stack_top]
+                    };
 
-                    if slots_offset > 0 {
-                        self.close_upvalue_at(slots_offset - 1);
+                    if slots > 0 {
+                        self.close_upvalue_at(slots - 1)?;
                     }
-                    self.close_upvalues(slots_offset);
+                    self.close_upvalues(slots)?;
 
-                    let num_to_pop = self.stack.len() - slots_offset + 1;
                     self.frame_count -= 1;
+
+                    let release_from = if is_init { slots } else { slots.saturating_sub(1) };
+                    self.release_stack_range(release_from, self.stack_top);
                     if self.frame_count == 0 {
-                        self.pop()?;
+                        if !is_init {
+                            self.stack_top = slots.saturating_sub(1);
+                            self.push(value);
+                        }
                         return Ok(());
                     }
-                    self.pop_n_times(num_to_pop)?;
-                    self.push(value);
+                    if is_init {
+                        self.stack_top = if slots > 0 { slots } else { 1 };
+                    } else {
+                        self.stack_top = slots.saturating_sub(1);
+                        self.push(value);
+                    }
                     continue;
                 }
                 OpCode::Negate => {
                     let value = self.pop()?;
                     let value = value.try_num()?;
-                    self.push(LoxValue::Number(-value));
+                    self.push(LoxValue::number(-value));
                 }
                 OpCode::Add => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let lr = a.try_str();
-                    let rr = b.try_str();
-                    if lr.is_ok() || rr.is_ok() {
-                        if let Ok(l) = lr {
-                            let r = if let LoxValue::Nil = b {
-                                String::new()
-                            } else {
-                                b.to_string()
-                            };
-                            let result = l.to_owned() + &r;
-                            self.push(LoxValue::String(result));
-                        } else if let Ok(r) = rr {
-                            let l = if let LoxValue::Nil = a {
-                                String::new()
-                            } else {
-                                a.to_string()
-                            };
-                            let result = l + r;
-                            self.push(LoxValue::String(result));
-                        }
+                    if let Ok(l_id) = a.try_str(&self.objects) {
+                        let l = string_chars(&self.objects, l_id)?;
+                        let r = if b.is_nil() {
+                            String::new()
+                        } else {
+                            self.value_to_string(b)
+                        };
+                        let result = self.objects.intern_string(l.to_owned() + &r)?;
+                        self.push(result);
+                    } else if let Ok(r_id) = b.try_str(&self.objects) {
+                        let r = string_chars(&self.objects, r_id)?;
+                        let l = if a.is_nil() {
+                            String::new()
+                        } else {
+                            self.value_to_string(a)
+                        };
+                        let result = self.objects.intern_string(l.to_owned() + r)?;
+                        self.push(result);
                     } else {
                         let l = a.try_num()?;
                         let r = b.try_num()?;
-                        self.push(LoxValue::Number(l + r));
+                        self.push(LoxValue::number(l + r));
                     }
                 }
                 OpCode::Subtract => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num()?;
-                    let b = b.try_num()?;
-                    self.push(LoxValue::Number(a - b));
+                    self.push(LoxValue::number(a.try_num()? - b.try_num()?));
                 }
                 OpCode::Multiply => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let a = a.try_num()?;
-                    let b = b.try_num()?;
-                    self.push(LoxValue::Number(a * b));
+                    self.push(LoxValue::number(a.try_num()? * b.try_num()?));
                 }
                 OpCode::Divide => {
                     let b = self.pop()?;
@@ -308,97 +388,90 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let a = a.try_num()?;
                     let b = b.try_num()?;
                     if b == 0.0 {
-                        self.push(LoxValue::NaN);
+                        self.push(LoxValue::number(f64::NAN));
                     } else {
-                        self.push(LoxValue::Number(a / b));
+                        self.push(LoxValue::number(a / b));
                     }
                 }
-                OpCode::Nil => self.push(LoxValue::Nil),
-                OpCode::True => self.push(LoxValue::Bool(true)),
-                OpCode::False => self.push(LoxValue::Bool(false)),
+                OpCode::Nil => self.push(LoxValue::NIL),
+                OpCode::True => self.push(LoxValue::TRUE),
+                OpCode::False => self.push(LoxValue::FALSE),
                 OpCode::Not => {
                     let value = self.pop()?;
-                    self.push(LoxValue::Bool(value.is_falsey()));
+                    self.push(LoxValue::bool_val(value.is_falsey()));
                 }
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    self.push(LoxValue::Bool(a.equal(&b)));
+                    self.push(LoxValue::bool_val(a.equal(b)));
                 }
                 OpCode::Less => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let result = a.less(&b)?;
-                    self.push(LoxValue::Bool(result));
+                    self.push(LoxValue::bool_val(a.less(b, &self.objects)?));
                 }
                 OpCode::Greater => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let lt = a.less(&b)?;
-                    let gt = !lt && !a.equal(&b);
-                    self.push(LoxValue::Bool(gt));
+                    let lt = a.less(b, &self.objects)?;
+                    let gt = !lt && !a.equal(b);
+                    self.push(LoxValue::bool_val(gt));
                 }
                 OpCode::Print => {
-                    let value = self.pop()?;
-                    writeln!(self.writer, "{value}")
-                        .map_err(|e| RuntimeError::Common(e.to_string()))?;
+                    let value = self.peek(0)?;
+                    self.write_value(value)?;
+                    self.pop()?;
                 }
                 OpCode::Pop => {
                     self.pop()?;
                 }
                 OpCode::DefineGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let name = constants[ix].try_str()?;
-                    self.define_global(name)?;
+                    self.define_global(constants[ix])?;
                 }
                 OpCode::DefineGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    let name = constants[ix].try_str()?;
-                    self.define_global(name)?;
+                    self.define_global(constants[ix])?;
                 }
                 OpCode::GetGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let name = constants[ix].try_str()?;
-                    self.get_global(name)?;
+                    self.get_global(constants[ix])?;
                 }
                 OpCode::GetGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    let name = constants[ix].try_str()?;
-                    self.get_global(name)?;
+                    self.get_global(constants[ix])?;
                 }
                 OpCode::SetGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let name = constants[ix].try_str()?;
-                    self.set_global(name)?;
+                    self.set_global(constants[ix])?;
                 }
                 OpCode::SetGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    let name = constants[ix].try_str()?;
-                    self.set_global(name)?;
+                    self.set_global(constants[ix])?;
                 }
                 OpCode::GetLocal => {
                     let frame_offset = bytecode[ip] as usize;
                     ip += 1;
-                    let local_index = slots_offset + frame_offset - 1;
-                    self.push(self.stack[local_index].clone());
+                    let local_index = slots + frame_offset - 1;
+                    self.push(self.stack[local_index]);
                 }
                 OpCode::SetLocal => {
                     let frame_offset = bytecode[ip] as usize;
                     ip += 1;
-                    let local_index = slots_offset + frame_offset - 1;
-                    let stack_top = self.stack.len() - 1;
-                    self.stack[local_index] = self.stack[stack_top].clone();
+                    let local_index = slots + frame_offset - 1;
+                    let value = self.stack[self.stack_top - 1];
+                    self.set_stack(local_index, value);
                 }
                 OpCode::JumpIfFalse => {
                     let offset = Self::read_u16(bytecode, ip);
                     ip += 2;
-                    if self.stack.last().is_some_and(LoxValue::is_falsey) {
+                    if self.peek(0)?.is_falsey() {
                         ip += offset;
                     }
                 }
@@ -420,8 +493,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue;
                 }
                 OpCode::Invoke => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
-                    let method_name = constants[method_ix].try_str()?;
+                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let method_name = constants[method_ix];
                     let argc = bytecode[ip + 1];
                     ip += 2;
                     self.frames[frame_index].ip = ip;
@@ -429,142 +502,184 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue;
                 }
                 OpCode::Closure => {
-                    let function_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let function_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let function_value = constants[function_ix].clone();
-                    let LoxValue::Function(function) = function_value else {
-                        return self.runtime_error(
-                            chunk,
-                            instruction_ip,
-                            RuntimeError::ExpectedFunction(function_value),
-                        );
-                    };
-                    let upvalues_count = function.upvalue_count;
+                    let function_value = constants[function_ix];
+                    let function_id = function_value.try_function(&self.objects)?;
+                    let closure_val = self.objects.alloc_closure(function_id)?;
+                    let new_closure_id = closure_val.try_closure(&self.objects)?;
+                    let upvalues_count = self.objects.function(function_id)?.upvalue_count;
+                    let mut upvalues = Vec::with_capacity(upvalues_count);
 
-                    let mut new_closure = Closure::new(function);
                     for _ in 0..upvalues_count {
                         let is_local = bytecode[ip];
                         let index = bytecode[ip + 1];
                         ip += 2;
                         let upvalue = if is_local == 1 {
-                            self.capture_upvalue(slots_offset + index as usize - 1)
+                            self.capture_upvalue(slots + index as usize - 1)?
                         } else {
-                            closure.upvalues[index as usize].clone()
+                            self.objects.closure(closure_id)?.upvalues[index as usize]
                         };
-                        new_closure.upvalues.push(upvalue);
+                        upvalues.push(upvalue);
                     }
 
-                    self.push(LoxValue::Closure(Rc::new(new_closure)));
+                    self.objects.closure_mut(new_closure_id)?.upvalues = upvalues;
+                    self.push(closure_val);
                 }
                 OpCode::GetUpvalue => {
                     let slot = bytecode[ip] as usize;
                     ip += 1;
-                    let upvalue = closure.upvalues[slot].clone();
-                    let lox_value = match &*upvalue.borrow() {
-                        Upvalue::Open(location) => self.stack[*location].clone(),
-                        Upvalue::Closed(value) => value.clone(),
+                    let upvalue_id = self.objects.closure(closure_id)?.upvalues[slot];
+                    let upvalue = self.objects.upvalue(upvalue_id)?;
+                    let lox_value = match upvalue.location {
+                        Some(location) => self.stack[location],
+                        None => upvalue.closed,
                     };
                     self.push(lox_value);
                 }
                 OpCode::SetUpvalue => {
                     let slot = bytecode[ip] as usize;
                     ip += 1;
-                    let val = self.stack[self.stack.len() - 1].clone();
-                    let upvalue = closure.upvalues[slot].clone();
-                    match &mut *upvalue.borrow_mut() {
-                        Upvalue::Open(location) => self.stack[*location] = val,
-                        Upvalue::Closed(value) => *value = val,
+                    let val = self.stack[self.stack_top - 1];
+                    let upvalue_id = self.objects.closure(closure_id)?.upvalues[slot];
+                    let location = self.objects.upvalue(upvalue_id)?.location;
+                    if let Some(location) = location {
+                        self.set_stack(location, val);
+                    } else {
+                        let old_closed = {
+                            let upvalue = self.objects.upvalue_mut(upvalue_id)?;
+                            let old = upvalue.closed;
+                            upvalue.closed = val;
+                            old
+                        };
+                        self.objects.release(old_closed);
+                        self.objects.retain(val);
                     }
                 }
                 OpCode::CloseUpvalue => {
-                    let location = self.stack.len() - 1;
-                    self.close_upvalues(location);
+                    let location = self.stack_top - 1;
+                    self.close_upvalues(location)?;
                     self.pop()?;
                 }
                 OpCode::Class => {
-                    let class_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let class_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let class_name = constants[class_ix].try_str()?;
-                    let class = Class::new(class_name.clone());
-                    self.push(LoxValue::Class(Rc::new(RefCell::new(class))));
+                    let class_name = constants[class_ix];
+                    let class = self.objects.alloc_class(class_name)?;
+                    self.push(class);
                 }
                 OpCode::GetProperty => {
-                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let property = constants[prop_ix].try_str()?;
-                    let instance = self.peek(0)?.try_instance()?.clone();
-                    let value = Self::get_member(property, &instance);
-                    if let Some(val) = value {
+                    let property_id = constants[prop_ix].try_str(&self.objects)?;
+                    let instance_id = self.peek(0)?.try_instance(&self.objects)?;
+                    if let Some(val) =
+                        Self::get_member(instance_id, property_id, &mut self.objects)?
+                    {
                         self.pop()?;
                         self.push(val);
                     } else {
+                        let name = string_chars(&self.objects, property_id)?.to_owned();
                         return self.runtime_error(
-                            chunk,
-                            instruction_ip,
-                            RuntimeError::UndefinedMethodOrProperty(property.clone()),
+                            self.line,
+                            RuntimeError::UndefinedMethodOrProperty(name),
                         );
                     }
                 }
                 OpCode::SetProperty => {
-                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let property_name = constants[prop_ix].try_str()?;
+                    let property_id =
+                        constants[prop_ix].try_str(&self.objects).inspect_err(|_| {
+                            self.line = chunk.line(instruction_ip);
+                        })?;
+                    self.objects.retain(self.stack[self.stack_top - 1]);
                     let property_value = self.pop()?;
-                    let instance = self.pop()?;
-                    let instance = instance.try_instance()?;
-                    instance
-                        .borrow_mut()
-                        .fields
-                        .insert(property_name.to_owned(), property_value.clone());
+                    let instance_id = self.pop()?.try_instance(&self.objects)?;
+                    let old = {
+                        let instance = self.objects.instance_mut(instance_id)?;
+                        instance.fields.insert(property_id, property_value)
+                    };
+                    if let Some(old) = old {
+                        if old != property_value {
+                            self.objects.release(old);
+                        }
+                    }
                     self.push(property_value);
                 }
                 OpCode::Method => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let method_name = constants[method_ix].try_str()?;
-                    self.define_method(method_name)?;
+                    self.define_method(constants[method_ix])?;
                 }
                 OpCode::Inherit => {
-                    let super_class = self.peek(1)?.try_class()?;
-                    let sub_class = self.peek(0)?.try_class()?;
-                    for (name, method) in &super_class.borrow().methods {
-                        sub_class
-                            .borrow_mut()
+                    let super_class_id = self.peek(1)?.try_class(&self.objects)?;
+                    let sub_class_id = self.peek(0)?.try_class(&self.objects)?;
+                    let super_methods = self.objects.class(super_class_id)?.methods.clone();
+                    for (name, method) in super_methods {
+                        if !self
+                            .objects
+                            .class(sub_class_id)?
                             .methods
-                            .insert(name.clone(), method.clone());
+                            .contains_key(&name)
+                        {
+                            self.objects.retain(method);
+                            self.objects
+                                .class_mut(sub_class_id)?
+                                .methods
+                                .insert(name, method);
+                        }
                     }
                     self.pop()?;
                 }
                 OpCode::GetSuper => {
-                    let name_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let name_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let name = constants[name_ix].try_str()?;
-                    let super_class = self.pop()?;
-                    let super_class = super_class.try_class()?;
-                    let super_class = super_class.borrow();
-
-                    let instance = self.pop()?;
-                    let instance = instance.try_instance()?;
-
-                    let method = super_class.methods.get(name).ok_or_else(|| {
-                        RuntimeError::UndefinedMethodOrProperty(name.to_owned())
+                    let name_id = constants[name_ix].try_str(&self.objects).inspect_err(|_| {
+                        self.line = chunk.line(instruction_ip);
                     })?;
-                    let bound = LoxValue::Bound(instance.clone(), Box::new(method.clone()));
+                    let super_class_id = self.pop()?.try_class(&self.objects)?;
+                    let instance_id = self.pop()?.try_instance(&self.objects)?;
+                    let Some(method) = self
+                        .objects
+                        .class(super_class_id)?
+                        .methods
+                        .get(&name_id)
+                    else {
+                        return Err(RuntimeError::UndefinedMethodOrProperty(
+                            string_chars(&self.objects, name_id)?.to_owned(),
+                        ));
+                    };
+                    let method_closure_id = method.try_closure(&self.objects)?;
+                    let bound = self.objects.alloc_bound_method(
+                        LoxValue::from_obj(instance_id, ObjType::Instance),
+                        method_closure_id,
+                    )?;
                     self.push(bound);
                 }
                 OpCode::SuperInvoke => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
-                    let method_name = constants[method_ix].try_str()?;
+                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let method_name = constants[method_ix];
                     let argc = bytecode[ip + 1];
                     ip += 2;
                     self.frames[frame_index].ip = ip;
-                    let super_class = self.pop()?;
-                    let super_class = super_class.try_class()?;
-                    let super_class = super_class.borrow();
-                    let method = super_class.methods.get(method_name).ok_or_else(|| {
-                        RuntimeError::UndefinedMethodOrProperty(method_name.to_owned())
+                    let err_line = chunk.line(instruction_ip);
+                    let name_id = string_key(&self.objects, method_name).ok_or_else(|| {
+                        self.line = err_line;
+                        RuntimeError::ExpectedString(method_name)
                     })?;
-                    self.call_value(method.clone(), argc as usize)?;
+                    let super_class_id = self.pop()?.try_class(&self.objects)?;
+                    let Some(method) = self
+                        .objects
+                        .class(super_class_id)?
+                        .methods
+                        .get(&name_id)
+                    else {
+                        return Err(RuntimeError::UndefinedMethodOrProperty(
+                            string_chars(&self.objects, name_id)?.to_owned(),
+                        ));
+                    };
+                    self.call_value(*method, argc as usize)?;
                     continue;
                 }
             }
@@ -574,187 +689,235 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn invoke(&mut self, method_name: &String, argc: u8) -> Result<(), RuntimeError> {
+    fn invoke(&mut self, method_name: LoxValue, argc: u8) -> Result<(), RuntimeError> {
+        let method_key = string_key(&self.objects, method_name)
+            .ok_or(RuntimeError::ExpectedString(method_name))?;
         let receiver = self.peek(argc as usize)?;
-        let instance = receiver.try_instance()?;
-        let instance = instance.clone(); // to avoid borrowing mut while borrowing
-        let instance = instance.borrow();
-        let callable = if let Some(field) = instance.fields.get(method_name) {
-            let stack_size = self.stack.len();
-            self.stack[stack_size - argc as usize - 1] = field.clone();
-            field.clone()
-        } else if let Some(method) = instance.class.borrow().methods.get(method_name) {
-            method.clone()
-        } else {
-            return Err(RuntimeError::UndefinedMethodOrProperty(method_name.clone()));
-        };
-        drop(instance); // IMPORTANT: to avoid borrowing mut twice if setting class field in a method call
-        self.call_value(callable, argc as usize)?;
-        Ok(())
-    }
-
-    #[inline]
-    fn get_member(property: &String, instance: &Rc<RefCell<Instance>>) -> Option<LoxValue> {
-        let inst = instance.borrow();
-        if let Some(field) = inst.fields.get(property) {
-            Some(field.clone())
-        } else {
-            let class = inst.class.borrow();
-            let method = class.methods.get(property);
-            method.map(|val| LoxValue::Bound(instance.clone(), Box::new(val.clone())))
-        }
-    }
-
-    #[inline]
-    fn define_method(&mut self, name: &str) -> Result<(), RuntimeError> {
-        let method_closure = self.pop()?;
-        let class = self.peek(0)?;
-        if let LoxValue::Class(class) = class {
-            class
-                .borrow_mut()
-                .methods
-                .insert(name.to_owned(), method_closure);
-        } else {
-            return Err(RuntimeError::ExpectedInstance(class.clone()));
-        }
-        Ok(())
-    }
-
-    #[inline]
-    fn close_upvalues(&mut self, location: usize) {
-        while let Some(upval) = self.open_upvalues.last() {
-            if upval.borrow().is_open_above_or_equal_index(location) {
-                let upvalue_index = match *upval.borrow() {
-                    Upvalue::Open(index) => index,
-                    Upvalue::Closed(_) => break,
+        let instance_id = receiver.try_instance(&self.objects)?;
+        let (is_field, callable) = {
+            let instance = self.objects.instance(instance_id)?;
+            if let Some(field) = instance.fields.get(&method_key) {
+                (true, *field)
+            } else {
+                let class_id = instance.class;
+                let Some(callable) = self
+                    .objects
+                    .class(class_id)?
+                    .methods
+                    .get(&method_key)
+                    .copied()
+                else {
+                    return Err(RuntimeError::UndefinedMethodOrProperty(
+                        string_chars(&self.objects, method_key)?.to_owned(),
+                    ));
                 };
-                if upvalue_index < self.stack.len() {
-                    upval.replace(Upvalue::Closed(self.stack[upvalue_index].clone())); // move value to the heap
-                }
-                self.open_upvalues.pop();
-            } else {
-                break;
+                (false, callable)
             }
+        };
+        if is_field {
+            self.set_stack(self.stack_top - argc as usize - 1, callable);
         }
+        self.call_value(callable, argc as usize)
     }
 
     #[inline]
-    fn close_upvalue_at(&mut self, location: usize) {
-        // Close upvalues that point to exactly this location (used for 'this' in methods)
-        let mut i = 0;
-        while i < self.open_upvalues.len() {
-            if self.open_upvalues[i].borrow().is_open_with_index(location) {
-                if location < self.stack.len() {
-                    self.open_upvalues[i].replace(Upvalue::Closed(self.stack[location].clone()));
-                }
-                self.open_upvalues.remove(i);
-            } else {
-                i += 1;
+    fn get_member(
+        instance_id: ObjId,
+        property_id: ObjId,
+        store: &mut ObjectStore,
+    ) -> Result<Option<LoxValue>, RuntimeError> {
+        let class_id = {
+            let instance = store.instance(instance_id)?;
+            if let Some(field) = instance.fields.get(&property_id) {
+                return Ok(Some(*field));
             }
-        }
+            instance.class
+        };
+        let Some(method) = store.class(class_id)?.methods.get(&property_id).copied() else {
+            return Ok(None);
+        };
+        let method_closure_id = method.try_closure(store)?;
+        Ok(Some(store.alloc_bound_method(
+            LoxValue::from_obj(instance_id, ObjType::Instance),
+            method_closure_id,
+        )?))
     }
 
     #[inline]
-    fn capture_upvalue(&mut self, location: usize) -> Rc<RefCell<Upvalue>> {
-        if let Some(upval) = self
-            .open_upvalues
-            .iter()
-            .rev()
-            .find(|upval| upval.borrow().is_open_with_index(location))
+    fn define_method(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
+        let method_key =
+            string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        let method_closure = self.pop()?;
+        let class_id = self.peek(0)?.try_class(&self.objects)?;
+        let class = self.objects.class_mut(class_id)?;
+        if let Some(old) = class.methods.insert(method_key, method_closure) {
+            self.objects.release(old);
+        }
+        self.objects.retain(method_closure);
+        Ok(())
+    }
+
+    #[inline]
+    fn close_upvalues(&mut self, from_slot: usize) -> Result<(), RuntimeError> {
+        while let Some(upvalue_id) = self.open_upvalues {
+            let location = match self.objects.upvalue(upvalue_id)?.location {
+                Some(location) if location >= from_slot => location,
+                _ => break,
+            };
+            let next = self.objects.upvalue(upvalue_id)?.next;
+            let closed_value = self.stack[location];
+            let old_closed = {
+                let upvalue = self.objects.upvalue_mut(upvalue_id)?;
+                let old = upvalue.closed;
+                upvalue.closed = closed_value;
+                upvalue.location = None;
+                old
+            };
+            self.objects.release(old_closed);
+            self.objects.retain(closed_value);
+            self.open_upvalues = next;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn close_upvalue_at(&mut self, location: usize) -> Result<(), RuntimeError> {
+        let mut prev: Option<ObjId> = None;
+        let mut current = self.open_upvalues;
+
+        while let Some(upvalue_id) = current {
+            let upvalue = self.objects.upvalue(upvalue_id)?;
+            if upvalue.location == Some(location) {
+                let next = upvalue.next;
+                let closed_value = self.stack[location];
+                let old_closed = {
+                    let upvalue = self.objects.upvalue_mut(upvalue_id)?;
+                    let old = upvalue.closed;
+                    upvalue.closed = closed_value;
+                    upvalue.location = None;
+                    old
+                };
+                self.objects.release(old_closed);
+                self.objects.retain(closed_value);
+                if let Some(prev_id) = prev {
+                    self.objects.upvalue_mut(prev_id)?.next = next;
+                } else {
+                    self.open_upvalues = next;
+                }
+                return Ok(());
+            }
+            prev = Some(upvalue_id);
+            current = upvalue.next;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn capture_upvalue(&mut self, location: usize) -> Result<ObjId, RuntimeError> {
+        let mut prev: Option<ObjId> = None;
+        let mut current = self.open_upvalues;
+
+        while let Some(upvalue_id) = current {
+            let upvalue = self.objects.upvalue(upvalue_id)?;
+            match upvalue.location {
+                Some(loc) if loc > location => {
+                    prev = Some(upvalue_id);
+                    current = upvalue.next;
+                }
+                Some(loc) if loc == location => return Ok(upvalue_id),
+                _ => break,
+            }
+        }
+
+        let created = self.objects.alloc_upvalue(location)?;
         {
-            upval.clone()
-        } else {
-            let upval = Rc::new(RefCell::new(Upvalue::Open(location)));
-            self.open_upvalues.push(upval.clone());
-            upval
+            let created_upvalue = self.objects.upvalue_mut(created)?;
+            created_upvalue.next = current;
         }
+
+        if let Some(prev_id) = prev {
+            self.objects.upvalue_mut(prev_id)?.next = Some(created);
+        } else {
+            self.open_upvalues = Some(created);
+        }
+
+        Ok(created)
     }
 
     #[inline]
     fn call_value_at(&mut self, args_count: usize) -> Result<(), RuntimeError> {
-        let callee_index = self.stack.len() - args_count - 1;
-        let target = match &self.stack[callee_index] {
-            LoxValue::Closure(closure) => CallTarget::Closure(Rc::clone(closure)),
-            LoxValue::Class(class) => CallTarget::Class(Rc::clone(class)),
-            LoxValue::Bound(receiver, method) => {
-                CallTarget::Bound(Rc::clone(receiver), (**method).clone())
-            }
-            LoxValue::Native(func) => CallTarget::Native(func.clone()),
-            other => CallTarget::Invalid(other.clone()),
-        };
-        match target {
-            CallTarget::Closure(closure) => self.call_function(closure, args_count),
-            CallTarget::Class(class) => self.call_class(&class, args_count),
-            CallTarget::Bound(receiver, method) => self.call_method(receiver, method, args_count),
-            CallTarget::Native(func) => self.call_native(&func, args_count),
-            CallTarget::Invalid(other) => Err(RuntimeError::InvalidCallable(other)),
-        }
+        let callee = self.stack[self.stack_top - args_count - 1];
+        self.call_value(callee, args_count)
     }
 
     #[inline]
     fn call_value(&mut self, callee: LoxValue, args_count: usize) -> Result<(), RuntimeError> {
-        match callee {
-            LoxValue::Closure(closure) => self.call_function(closure, args_count),
-            LoxValue::Class(class) => self.call_class(&class, args_count),
-            LoxValue::Bound(receiver, method) => self.call_method(receiver, *method, args_count),
-            LoxValue::Native(func) => self.call_native(&func, args_count),
-            other => Err(RuntimeError::InvalidCallable(other)),
+        match callee.obj_type() {
+            Some(ObjType::Closure) => self.call_function(callee, args_count),
+            Some(ObjType::Class) => self.call_class(callee.obj_id_unchecked(), args_count),
+            Some(ObjType::BoundMethod) => {
+                let bound_id = callee.obj_id_unchecked();
+                let bound = self.objects.bound_method(bound_id)?;
+                let receiver = bound.receiver;
+                let method = bound.method;
+                self.call_method(receiver, method, args_count)
+            }
+            Some(ObjType::Native) => self.call_native(callee.obj_id_unchecked(), args_count),
+            _ => Err(RuntimeError::InvalidCallable(callee)),
         }
     }
 
     #[inline]
-    fn call_function(&mut self, closure: Rc<Closure>, args_count: usize) -> Result<(), RuntimeError> {
-        if closure.function.arity != args_count {
+    fn call_function(
+        &mut self,
+        closure_val: LoxValue,
+        args_count: usize,
+    ) -> Result<(), RuntimeError> {
+        let closure_id = closure_val.try_closure(&self.objects)?;
+        let function_id = self.objects.closure(closure_id)?.function;
+        let function = self.objects.function(function_id)?;
+        if function.arity != args_count {
             return Err(RuntimeError::InvalidFunctionArgsCount(
-                closure.function.arity,
+                function.arity,
                 args_count,
             ));
         }
         if self.frame_count == FRAMES_MAX - 1 {
             return Err(RuntimeError::StackOverflow);
         }
-        self.frame_count += 1;
-        let slots_offset = self.stack.len() - args_count;
-        let frame = self.frame_mut();
-        frame.slots_offset = slots_offset;
-        frame.closure = closure;
+        let frame = &mut self.frames[self.frame_count];
+        frame.slots = self.stack_top - args_count;
+        frame.closure = closure_id;
         frame.ip = 0;
+        frame.chunk = Rc::clone(&function.chunk);
+        self.frame_count += 1;
         Ok(())
     }
 
     #[inline]
-    fn call_native(
-        &mut self,
-        func: &NativeFunction,
-        args_count: usize,
-    ) -> Result<(), RuntimeError> {
-        if func.arity != args_count {
+    fn call_native(&mut self, native_id: ObjId, args_count: usize) -> Result<(), RuntimeError> {
+        let native = self.objects.native(native_id)?;
+        if native.arity != args_count {
             return Err(RuntimeError::InvalidFunctionArgsCount(
-                func.arity, args_count,
+                native.arity,
+                args_count,
             ));
         }
-        let stack_len = self.stack.len();
-        let args_start = stack_len - args_count;
-        let result = (func.func)(&self.stack[args_start..])?;
-
-        self.stack.truncate(args_start - 1);
+        let args_start = self.stack_top - args_count;
+        let result = (native.func)(&self.stack[args_start..self.stack_top])?;
+        self.release_stack_range(args_start - 1, self.stack_top);
+        self.stack_top = args_start - 1;
         self.push(result);
         Ok(())
     }
 
     #[inline]
-    fn call_class(
-        &mut self,
-        class: &Rc<RefCell<Class>>,
-        args_count: usize,
-    ) -> Result<(), RuntimeError> {
-        let instance = Instance::new(class.clone());
-        let receiver = Rc::new(RefCell::new(instance));
+    fn call_class(&mut self, class_id: ObjId, args_count: usize) -> Result<(), RuntimeError> {
+        let instance = self.objects.alloc_instance(class_id)?;
+        self.set_stack(self.stack_top - args_count - 1, instance);
 
-        let stack_size = self.stack.len();
-        self.stack[stack_size - args_count - 1] = LoxValue::Instance(receiver.clone());
-        if let Some(init) = class.borrow().methods.get(scanner::INIT) {
-            self.call_value(init.clone(), args_count)
+        if let Some(init) = self.objects.class(class_id)?.methods.get(&self.init_string) {
+            self.call_value(*init, args_count)
         } else if args_count > 0 {
             Err(RuntimeError::InvalidFunctionArgsCount(0, args_count))
         } else {
@@ -765,41 +928,50 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn call_method(
         &mut self,
-        receiver: Rc<RefCell<Instance>>,
-        method: LoxValue,
+        receiver: LoxValue,
+        method: ObjId,
         args_count: usize,
     ) -> Result<(), RuntimeError> {
-        let stack_size = self.stack.len();
-        self.stack[stack_size - args_count - 1] = LoxValue::Instance(receiver);
-        self.call_value(method, args_count)
+        self.set_stack(self.stack_top - args_count - 1, receiver);
+        self.call_function(LoxValue::from_obj(method, ObjType::Closure), args_count)
     }
 
     #[inline]
-    fn set_global(&mut self, name: &str) -> Result<(), RuntimeError> {
-        if !self.globals.contains_key(name) {
-            return Err(RuntimeError::UndefinedGlobal(name.to_owned()));
+    fn set_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
+        let key = string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        if !self.globals.contains_key(&key) {
+            return Err(RuntimeError::UndefinedGlobal(
+                string_chars(&self.objects, key)?.to_owned(),
+            ));
         }
-        let stack_top = self.stack.len() - 1;
-        let value = self.stack[stack_top].clone();
-        self.globals.insert(name.to_owned(), value);
+        let value = self.stack[self.stack_top - 1];
+        if let Some(old) = self.globals.insert(key, value) {
+            self.objects.release(old);
+        }
+        self.objects.retain(value);
         Ok(())
     }
 
     #[inline]
-    fn get_global(&mut self, name: &str) -> Result<(), RuntimeError> {
-        let Some(val) = self.globals.get(name) else {
-            return Err(RuntimeError::UndefinedGlobal(name.to_owned()));
+    fn get_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
+        let key = string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        let Some(val) = self.globals.get(&key) else {
+            return Err(RuntimeError::UndefinedGlobal(
+                string_chars(&self.objects, key)?.to_owned(),
+            ));
         };
-        self.push(val.clone());
+        self.push(*val);
         Ok(())
     }
 
     #[inline]
-    fn define_global(&mut self, name: &str) -> Result<(), RuntimeError> {
-        let stack_top = self.stack.len() - 1;
-        let value = self.stack[stack_top].clone();
-        self.globals.insert(name.to_owned(), value);
-        self.pop()?;
+    fn define_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
+        let key = string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        self.stack_top -= 1;
+        let value = self.stack[self.stack_top];
+        if let Some(old) = self.globals.insert(key, value) {
+            self.objects.release(old);
+        }
         Ok(())
     }
 }
@@ -955,6 +1127,7 @@ for (var i = 1; i < 4; i = i + 1) {
 }
 
 f1(); // expect: 4
+      // expect: 4
       // expect: 1
 f2(); // expect: 4
       // expect: 2
@@ -1102,7 +1275,7 @@ a.m();
         // Arrange
         let mut stdout = Vec::new();
         let mut vm = VirtualMachine::new(&mut stdout);
-        vm.init();
+        vm.init().unwrap();
 
         // Act
         let actual = vm.interpret(input, true);

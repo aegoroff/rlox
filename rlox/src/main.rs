@@ -97,7 +97,7 @@ fn interpret(content: String) -> miette::Result<()> {
 
 fn compile(content: String, printcode: bool) -> miette::Result<()> {
     let mut vm = VirtualMachine::new(stdout());
-    vm.init();
+    vm.init().map_err(|e| miette::miette!("{e}"))?;
 
     vm.interpret(&content, printcode)
         .map_err(|err| err.with_source_code(content))
