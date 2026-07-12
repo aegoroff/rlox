@@ -306,8 +306,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(constants[ix]);
                 }
                 OpCode::Return => {
-                    self.stack_top -= 1;
-                    let value = self.stack[self.stack_top];
+                    let ret_slot = self.stack_top - 1;
+                    let value = self.stack[ret_slot];
+                    self.stack_top = ret_slot;
+                    let returns_slot0 =
+                        slots > 0 && value == self.stack[slots.saturating_sub(1)];
 
                     if slots > 0 {
                         self.close_upvalue_at(slots - 1)?;
@@ -316,15 +319,24 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
                     self.frame_count -= 1;
 
-                    let release_from = slots.saturating_sub(1);
-                    self.release_stack_range(release_from, self.stack_top);
-                    if self.frame_count == 0 {
+                    let release_from = if returns_slot0 {
+                        slots
+                    } else {
+                        slots.saturating_sub(1)
+                    };
+                    self.release_stack_range(release_from, ret_slot);
+                    self.objects.release(value);
+
+                    if returns_slot0 {
+                        self.stack_top = if slots > 0 { slots } else { 1 };
+                    } else {
                         self.stack_top = slots.saturating_sub(1);
                         self.push(value);
+                    }
+
+                    if self.frame_count == 0 {
                         return Ok(());
                     }
-                    self.stack_top = slots.saturating_sub(1);
-                    self.push(value);
                     continue;
                 }
                 OpCode::Negate => {
