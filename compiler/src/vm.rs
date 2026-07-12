@@ -3,12 +3,13 @@
 use crate::value::{Class, Closure, Instance, Upvalue};
 use crate::{RuntimeError, builtin};
 use crate::{
-    chunk::OpCode,
+    chunk::{Chunk, OpCode},
     compile::Parser,
     value::{Function, LoxValue, NativeFunction},
 };
 use fnv::FnvHashMap;
 use miette::LabeledSpan;
+use num_traits::FromPrimitive;
 use std::cell::RefCell;
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
@@ -161,22 +162,59 @@ impl<W: std::io::Write> VirtualMachine<W> {
         &mut self.frames[self.frame_count - 1]
     }
 
+    #[inline]
+    fn read_u16(code: &[u8], offset: usize) -> usize {
+        (code[offset + 1] as usize) << 8 | code[offset] as usize
+    }
+
+    #[inline]
+    fn read_u24(code: &[u8], offset: usize) -> usize {
+        (code[offset + 2] as usize) << 16
+            | (code[offset + 1] as usize) << 8
+            | code[offset] as usize
+    }
+
+    #[inline]
+    fn constant_index(code: &[u8], offset: usize, size: usize) -> usize {
+        match size {
+            CONST_SIZE => code[offset] as usize,
+            CONST_LONG_SIZE => Self::read_u24(code, offset),
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    fn runtime_error(
+        &mut self,
+        chunk: &Chunk,
+        instruction_ip: usize,
+        err: RuntimeError,
+    ) -> Result<(), RuntimeError> {
+        self.line = chunk.line(instruction_ip);
+        Err(err)
+    }
+
     fn run(&mut self) -> Result<(), RuntimeError> {
         while self.frame_count > 0 {
             let frame_index = self.frame_count - 1;
             let mut ip = self.frames[frame_index].ip;
-            let code_len = self.frames[frame_index].closure.function.chunk.code.len();
+            let slots_offset = self.frames[frame_index].slots_offset;
+            let closure = self.frames[frame_index].closure.clone();
+            let chunk = &closure.function.chunk;
+            let bytecode = chunk.code.as_slice();
+            let constants = chunk.constants.as_slice();
 
-            if ip >= code_len {
+            if ip >= bytecode.len() {
                 return Ok(());
             }
 
-            let code = self.frames[frame_index]
-                .closure
-                .function
-                .chunk
-                .read_opcode(ip)?;
-            self.line = self.frames[frame_index].closure.function.chunk.line(ip);
+            let instruction_ip = ip;
+            self.line = chunk.line(instruction_ip);
+            let Some(opcode) = OpCode::from_u8(bytecode[ip]) else {
+                return self.runtime_error(chunk, instruction_ip, RuntimeError::InvalidInstruction(instruction_ip));
+            };
+            ip += 1;
+
             #[cfg(feature = "disassembly")]
             {
                 print!("          ");
@@ -184,36 +222,22 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     print!("[ {value} ]");
                 }
                 println!();
-                self.frames[frame_index]
-                    .closure
-                    .function
-                    .chunk
-                    .disassembly_instruction(ip);
+                chunk.disassembly_instruction(instruction_ip);
             }
-            ip += 1;
 
-            match code {
+            match opcode {
                 OpCode::Constant => {
-                    let constant = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
                     ip += CONST_SIZE;
-                    self.push(constant);
+                    self.push(constants[ix].clone());
                 }
                 OpCode::ConstantLong => {
-                    let constant = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_LONG_SIZE);
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
                     ip += CONST_LONG_SIZE;
-                    self.push(constant);
+                    self.push(constants[ix].clone());
                 }
                 OpCode::Return => {
                     let value = self.pop()?;
-                    let slots_offset = self.frames[frame_index].slots_offset;
 
                     if slots_offset > 0 {
                         self.close_upvalue_at(slots_offset - 1);
@@ -294,14 +318,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::False => self.push(LoxValue::Bool(false)),
                 OpCode::Not => {
                     let value = self.pop()?;
-                    let val = value.is_falsey();
-                    self.push(LoxValue::Bool(val));
+                    self.push(LoxValue::Bool(value.is_falsey()));
                 }
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let result = a.equal(&b);
-                    self.push(LoxValue::Bool(result));
+                    self.push(LoxValue::Bool(a.equal(&b)));
                 }
                 OpCode::Less => {
                     let b = self.pop()?;
@@ -325,195 +347,119 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop()?;
                 }
                 OpCode::DefineGlobal => {
-                    let name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .ref_constant(ip, CONST_SIZE)
-                        .try_str()?
-                        .clone();
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
                     ip += CONST_SIZE;
-                    self.define_global(&name)?;
+                    let name = constants[ix].try_str()?;
+                    self.define_global(name)?;
                 }
                 OpCode::DefineGlobalLong => {
-                    let name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .ref_constant(ip, CONST_LONG_SIZE)
-                        .try_str()?
-                        .clone();
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
                     ip += CONST_LONG_SIZE;
-                    self.define_global(&name)?;
+                    let name = constants[ix].try_str()?;
+                    self.define_global(name)?;
                 }
                 OpCode::GetGlobal => {
-                    let name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .ref_constant(ip, CONST_SIZE)
-                        .try_str()?
-                        .clone();
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
                     ip += CONST_SIZE;
-                    self.get_global(&name)?;
+                    let name = constants[ix].try_str()?;
+                    self.get_global(name)?;
                 }
                 OpCode::GetGlobalLong => {
-                    let name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .ref_constant(ip, CONST_LONG_SIZE)
-                        .try_str()?
-                        .clone();
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
                     ip += CONST_LONG_SIZE;
-                    self.get_global(&name)?;
+                    let name = constants[ix].try_str()?;
+                    self.get_global(name)?;
                 }
                 OpCode::SetGlobal => {
-                    let name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .ref_constant(ip, CONST_SIZE)
-                        .try_str()?
-                        .clone();
+                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE);
                     ip += CONST_SIZE;
-                    self.set_global(&name)?;
+                    let name = constants[ix].try_str()?;
+                    self.set_global(name)?;
                 }
                 OpCode::SetGlobalLong => {
-                    let name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .ref_constant(ip, CONST_LONG_SIZE)
-                        .try_str()?
-                        .clone();
+                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE);
                     ip += CONST_LONG_SIZE;
-                    self.set_global(&name)?;
+                    let name = constants[ix].try_str()?;
+                    self.set_global(name)?;
                 }
                 OpCode::GetLocal => {
-                    let slots_offset = self.frames[frame_index].slots_offset;
-                    let frame_offset = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_byte(ip) as usize;
+                    let frame_offset = bytecode[ip] as usize;
                     ip += 1;
                     let local_index = slots_offset + frame_offset - 1;
                     self.push(self.stack[local_index].clone());
                 }
                 OpCode::SetLocal => {
-                    let slots_offset = self.frames[frame_index].slots_offset;
-                    let frame_offset = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_byte(ip) as usize;
+                    let frame_offset = bytecode[ip] as usize;
                     ip += 1;
                     let local_index = slots_offset + frame_offset - 1;
                     let stack_top = self.stack.len() - 1;
                     self.stack[local_index] = self.stack[stack_top].clone();
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_short(ip);
+                    let offset = Self::read_u16(bytecode, ip);
                     ip += 2;
-                    if self.stack[self.stack.len() - 1].is_falsey() {
+                    if self.stack.last().is_some_and(LoxValue::is_falsey) {
                         ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_short(ip);
+                    let offset = Self::read_u16(bytecode, ip);
                     ip += 2;
                     ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_short(ip);
+                    let offset = Self::read_u16(bytecode, ip);
                     ip += 2;
                     ip -= offset;
                 }
                 OpCode::Call => {
-                    let args_count = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_byte(ip) as usize;
+                    let args_count = bytecode[ip] as usize;
                     ip += 1;
                     self.frames[frame_index].ip = ip;
                     self.call_value_at(args_count)?;
                     continue;
                 }
                 OpCode::Invoke => {
-                    let method_name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str()?;
-                    let argc = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_byte(ip + 1);
+                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let method_name = constants[method_ix].try_str()?;
+                    let argc = bytecode[ip + 1];
                     ip += 2;
                     self.frames[frame_index].ip = ip;
                     self.invoke(method_name, argc)?;
                     continue;
                 }
                 OpCode::Closure => {
-                    let function_value = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, 1);
+                    let function_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    ip += CONST_SIZE;
+                    let function_value = constants[function_ix].clone();
                     let LoxValue::Function(function) = function_value else {
-                        return Err(RuntimeError::ExpectedFunction(function_value));
+                        return self.runtime_error(
+                            chunk,
+                            instruction_ip,
+                            RuntimeError::ExpectedFunction(function_value),
+                        );
                     };
                     let upvalues_count = function.upvalue_count;
-                    ip += 1;
 
-                    let mut closure = Closure::new(function);
-                    let slots_offset = self.frames[frame_index].slots_offset;
+                    let mut new_closure = Closure::new(function);
                     for _ in 0..upvalues_count {
-                        let is_local = self.frames[frame_index]
-                            .closure
-                            .function
-                            .chunk
-                            .read_byte(ip);
-                        let index = self.frames[frame_index]
-                            .closure
-                            .function
-                            .chunk
-                            .read_byte(ip + 1);
+                        let is_local = bytecode[ip];
+                        let index = bytecode[ip + 1];
                         ip += 2;
                         let upvalue = if is_local == 1 {
                             self.capture_upvalue(slots_offset + index as usize - 1)
                         } else {
-                            self.frames[frame_index].closure.upvalues[index as usize].clone()
+                            closure.upvalues[index as usize].clone()
                         };
-                        closure.upvalues.push(upvalue);
+                        new_closure.upvalues.push(upvalue);
                     }
 
-                    self.push(LoxValue::Closure(Rc::new(closure)));
+                    self.push(LoxValue::Closure(Rc::new(new_closure)));
                 }
                 OpCode::GetUpvalue => {
-                    let slot = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_byte(ip) as usize;
+                    let slot = bytecode[ip] as usize;
                     ip += 1;
-                    let upvalue = self.frames[frame_index].closure.upvalues[slot].clone();
+                    let upvalue = closure.upvalues[slot].clone();
                     let lox_value = match &*upvalue.borrow() {
                         Upvalue::Open(location) => self.stack[*location].clone(),
                         Upvalue::Closed(value) => value.clone(),
@@ -521,14 +467,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(lox_value);
                 }
                 OpCode::SetUpvalue => {
-                    let slot = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_byte(ip) as usize;
+                    let slot = bytecode[ip] as usize;
                     ip += 1;
                     let val = self.stack[self.stack.len() - 1].clone();
-                    let upvalue = self.frames[frame_index].closure.upvalues[slot].clone();
+                    let upvalue = closure.upvalues[slot].clone();
                     match &mut *upvalue.borrow_mut() {
                         Upvalue::Open(location) => self.stack[*location] = val,
                         Upvalue::Closed(value) => *value = val,
@@ -540,40 +482,33 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop()?;
                 }
                 OpCode::Class => {
-                    let class_name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
-                    let class_name = class_name.try_str()?;
+                    let class_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    ip += CONST_SIZE;
+                    let class_name = constants[class_ix].try_str()?;
                     let class = Class::new(class_name.clone());
                     self.push(LoxValue::Class(Rc::new(RefCell::new(class))));
-                    ip += 1;
                 }
                 OpCode::GetProperty => {
-                    let property = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
-                    let property = property.try_str()?;
+                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    ip += CONST_SIZE;
+                    let property = constants[prop_ix].try_str()?;
                     let instance = self.peek(0)?.try_instance()?.clone();
                     let value = Self::get_member(property, &instance);
                     if let Some(val) = value {
                         self.pop()?;
                         self.push(val);
                     } else {
-                        return Err(RuntimeError::UndefinedMethodOrProperty(property.clone()));
+                        return self.runtime_error(
+                            chunk,
+                            instruction_ip,
+                            RuntimeError::UndefinedMethodOrProperty(property.clone()),
+                        );
                     }
-                    ip += 1;
                 }
                 OpCode::SetProperty => {
-                    let property = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
-                    let property_name = property.try_str()?;
+                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    ip += CONST_SIZE;
+                    let property_name = constants[prop_ix].try_str()?;
                     let property_value = self.pop()?;
                     let instance = self.pop()?;
                     let instance = instance.try_instance()?;
@@ -582,17 +517,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         .fields
                         .insert(property_name.to_owned(), property_value.clone());
                     self.push(property_value);
-                    ip += 1;
                 }
                 OpCode::Method => {
-                    let method_name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str()?;
+                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    ip += CONST_SIZE;
+                    let method_name = constants[method_ix].try_str()?;
                     self.define_method(method_name)?;
-                    ip += 1;
                 }
                 OpCode::Inherit => {
                     let super_class = self.peek(1)?.try_class()?;
@@ -606,12 +536,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop()?;
                 }
                 OpCode::GetSuper => {
-                    let name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
-                    let name = name.try_str()?;
+                    let name_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    ip += CONST_SIZE;
+                    let name = constants[name_ix].try_str()?;
                     let super_class = self.pop()?;
                     let super_class = super_class.try_class()?;
                     let super_class = super_class.borrow();
@@ -619,34 +546,24 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let instance = self.pop()?;
                     let instance = instance.try_instance()?;
 
-                    let method = super_class
-                        .methods
-                        .get(name)
-                        .ok_or(RuntimeError::UndefinedMethodOrProperty(name.to_owned()))?;
+                    let method = super_class.methods.get(name).ok_or_else(|| {
+                        RuntimeError::UndefinedMethodOrProperty(name.to_owned())
+                    })?;
                     let bound = LoxValue::Bound(instance.clone(), Box::new(method.clone()));
                     self.push(bound);
-                    ip += 1;
                 }
                 OpCode::SuperInvoke => {
-                    let method_name = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_constant(ip, CONST_SIZE);
-                    let method_name = method_name.try_str()?;
-                    let argc = self.frames[frame_index]
-                        .closure
-                        .function
-                        .chunk
-                        .read_byte(ip + 1);
+                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE);
+                    let method_name = constants[method_ix].try_str()?;
+                    let argc = bytecode[ip + 1];
                     ip += 2;
                     self.frames[frame_index].ip = ip;
                     let super_class = self.pop()?;
                     let super_class = super_class.try_class()?;
                     let super_class = super_class.borrow();
-                    let method = super_class.methods.get(method_name).ok_or(
-                        RuntimeError::UndefinedMethodOrProperty(method_name.to_owned()),
-                    )?;
+                    let method = super_class.methods.get(method_name).ok_or_else(|| {
+                        RuntimeError::UndefinedMethodOrProperty(method_name.to_owned())
+                    })?;
                     self.call_value(method.clone(), argc as usize)?;
                     continue;
                 }

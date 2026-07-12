@@ -24,17 +24,28 @@ pub enum LoxValue {
 const ERROR_MARGIN: f64 = 0.00001;
 
 impl LoxValue {
+    #[inline]
     #[must_use]
     pub fn equal(&self, other: &LoxValue) -> bool {
+        use LoxValue::{
+            Bool, Bound, Class, Closure, Function, Instance, NaN, Native, Nil, Number, String,
+        };
+        use core::mem::discriminant;
+
         match (self, other) {
-            (LoxValue::Number(l), LoxValue::Number(r)) => (l - r).abs() < ERROR_MARGIN,
-            (LoxValue::String(l), LoxValue::String(r)) => l == r,
-            // nil and false considered same (both falsey bool-like values)
-            (LoxValue::Bool(_) | LoxValue::Nil, LoxValue::Bool(_) | LoxValue::Nil) => {
-                let l = self.try_bool().unwrap_or(false);
-                let r = other.try_bool().unwrap_or(false);
-                l == r
-            }
+            (Bool(b), Nil) | (Nil, Bool(b)) => !b,
+            _ if discriminant(self) != discriminant(other) => false,
+            (Number(l), Number(r)) => (l - r).abs() < ERROR_MARGIN,
+            (String(l), String(r)) => l == r,
+            (Bool(l), Bool(r)) => l == r,
+            (Nil, Nil) => true,
+            (Function(l), Function(r)) => Rc::ptr_eq(l, r),
+            (Closure(l), Closure(r)) => Rc::ptr_eq(l, r),
+            (Class(l), Class(r)) => Rc::ptr_eq(l, r),
+            (Instance(l), Instance(r)) => Rc::ptr_eq(l, r),
+            (Native(l), Native(r)) => l == r,
+            (Bound(l, m), Bound(r, n)) => Rc::ptr_eq(l, r) && *m == *n,
+            (NaN, NaN) => true,
             _ => false,
         }
     }
