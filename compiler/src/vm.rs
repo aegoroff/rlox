@@ -115,23 +115,22 @@ impl<W: std::io::Write> VirtualMachine<W> {
         self.push(closure_val);
         self.call_function(closure_val, 0)
             .map_err(|e| miette::miette!("{e}"))?;
-        self.run()
-            .map_err(|e| {
-                let mut stack_trace = Vec::with_capacity(self.frame_count);
-                for i in 0..self.frame_count {
-                    if let Ok(frame_name) = self.format_frame(i) {
-                        stack_trace.push(frame_name);
-                    }
+        self.run().map_err(|e| {
+            let mut stack_trace = Vec::with_capacity(self.frame_count);
+            for i in 0..self.frame_count {
+                if let Ok(frame_name) = self.format_frame(i) {
+                    stack_trace.push(frame_name);
                 }
-                stack_trace.reverse();
-                miette::miette!(
-                    labels = vec![LabeledSpan::at(
-                        scanner::Lexer::new(content).line_span(self.line),
-                        format!("{e}. Stack trace:\n{}", stack_trace.join("\n"))
-                    )],
-                    "Runtime error"
-                )
-            })
+            }
+            stack_trace.reverse();
+            miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    scanner::Lexer::new(content).line_span(self.line),
+                    format!("{e}. Stack trace:\n{}", stack_trace.join("\n"))
+                )],
+                "Runtime error"
+            )
+        })
     }
 
     fn format_frame(&self, index: usize) -> Result<String, RuntimeError> {
@@ -323,7 +322,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
                     self.frame_count -= 1;
 
-                    let release_from = if is_init { slots } else { slots.saturating_sub(1) };
+                    let release_from = if is_init {
+                        slots
+                    } else {
+                        slots.saturating_sub(1)
+                    };
                     self.release_stack_range(release_from, self.stack_top);
                     if self.frame_count == 0 {
                         if !is_init {
@@ -640,11 +643,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     })?;
                     let super_class_id = self.pop()?.try_class(&self.objects)?;
                     let instance_id = self.pop()?.try_instance(&self.objects)?;
-                    let Some(method) = self
-                        .objects
-                        .class(super_class_id)?
-                        .methods
-                        .get(&name_id)
+                    let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
                     else {
                         return Err(RuntimeError::UndefinedMethodOrProperty(
                             string_chars(&self.objects, name_id)?.to_owned(),
@@ -669,11 +668,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         RuntimeError::ExpectedString(method_name)
                     })?;
                     let super_class_id = self.pop()?.try_class(&self.objects)?;
-                    let Some(method) = self
-                        .objects
-                        .class(super_class_id)?
-                        .methods
-                        .get(&name_id)
+                    let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
                     else {
                         return Err(RuntimeError::UndefinedMethodOrProperty(
                             string_chars(&self.objects, name_id)?.to_owned(),
