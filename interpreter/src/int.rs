@@ -853,13 +853,11 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Interpreter<'
             return Err(LoxError::Error(miette!("Invalid identifier")));
         };
         if let Some(v) = initializer {
-            match v.accept(self) {
-                Ok(val) => {
-                    // var id = Class(); or var id = 1; or var id;
-                    // so val may be Class() call or other value
-                    self.environment.borrow_mut().define((*id).to_string(), val);
-                }
-                Err(e) => return Err(e),
+            {
+                let val = v.accept(self)?;
+                // var id = Class(); or var id = 1; or var id;
+                // so val may be Class() call or other value
+                self.environment.borrow_mut().define((*id).to_string(), val);
             }
         } else {
             self.environment
