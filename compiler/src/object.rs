@@ -187,12 +187,11 @@ impl ObjectStore {
         let chars = text.into();
         let hash = hash_string(&chars);
         let key = (hash, chars.len());
-        if let Some(&existing_id) = self.strings.get(&key) {
-            if let Ok(existing) = self.string(existing_id) {
-                if existing.chars == chars {
-                    return Ok(LoxValue::from_obj(existing_id, ObjType::String));
-                }
-            }
+        if let Some(&existing_id) = self.strings.get(&key)
+            && let Ok(existing) = self.string(existing_id)
+            && existing.chars == chars
+        {
+            return Ok(LoxValue::from_obj(existing_id, ObjType::String));
         }
 
         let id = self.push_object(HeapObject::String(ObjString { chars, hash }))?;

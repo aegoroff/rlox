@@ -598,10 +598,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         let instance = self.objects.instance_mut(instance_id)?;
                         instance.fields.insert(property_id, property_value)
                     };
-                    if let Some(old) = old {
-                        if old != property_value {
-                            self.objects.release(old);
-                        }
+                    if let Some(old) = old
+                        && old != property_value
+                    {
+                        self.objects.release(old);
                     }
                     self.push(property_value);
                 }
