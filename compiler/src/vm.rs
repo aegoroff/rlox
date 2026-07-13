@@ -263,412 +263,419 @@ impl<W: std::io::Write> VirtualMachine<W> {
             let bytecode = chunk.code.as_slice();
             let constants = chunk.constants.as_slice();
 
-            if ip >= bytecode.len() {
-                return Ok(());
-            }
+            'run_insns: loop {
+                if ip >= bytecode.len() {
+                    return Ok(());
+                }
 
-            let instruction_ip = ip;
-            self.line = chunk.line(instruction_ip);
-            let Some(opcode) = OpCode::from_u8(bytecode[ip]) else {
-                return self
-                    .runtime_error(self.line, RuntimeError::InvalidInstruction(instruction_ip));
-            };
-            ip += 1;
-
-            #[cfg(feature = "disassembly")]
-            {
-                print!("          ");
-                for i in 0..self.stack_top {
-                    print!(
-                        "[ {} ]",
-                        FormattedValue {
-                            store: &self.objects,
-                            value: self.stack[i],
-                        }
+                let instruction_ip = ip;
+                self.line = chunk.line(instruction_ip);
+                let Some(opcode) = OpCode::from_u8(bytecode[ip]) else {
+                    return self.runtime_error(
+                        self.line,
+                        RuntimeError::InvalidInstruction(instruction_ip),
                     );
-                }
-                println!();
-                let closure_id = self.frames[frame_index].closure;
-                let function_id = self.objects.closure(closure_id)?.function;
-                let disasm_chunk = self.objects.function(function_id)?.chunk.clone();
-                disasm_chunk.disassembly_instruction(instruction_ip, &self.objects);
-            }
+                };
+                ip += 1;
 
-            match opcode {
-                OpCode::Constant => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    self.push(constants[ix]);
-                }
-                OpCode::ConstantLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
-                    ip += CONST_LONG_SIZE;
-                    self.push(constants[ix]);
-                }
-                OpCode::Return => {
-                    let ret_slot = self.stack_top - 1;
-                    let value = self.stack[ret_slot];
-                    self.stack_top = ret_slot;
-                    let returns_slot0 = slots > 0 && value == self.stack[slots.saturating_sub(1)];
-
-                    if slots > 0 {
-                        self.close_upvalue_at(slots - 1)?;
-                    }
-                    self.close_upvalues(slots)?;
-
-                    self.frame_count -= 1;
-
-                    let release_from = if returns_slot0 {
-                        slots
-                    } else {
-                        slots.saturating_sub(1)
-                    };
-                    self.release_stack_range(release_from, ret_slot);
-                    self.objects.release(value);
-
-                    if returns_slot0 {
-                        self.stack_top = if slots > 0 { slots } else { 1 };
-                    } else {
-                        self.stack_top = slots.saturating_sub(1);
-                        self.push(value);
-                    }
-
-                    if self.frame_count == 0 {
-                        return Ok(());
-                    }
-                    continue;
-                }
-                OpCode::Negate => {
-                    let value = self.pop()?;
-                    let value = value.try_num()?;
-                    self.push(LoxValue::number(-value));
-                }
-                OpCode::Add => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    if let Ok(l_id) = a.try_str() {
-                        let l = string_chars(&self.objects, l_id)?;
-                        let r = if b.is_nil() {
-                            String::new()
-                        } else {
-                            self.value_to_string(b)
-                        };
-                        let result = self.objects.intern_string(l.to_owned() + &r)?;
-                        self.push(result);
-                    } else if let Ok(r_id) = b.try_str() {
-                        let r = string_chars(&self.objects, r_id)?;
-                        let l = if a.is_nil() {
-                            String::new()
-                        } else {
-                            self.value_to_string(a)
-                        };
-                        let result = self.objects.intern_string(l.clone() + r)?;
-                        self.push(result);
-                    } else {
-                        let l = a.try_num()?;
-                        let r = b.try_num()?;
-                        self.push(LoxValue::number(l + r));
-                    }
-                }
-                OpCode::Subtract => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::number(a.try_num()? - b.try_num()?));
-                }
-                OpCode::Multiply => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::number(a.try_num()? * b.try_num()?));
-                }
-                OpCode::Divide => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    let a = a.try_num()?;
-                    let b = b.try_num()?;
-                    if b == 0.0 {
-                        self.push(LoxValue::number(f64::NAN));
-                    } else {
-                        self.push(LoxValue::number(a / b));
-                    }
-                }
-                OpCode::Nil => self.push(LoxValue::NIL),
-                OpCode::True => self.push(LoxValue::TRUE),
-                OpCode::False => self.push(LoxValue::FALSE),
-                OpCode::Not => {
-                    let value = self.pop()?;
-                    self.push(LoxValue::bool_val(value.is_falsey()));
-                }
-                OpCode::Equal => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::bool_val(a.equal(b)));
-                }
-                OpCode::Less => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::bool_val(a.less(b, &self.objects)?));
-                }
-                OpCode::Greater => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    let lt = a.less(b, &self.objects)?;
-                    let gt = !lt && !a.equal(b);
-                    self.push(LoxValue::bool_val(gt));
-                }
-                OpCode::Print => {
-                    let value = self.peek(0)?;
-                    self.write_value(value)?;
-                    self.pop()?;
-                }
-                OpCode::Pop => {
-                    self.pop()?;
-                }
-                OpCode::DefineGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    self.define_global(constants[ix])?;
-                }
-                OpCode::DefineGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
-                    ip += CONST_LONG_SIZE;
-                    self.define_global(constants[ix])?;
-                }
-                OpCode::GetGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    self.get_global(constants[ix])?;
-                }
-                OpCode::GetGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
-                    ip += CONST_LONG_SIZE;
-                    self.get_global(constants[ix])?;
-                }
-                OpCode::SetGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    self.set_global(constants[ix])?;
-                }
-                OpCode::SetGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
-                    ip += CONST_LONG_SIZE;
-                    self.set_global(constants[ix])?;
-                }
-                OpCode::GetLocal => {
-                    let frame_offset = bytecode[ip] as usize;
-                    ip += 1;
-                    let local_index = slots + frame_offset - 1;
-                    self.push(self.stack[local_index]);
-                }
-                OpCode::SetLocal => {
-                    let frame_offset = bytecode[ip] as usize;
-                    ip += 1;
-                    let local_index = slots + frame_offset - 1;
-                    let value = self.stack[self.stack_top - 1];
-                    self.set_stack(local_index, value);
-                }
-                OpCode::JumpIfFalse => {
-                    let offset = Self::read_u16(bytecode, ip);
-                    ip += 2;
-                    if self.peek(0)?.is_falsey() {
-                        ip += offset;
-                    }
-                }
-                OpCode::Jump => {
-                    let offset = Self::read_u16(bytecode, ip);
-                    ip += 2;
-                    ip += offset;
-                }
-                OpCode::Loop => {
-                    let offset = Self::read_u16(bytecode, ip);
-                    ip += 2;
-                    ip -= offset;
-                }
-                OpCode::Call => {
-                    let args_count = bytecode[ip] as usize;
-                    ip += 1;
-                    self.frames[frame_index].ip = ip;
-                    self.call_value_at(args_count)?;
-                    continue;
-                }
-                OpCode::Invoke => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    let method_name = constants[method_ix];
-                    let argc = bytecode[ip + 1];
-                    ip += 2;
-                    self.frames[frame_index].ip = ip;
-                    self.invoke(method_name, argc)?;
-                    continue;
-                }
-                OpCode::Closure => {
-                    let function_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    let function_value = constants[function_ix];
-                    let function_id = function_value.try_function()?;
-                    let closure_val = self.objects.alloc_closure(function_id)?;
-                    let new_closure_id = closure_val.try_closure()?;
-                    let upvalues_count = self.objects.function(function_id)?.upvalue_count;
-                    let mut upvalues = Vec::with_capacity(upvalues_count);
-
-                    for _ in 0..upvalues_count {
-                        let is_local = bytecode[ip];
-                        let index = bytecode[ip + 1];
-                        ip += 2;
-                        let upvalue = if is_local == 1 {
-                            self.capture_upvalue(slots + index as usize - 1)?
-                        } else {
-                            self.objects.closure(closure_id)?.upvalues[index as usize]
-                        };
-                        upvalues.push(upvalue);
-                    }
-
-                    self.objects.closure_mut(new_closure_id)?.upvalues = upvalues;
-                    self.push(closure_val);
-                }
-                OpCode::GetUpvalue => {
-                    let slot = bytecode[ip] as usize;
-                    ip += 1;
-                    let upvalue_id = self.objects.closure(closure_id)?.upvalues[slot];
-                    let upvalue = self.objects.upvalue(upvalue_id)?;
-                    let lox_value = match upvalue.location {
-                        Some(location) => self.stack[location],
-                        None => upvalue.closed,
-                    };
-                    self.push(lox_value);
-                }
-                OpCode::SetUpvalue => {
-                    let slot = bytecode[ip] as usize;
-                    ip += 1;
-                    let val = self.stack[self.stack_top - 1];
-                    let upvalue_id = self.objects.closure(closure_id)?.upvalues[slot];
-                    let location = self.objects.upvalue(upvalue_id)?.location;
-                    if let Some(location) = location {
-                        self.set_stack(location, val);
-                    } else {
-                        let old_closed = {
-                            let upvalue = self.objects.upvalue_mut(upvalue_id)?;
-                            let old = upvalue.closed;
-                            upvalue.closed = val;
-                            old
-                        };
-                        self.objects.release(old_closed);
-                        self.objects.retain(val);
-                    }
-                }
-                OpCode::CloseUpvalue => {
-                    let location = self.stack_top - 1;
-                    self.close_upvalues(location)?;
-                    self.pop()?;
-                }
-                OpCode::Class => {
-                    let class_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    let class_name = constants[class_ix];
-                    let class = self.objects.alloc_class(class_name)?;
-                    self.push(class);
-                }
-                OpCode::GetProperty => {
-                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    let property_id = constants[prop_ix].try_str()?;
-                    let instance_id = self.peek(0)?.try_instance()?;
-                    if let Some(val) =
-                        Self::get_member(instance_id, property_id, &mut self.objects)?
-                    {
-                        self.pop()?;
-                        self.push(val);
-                    } else {
-                        let name = string_chars(&self.objects, property_id)?.to_owned();
-                        return self.runtime_error(
-                            self.line,
-                            RuntimeError::UndefinedMethodOrProperty(name),
+                #[cfg(feature = "disassembly")]
+                {
+                    print!("          ");
+                    for i in 0..self.stack_top {
+                        print!(
+                            "[ {} ]",
+                            FormattedValue {
+                                store: &self.objects,
+                                value: self.stack[i],
+                            }
                         );
                     }
+                    println!();
+                    let closure_id = self.frames[frame_index].closure;
+                    let function_id = self.objects.closure(closure_id)?.function;
+                    let disasm_chunk = self.objects.function(function_id)?.chunk.clone();
+                    disasm_chunk.disassembly_instruction(instruction_ip, &self.objects);
                 }
-                OpCode::SetProperty => {
-                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    let property_id = constants[prop_ix].try_str().inspect_err(|_| {
-                        self.line = chunk.line(instruction_ip);
-                    })?;
-                    self.objects.retain(self.stack[self.stack_top - 1]);
-                    let property_value = self.pop()?;
-                    let instance_id = self.pop()?.try_instance()?;
-                    let old = {
-                        let instance = self.objects.instance_mut(instance_id)?;
-                        instance.fields.insert(property_id, property_value)
-                    };
-                    if let Some(old) = old
-                        && old != property_value
-                    {
-                        self.objects.release(old);
+
+                match opcode {
+                    OpCode::Constant => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        self.push(constants[ix]);
                     }
-                    self.push(property_value);
-                }
-                OpCode::Method => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    self.define_method(constants[method_ix])?;
-                }
-                OpCode::Inherit => {
-                    let super_class_id = self.peek(1)?.try_class()?;
-                    let sub_class_id = self.peek(0)?.try_class()?;
-                    let super_methods = self.objects.class(super_class_id)?.methods.clone();
-                    for (name, method) in super_methods {
-                        if !self
-                            .objects
-                            .class(sub_class_id)?
-                            .methods
-                            .contains_key(&name)
-                        {
-                            self.objects.retain(method);
-                            self.objects
-                                .class_mut(sub_class_id)?
-                                .methods
-                                .insert(name, method);
+                    OpCode::ConstantLong => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                        ip += CONST_LONG_SIZE;
+                        self.push(constants[ix]);
+                    }
+                    OpCode::Return => {
+                        let ret_slot = self.stack_top - 1;
+                        let value = self.stack[ret_slot];
+                        self.stack_top = ret_slot;
+                        let returns_slot0 =
+                            slots > 0 && value == self.stack[slots.saturating_sub(1)];
+
+                        if slots > 0 {
+                            self.close_upvalue_at(slots - 1)?;
+                        }
+                        self.close_upvalues(slots)?;
+
+                        self.frame_count -= 1;
+
+                        let release_from = if returns_slot0 {
+                            slots
+                        } else {
+                            slots.saturating_sub(1)
+                        };
+                        self.release_stack_range(release_from, ret_slot);
+                        self.objects.release(value);
+
+                        if returns_slot0 {
+                            self.stack_top = if slots > 0 { slots } else { 1 };
+                        } else {
+                            self.stack_top = slots.saturating_sub(1);
+                            self.push(value);
+                        }
+
+                        if self.frame_count == 0 {
+                            return Ok(());
+                        }
+                        break 'run_insns;
+                    }
+                    OpCode::Negate => {
+                        let value = self.pop()?;
+                        let value = value.try_num()?;
+                        self.push(LoxValue::number(-value));
+                    }
+                    OpCode::Add => {
+                        let b = self.pop()?;
+                        let a = self.pop()?;
+                        if let Ok(l_id) = a.try_str() {
+                            let l = string_chars(&self.objects, l_id)?;
+                            let r = if b.is_nil() {
+                                String::new()
+                            } else {
+                                self.value_to_string(b)
+                            };
+                            let result = self.objects.intern_string(l.to_owned() + &r)?;
+                            self.push(result);
+                        } else if let Ok(r_id) = b.try_str() {
+                            let r = string_chars(&self.objects, r_id)?;
+                            let l = if a.is_nil() {
+                                String::new()
+                            } else {
+                                self.value_to_string(a)
+                            };
+                            let result = self.objects.intern_string(l.clone() + r)?;
+                            self.push(result);
+                        } else {
+                            let l = a.try_num()?;
+                            let r = b.try_num()?;
+                            self.push(LoxValue::number(l + r));
                         }
                     }
-                    self.pop()?;
+                    OpCode::Subtract => {
+                        let b = self.pop()?;
+                        let a = self.pop()?;
+                        self.push(LoxValue::number(a.try_num()? - b.try_num()?));
+                    }
+                    OpCode::Multiply => {
+                        let b = self.pop()?;
+                        let a = self.pop()?;
+                        self.push(LoxValue::number(a.try_num()? * b.try_num()?));
+                    }
+                    OpCode::Divide => {
+                        let b = self.pop()?;
+                        let a = self.pop()?;
+                        let a = a.try_num()?;
+                        let b = b.try_num()?;
+                        if b == 0.0 {
+                            self.push(LoxValue::number(f64::NAN));
+                        } else {
+                            self.push(LoxValue::number(a / b));
+                        }
+                    }
+                    OpCode::Nil => self.push(LoxValue::NIL),
+                    OpCode::True => self.push(LoxValue::TRUE),
+                    OpCode::False => self.push(LoxValue::FALSE),
+                    OpCode::Not => {
+                        let value = self.pop()?;
+                        self.push(LoxValue::bool_val(value.is_falsey()));
+                    }
+                    OpCode::Equal => {
+                        let b = self.pop()?;
+                        let a = self.pop()?;
+                        self.push(LoxValue::bool_val(a.equal(b)));
+                    }
+                    OpCode::Less => {
+                        let b = self.pop()?;
+                        let a = self.pop()?;
+                        self.push(LoxValue::bool_val(a.less(b, &self.objects)?));
+                    }
+                    OpCode::Greater => {
+                        let b = self.pop()?;
+                        let a = self.pop()?;
+                        let lt = a.less(b, &self.objects)?;
+                        let gt = !lt && !a.equal(b);
+                        self.push(LoxValue::bool_val(gt));
+                    }
+                    OpCode::Print => {
+                        let value = self.peek(0)?;
+                        self.write_value(value)?;
+                        self.pop()?;
+                    }
+                    OpCode::Pop => {
+                        self.pop()?;
+                    }
+                    OpCode::DefineGlobal => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        self.define_global(constants[ix])?;
+                    }
+                    OpCode::DefineGlobalLong => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                        ip += CONST_LONG_SIZE;
+                        self.define_global(constants[ix])?;
+                    }
+                    OpCode::GetGlobal => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        self.get_global(constants[ix])?;
+                    }
+                    OpCode::GetGlobalLong => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                        ip += CONST_LONG_SIZE;
+                        self.get_global(constants[ix])?;
+                    }
+                    OpCode::SetGlobal => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        self.set_global(constants[ix])?;
+                    }
+                    OpCode::SetGlobalLong => {
+                        let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                        ip += CONST_LONG_SIZE;
+                        self.set_global(constants[ix])?;
+                    }
+                    OpCode::GetLocal => {
+                        let frame_offset = bytecode[ip] as usize;
+                        ip += 1;
+                        let local_index = slots + frame_offset - 1;
+                        self.push(self.stack[local_index]);
+                    }
+                    OpCode::SetLocal => {
+                        let frame_offset = bytecode[ip] as usize;
+                        ip += 1;
+                        let local_index = slots + frame_offset - 1;
+                        let value = self.stack[self.stack_top - 1];
+                        self.set_stack(local_index, value);
+                    }
+                    OpCode::JumpIfFalse => {
+                        let offset = Self::read_u16(bytecode, ip);
+                        ip += 2;
+                        if self.peek(0)?.is_falsey() {
+                            ip += offset;
+                        }
+                    }
+                    OpCode::Jump => {
+                        let offset = Self::read_u16(bytecode, ip);
+                        ip += 2;
+                        ip += offset;
+                    }
+                    OpCode::Loop => {
+                        let offset = Self::read_u16(bytecode, ip);
+                        ip += 2;
+                        ip -= offset;
+                    }
+                    OpCode::Call => {
+                        let args_count = bytecode[ip] as usize;
+                        ip += 1;
+                        self.frames[frame_index].ip = ip;
+                        self.call_value_at(args_count)?;
+                        break 'run_insns;
+                    }
+                    OpCode::Invoke => {
+                        let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        let method_name = constants[method_ix];
+                        let argc = bytecode[ip + 1];
+                        ip += 2;
+                        self.frames[frame_index].ip = ip;
+                        self.invoke(method_name, argc)?;
+                        break 'run_insns;
+                    }
+                    OpCode::Closure => {
+                        let const_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        let function_value = constants[const_ix];
+                        let func_id = function_value.try_function()?;
+                        let closure_val = self.objects.alloc_closure(func_id)?;
+                        let new_closure_id = closure_val.try_closure()?;
+                        let upvalues_count = self.objects.function(func_id)?.upvalue_count;
+                        let mut upvalues = Vec::with_capacity(upvalues_count);
+
+                        for _ in 0..upvalues_count {
+                            let is_local = bytecode[ip];
+                            let index = bytecode[ip + 1];
+                            ip += 2;
+                            let upvalue = if is_local == 1 {
+                                self.capture_upvalue(slots + index as usize - 1)?
+                            } else {
+                                self.objects.closure(closure_id)?.upvalues[index as usize]
+                            };
+                            upvalues.push(upvalue);
+                        }
+
+                        self.objects.closure_mut(new_closure_id)?.upvalues = upvalues;
+                        self.push(closure_val);
+                    }
+                    OpCode::GetUpvalue => {
+                        let slot = bytecode[ip] as usize;
+                        ip += 1;
+                        let upvalue_id = self.objects.closure(closure_id)?.upvalues[slot];
+                        let upvalue = self.objects.upvalue(upvalue_id)?;
+                        let lox_value = match upvalue.location {
+                            Some(location) => self.stack[location],
+                            None => upvalue.closed,
+                        };
+                        self.push(lox_value);
+                    }
+                    OpCode::SetUpvalue => {
+                        let slot = bytecode[ip] as usize;
+                        ip += 1;
+                        let val = self.stack[self.stack_top - 1];
+                        let upvalue_id = self.objects.closure(closure_id)?.upvalues[slot];
+                        let location = self.objects.upvalue(upvalue_id)?.location;
+                        if let Some(location) = location {
+                            self.set_stack(location, val);
+                        } else {
+                            let old_closed = {
+                                let upvalue = self.objects.upvalue_mut(upvalue_id)?;
+                                let old = upvalue.closed;
+                                upvalue.closed = val;
+                                old
+                            };
+                            self.objects.release(old_closed);
+                            self.objects.retain(val);
+                        }
+                    }
+                    OpCode::CloseUpvalue => {
+                        let location = self.stack_top - 1;
+                        self.close_upvalues(location)?;
+                        self.pop()?;
+                    }
+                    OpCode::Class => {
+                        let class_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        let class_name = constants[class_ix];
+                        let class = self.objects.alloc_class(class_name)?;
+                        self.push(class);
+                    }
+                    OpCode::GetProperty => {
+                        let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        let property_id = constants[prop_ix].try_str()?;
+                        let instance_id = self.peek(0)?.try_instance()?;
+                        if let Some(val) =
+                            Self::get_member(instance_id, property_id, &mut self.objects)?
+                        {
+                            self.pop()?;
+                            self.push(val);
+                        } else {
+                            let name = string_chars(&self.objects, property_id)?.to_owned();
+                            return self.runtime_error(
+                                self.line,
+                                RuntimeError::UndefinedMethodOrProperty(name),
+                            );
+                        }
+                    }
+                    OpCode::SetProperty => {
+                        let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        let property_id = constants[prop_ix].try_str().inspect_err(|_| {
+                            self.line = chunk.line(instruction_ip);
+                        })?;
+                        self.objects.retain(self.stack[self.stack_top - 1]);
+                        let property_value = self.pop()?;
+                        let instance_id = self.pop()?.try_instance()?;
+                        let old = {
+                            let instance = self.objects.instance_mut(instance_id)?;
+                            instance.fields.insert(property_id, property_value)
+                        };
+                        if let Some(old) = old
+                            && old != property_value
+                        {
+                            self.objects.release(old);
+                        }
+                        self.push(property_value);
+                    }
+                    OpCode::Method => {
+                        let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        self.define_method(constants[method_ix])?;
+                    }
+                    OpCode::Inherit => {
+                        let super_class_id = self.peek(1)?.try_class()?;
+                        let sub_class_id = self.peek(0)?.try_class()?;
+                        let super_methods = self.objects.class(super_class_id)?.methods.clone();
+                        for (name, method) in super_methods {
+                            if !self
+                                .objects
+                                .class(sub_class_id)?
+                                .methods
+                                .contains_key(&name)
+                            {
+                                self.objects.retain(method);
+                                self.objects
+                                    .class_mut(sub_class_id)?
+                                    .methods
+                                    .insert(name, method);
+                            }
+                        }
+                        self.pop()?;
+                    }
+                    OpCode::GetSuper => {
+                        let const_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        ip += CONST_SIZE;
+                        let name_id = constants[const_ix].try_str().inspect_err(|_| {
+                            self.line = chunk.line(instruction_ip);
+                        })?;
+                        let super_class_id = self.pop()?.try_class()?;
+                        let instance_id = self.pop()?.try_instance()?;
+                        let Some(method) =
+                            self.objects.class(super_class_id)?.methods.get(&name_id)
+                        else {
+                            return Err(RuntimeError::UndefinedMethodOrProperty(
+                                string_chars(&self.objects, name_id)?.to_owned(),
+                            ));
+                        };
+                        let method_closure_id = method.try_closure()?;
+                        let bound = self.objects.alloc_bound_method(
+                            LoxValue::from_obj(instance_id, ObjType::Instance),
+                            method_closure_id,
+                        )?;
+                        self.push(bound);
+                    }
+                    OpCode::SuperInvoke => {
+                        let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                        let method_name = constants[method_ix];
+                        let argc = bytecode[ip + 1];
+                        ip += 2;
+                        self.frames[frame_index].ip = ip;
+                        let name_id = method_name.try_str()?;
+                        let super_class_id = self.pop()?.try_class()?;
+                        let Some(method) =
+                            self.objects.class(super_class_id)?.methods.get(&name_id)
+                        else {
+                            return Err(RuntimeError::UndefinedMethodOrProperty(
+                                string_chars(&self.objects, name_id)?.to_owned(),
+                            ));
+                        };
+                        self.call_value(*method, argc as usize)?;
+                        break 'run_insns;
+                    }
                 }
-                OpCode::GetSuper => {
-                    let name_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    ip += CONST_SIZE;
-                    let name_id = constants[name_ix].try_str().inspect_err(|_| {
-                        self.line = chunk.line(instruction_ip);
-                    })?;
-                    let super_class_id = self.pop()?.try_class()?;
-                    let instance_id = self.pop()?.try_instance()?;
-                    let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
-                    else {
-                        return Err(RuntimeError::UndefinedMethodOrProperty(
-                            string_chars(&self.objects, name_id)?.to_owned(),
-                        ));
-                    };
-                    let method_closure_id = method.try_closure()?;
-                    let bound = self.objects.alloc_bound_method(
-                        LoxValue::from_obj(instance_id, ObjType::Instance),
-                        method_closure_id,
-                    )?;
-                    self.push(bound);
-                }
-                OpCode::SuperInvoke => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    let method_name = constants[method_ix];
-                    let argc = bytecode[ip + 1];
-                    ip += 2;
-                    self.frames[frame_index].ip = ip;
-                    let name_id = method_name.try_str()?;
-                    let super_class_id = self.pop()?.try_class()?;
-                    let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
-                    else {
-                        return Err(RuntimeError::UndefinedMethodOrProperty(
-                            string_chars(&self.objects, name_id)?.to_owned(),
-                        ));
-                    };
-                    self.call_value(*method, argc as usize)?;
-                    continue;
-                }
+                self.frames[frame_index].ip = ip;
             }
-            self.frames[frame_index].ip = ip;
         }
         Ok(())
     }
