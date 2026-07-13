@@ -588,7 +588,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.define_method(constants[method_ix])?;
                     }
                     OpCode::Inherit => {
-                        let super_class_id = self.peek(1)?.try_class()?;
+                        let super_class_id = match self.peek(1)?.try_class() {
+                            Ok(id) => id,
+                            Err(_) => return Err(RuntimeError::SuperclassMustBeClass),
+                        };
                         let sub_class_id = self.peek(0)?.try_class()?;
                         let super_methods = self.objects.class(super_class_id)?.methods.clone();
                         for (name, method) in super_methods {
