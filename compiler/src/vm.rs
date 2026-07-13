@@ -570,7 +570,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         })?;
                         self.objects.retain(self.stack[self.stack_top - 1]);
                         let property_value = self.pop()?;
-                        let instance_id = self.pop()?.try_instance()?;
+                        let instance_id = self.pop()?.try_instance_field()?;
                         let old = {
                             let instance = self.objects.instance_mut(instance_id)?;
                             instance.fields.insert(property_id, property_value)

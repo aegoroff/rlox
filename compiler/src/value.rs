@@ -192,6 +192,14 @@ impl LoxValue {
         }
     }
 
+    pub fn try_instance_field(self) -> Result<ObjId, RuntimeError> {
+        if self.obj_type() == Some(ObjType::Instance) {
+            Ok(self.obj_id().ok_or(RuntimeError::ExpectedInstanceField)?)
+        } else {
+            Err(RuntimeError::ExpectedInstanceField)
+        }
+    }
+
     pub fn try_function(self) -> Result<ObjId, RuntimeError> {
         let id = self.obj_id().ok_or(RuntimeError::ExpectedFunction(self))?;
         if self.obj_type() == Some(ObjType::Function) {

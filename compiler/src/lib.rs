@@ -32,6 +32,7 @@ pub enum RuntimeError {
     ExpectedNative(LoxValue),
     ExpectedBoundMethod(LoxValue),
     ExpectedInstance(LoxValue),
+    ExpectedInstanceField,
     InvalidFunctionArgsCount(usize, usize),
     UndefinedGlobal(String),
     UndefinedMethodOrProperty(String),
@@ -55,8 +56,8 @@ impl Display for RuntimeError {
                 f,
                 "Not enough stack capacity for distance {distance}. Current stack size is {size}"
             ),
-            RuntimeError::InvalidCallable(value) => {
-                write!(f, "Can only call functions and classes not '{value}'")
+            RuntimeError::InvalidCallable(_) => {
+                write!(f, "Can only call functions and classes.")
             }
             RuntimeError::OperandsMustBeNumbers(first, second) => {
                 write!(
@@ -83,8 +84,11 @@ impl Display for RuntimeError {
             RuntimeError::UndefinedGlobal(value) => {
                 write!(f, "Undefined variable '{value}'.")
             }
-            RuntimeError::ExpectedInstance(val) => {
-                write!(f, "Only instances can have properties not '{val}'")
+            RuntimeError::ExpectedInstance(_) => {
+                write!(f, "Only instances have properties.")
+            }
+            RuntimeError::ExpectedInstanceField => {
+                write!(f, "Only instances have fields.")
             }
             RuntimeError::UndefinedMethodOrProperty(value) => {
                 write!(f, "Undefined property '{value}'.")
