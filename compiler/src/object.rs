@@ -427,15 +427,17 @@ impl ObjectStore {
     }
 }
 
+#[must_use]
 pub fn hash_string(text: &str) -> u32 {
-    let mut hash: u32 = 2166136261;
+    let mut hash: u32 = 2_166_136_261;
     for byte in text.bytes() {
         hash ^= u32::from(byte);
-        hash = hash.wrapping_mul(16777619);
+        hash = hash.wrapping_mul(16_777_619);
     }
     hash
 }
 
+#[must_use]
 pub fn obj_type_in(store: &ObjectStore, value: LoxValue) -> Option<ObjType> {
     let id = value.obj_id()?;
     let object = store.try_get(id).ok()?;
@@ -520,6 +522,7 @@ pub fn try_bound_method_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjI
     }
 }
 
+#[must_use]
 pub fn string_key(store: &ObjectStore, value: LoxValue) -> Option<ObjId> {
     try_string_id(store, value).ok()
 }

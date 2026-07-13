@@ -362,7 +362,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         } else {
                             self.value_to_string(a)
                         };
-                        let result = self.objects.intern_string(l.to_owned() + r)?;
+                        let result = self.objects.intern_string(l.clone() + r)?;
                         self.push(result);
                     } else {
                         let l = a.try_num()?;

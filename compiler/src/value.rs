@@ -124,7 +124,7 @@ impl LoxValue {
     #[must_use]
     pub fn equal(self, other: Self) -> bool {
         if self.is_number() && other.is_number() {
-            return self.as_number() == other.as_number();
+            return (self.as_number() - other.as_number()).abs() < 0.00001;
         }
         if (self.is_bool() || self.is_nil()) && (other.is_bool() || other.is_nil()) {
             let left = self.is_bool() && self.as_bool();
