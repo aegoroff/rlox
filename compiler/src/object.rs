@@ -389,10 +389,7 @@ impl ObjectStore {
                 Ok(name) => write!(f, "<fn {}>", name.chars),
                 Err(_) => write!(f, "<fn ?>"),
             },
-            HeapObject::Native(native) => match self.string(native.name) {
-                Ok(name) => write!(f, "<native fn {}>", name.chars),
-                Err(_) => write!(f, "<native fn ?>"),
-            },
+            HeapObject::Native(_) => write!(f, "<native fn>"),
             HeapObject::Closure(closure) => match self
                 .function(closure.function)
                 .and_then(|function| self.string(function.name))
@@ -411,17 +408,13 @@ impl ObjectStore {
                 Ok(name) => write!(f, "{} instance", name.chars),
                 Err(_) => write!(f, "<instance>"),
             },
-            HeapObject::BoundMethod(bound) => {
-                self.format(bound.receiver, f)?;
-                write!(f, " -> ")?;
-                match self.closure(bound.method).and_then(|closure| {
-                    self.function(closure.function)
-                        .and_then(|function| self.string(function.name))
-                }) {
-                    Ok(name) => write!(f, "<fn {}>", name.chars),
-                    Err(_) => write!(f, "<fn ?>"),
-                }
-            }
+            HeapObject::BoundMethod(bound) => match self.closure(bound.method).and_then(|closure| {
+                self.function(closure.function)
+                    .and_then(|function| self.string(function.name))
+            }) {
+                Ok(name) => write!(f, "<fn {}>", name.chars),
+                Err(_) => write!(f, "<fn ?>"),
+            },
             HeapObject::Upvalue(_) => write!(f, "upvalue"),
         }
     }

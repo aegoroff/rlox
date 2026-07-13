@@ -123,10 +123,11 @@ impl LoxValue {
         if self.is_number() && other.is_number() {
             return (self.as_number() - other.as_number()).abs() < 0.00001;
         }
-        if (self.is_bool() || self.is_nil()) && (other.is_bool() || other.is_nil()) {
-            let left = self.is_bool() && self.as_bool();
-            let right = other.is_bool() && other.as_bool();
-            return left == right;
+        if self.is_nil() && other.is_nil() {
+            return true;
+        }
+        if self.is_bool() && other.is_bool() {
+            return self.as_bool() == other.as_bool();
         }
         self.0 == other.0
     }

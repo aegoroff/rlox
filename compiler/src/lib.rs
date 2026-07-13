@@ -22,6 +22,7 @@ pub enum RuntimeError {
     NotEnoughStackCapacity(usize, usize),
     InvalidCallable(LoxValue),
     OperandsMustBeNumbers(LoxValue, LoxValue),
+    OperandsMustBeNumbersOrStrings,
     ExpectedNumber(LoxValue),
     ExpectedString(LoxValue),
     ExpectedClass(LoxValue),
@@ -62,6 +63,9 @@ impl Display for RuntimeError {
                     f,
                     "Operands must be numbers. But first is '{first}' and second is '{second}'"
                 )
+            }
+            RuntimeError::OperandsMustBeNumbersOrStrings => {
+                write!(f, "Operands must be two numbers or two strings.")
             }
             RuntimeError::ExpectedNumber(val) => write!(f, "Expected number but was '{val}'"),
             RuntimeError::ExpectedString(val) => write!(f, "Expected string but was '{val}'"),

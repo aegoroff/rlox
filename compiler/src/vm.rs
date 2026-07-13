@@ -240,19 +240,6 @@ impl<W: std::io::Write> VirtualMachine<W> {
             .map_err(|e| RuntimeError::Common(e.to_string()))
     }
 
-    fn value_to_string(&self, value: LoxValue) -> String {
-        format!(
-            "{}",
-            format_args!(
-                "{}",
-                FormattedValue {
-                    store: &self.objects,
-                    value,
-                }
-            )
-        )
-    }
-
     fn run(&mut self) -> Result<(), RuntimeError> {
         while self.frame_count > 0 {
             let frame_index = self.frame_count - 1;
@@ -350,28 +337,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     OpCode::Add => {
                         let b = self.pop()?;
                         let a = self.pop()?;
-                        if let Ok(l_id) = a.try_str() {
+                        if a.is_number() && b.is_number() {
+                            self.push(LoxValue::number(a.as_number() + b.as_number()));
+                        } else if let (Ok(l_id), Ok(r_id)) = (a.try_str(), b.try_str()) {
                             let l = string_chars(&self.objects, l_id)?;
-                            let r = if b.is_nil() {
-                                String::new()
-                            } else {
-                                self.value_to_string(b)
-                            };
-                            let result = self.objects.intern_string(l.to_owned() + &r)?;
-                            self.push(result);
-                        } else if let Ok(r_id) = b.try_str() {
                             let r = string_chars(&self.objects, r_id)?;
-                            let l = if a.is_nil() {
-                                String::new()
-                            } else {
-                                self.value_to_string(a)
-                            };
-                            let result = self.objects.intern_string(l.clone() + r)?;
+                            let result = self.objects.intern_string(l.to_owned() + r)?;
                             self.push(result);
                         } else {
-                            let l = a.try_num()?;
-                            let r = b.try_num()?;
-                            self.push(LoxValue::number(l + r));
+                            return Err(RuntimeError::OperandsMustBeNumbersOrStrings);
                         }
                     }
                     OpCode::Subtract => {
@@ -972,10 +946,6 @@ mod tests {
     use test_case::test_case;
 
     #[test_case("print (\"a\" + \"b\") + \"c\";", "abc")]
-    #[test_case("print (\"a\" + 4) + \"c\";", "a4c")]
-    #[test_case("print (4 + \"a\") + \"c\";", "4ac")]
-    #[test_case("print (true + \"a\") + \"c\";", "trueac")]
-    #[test_case("print (nil + \"a\") + \"c\";", "ac")]
     #[test_case("print (\"a\" == \"b\");", "false")]
     #[test_case("print (\"a\" != \"c\");", "true")]
     #[test_case("print (\"ab\" == \"ab\");", "true")]
@@ -992,9 +962,9 @@ mod tests {
     #[test_case("print 3 > 1 == true;", "true")]
     #[test_case("print 20 <= 20;", "true")]
     #[test_case("print 40 <= 50;", "true")]
-    #[test_case("print nil <= false;", "true" ; "nil lrs less or equal")]
+    #[test_case("print nil <= false;", "false" ; "nil is not less than or equal to false")]
     #[test_case("print nil < false;", "false" ; "nil lrs less")]
-    #[test_case("print nil == false;", "true" ; "nil lrs equal")]
+    #[test_case("print nil == false;", "false" ; "nil is not equal to false")]
     #[test_case("print !nil;", "true" ; "not nil")]
     #[test_case("print !1;", "false" ; "not number")]
     #[test_case("print !\"s\";", "false" ; "not string")]
