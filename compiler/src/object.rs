@@ -248,7 +248,7 @@ impl ObjectStore {
     }
 
     pub fn alloc_class(&mut self, name: LoxValue) -> Result<LoxValue, RuntimeError> {
-        let name_id = try_string_id(name)?;
+        let name_id = name.try_str()?;
         let id = self.push_object(HeapObject::Class(ObjClass {
             name: name_id,
             methods: FnvHashMap::default(),
@@ -451,60 +451,6 @@ pub fn obj_type_in(store: &ObjectStore, value: LoxValue) -> Option<ObjType> {
         HeapObject::Instance(_) => ObjType::Instance,
         HeapObject::BoundMethod(_) => ObjType::BoundMethod,
     })
-}
-
-pub fn try_string_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
-    let id = value.obj_id().ok_or(RuntimeError::ExpectedString(value))?;
-    if value.obj_type() == Some(ObjType::String) {
-        Ok(id)
-    } else {
-        Err(RuntimeError::ExpectedString(value))
-    }
-}
-
-pub fn try_function_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
-    let id = value
-        .obj_id()
-        .ok_or(RuntimeError::ExpectedFunction(value))?;
-    if value.obj_type() == Some(ObjType::Function) {
-        Ok(id)
-    } else {
-        Err(RuntimeError::ExpectedFunction(value))
-    }
-}
-
-pub fn try_closure_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
-    let id = value.obj_id().ok_or(RuntimeError::ExpectedClosure(value))?;
-    if value.obj_type() == Some(ObjType::Closure) {
-        Ok(id)
-    } else {
-        Err(RuntimeError::ExpectedClosure(value))
-    }
-}
-
-pub fn try_class_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
-    let id = value.obj_id().ok_or(RuntimeError::ExpectedClass(value))?;
-    if value.obj_type() == Some(ObjType::Class) {
-        Ok(id)
-    } else {
-        Err(RuntimeError::ExpectedClass(value))
-    }
-}
-
-pub fn try_instance_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
-    let id = value
-        .obj_id()
-        .ok_or(RuntimeError::ExpectedInstance(value))?;
-    if value.obj_type() == Some(ObjType::Instance) {
-        Ok(id)
-    } else {
-        Err(RuntimeError::ExpectedInstance(value))
-    }
-}
-
-#[must_use]
-pub fn string_key(value: LoxValue) -> Option<ObjId> {
-    try_string_id(value).ok()
 }
 
 pub fn string_chars(store: &ObjectStore, id: ObjId) -> Result<&str, RuntimeError> {

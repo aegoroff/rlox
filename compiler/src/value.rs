@@ -7,10 +7,7 @@ use num_traits::FromPrimitive;
 use crate::{
     RuntimeError,
     chunk::Chunk,
-    object::{
-        ObjId, ObjType, ObjectStore, string_chars, try_class_id, try_closure_id, try_function_id,
-        try_instance_id, try_string_id,
-    },
+    object::{ObjId, ObjType, ObjectStore, string_chars},
 };
 
 const SIGN_BIT: u64 = 0x8000_0000_0000_0000;
@@ -143,7 +140,7 @@ impl LoxValue {
             let right = other.is_bool() && other.as_bool();
             return Ok(!left & right);
         }
-        if let (Ok(left_id), Ok(right_id)) = (try_string_id(self), try_string_id(other)) {
+        if let (Ok(left_id), Ok(right_id)) = (self.try_str(), other.try_str()) {
             return Ok(string_chars(store, left_id)? < string_chars(store, right_id)?);
         }
         Err(RuntimeError::OperandsMustBeNumbers(self, other))
@@ -158,7 +155,12 @@ impl LoxValue {
     }
 
     pub fn try_str(self) -> Result<ObjId, RuntimeError> {
-        try_string_id(self)
+        let id = self.obj_id().ok_or(RuntimeError::ExpectedString(self))?;
+        if self.obj_type() == Some(ObjType::String) {
+            Ok(id)
+        } else {
+            Err(RuntimeError::ExpectedString(self))
+        }
     }
 
     pub fn try_bool(self) -> Result<bool, RuntimeError> {
@@ -172,19 +174,39 @@ impl LoxValue {
     }
 
     pub fn try_class(self) -> Result<ObjId, RuntimeError> {
-        try_class_id(self)
+        let id = self.obj_id().ok_or(RuntimeError::ExpectedClass(self))?;
+        if self.obj_type() == Some(ObjType::Class) {
+            Ok(id)
+        } else {
+            Err(RuntimeError::ExpectedClass(self))
+        }
     }
 
     pub fn try_instance(self) -> Result<ObjId, RuntimeError> {
-        try_instance_id(self)
+        let id = self.obj_id().ok_or(RuntimeError::ExpectedInstance(self))?;
+        if self.obj_type() == Some(ObjType::Instance) {
+            Ok(id)
+        } else {
+            Err(RuntimeError::ExpectedInstance(self))
+        }
     }
 
     pub fn try_function(self) -> Result<ObjId, RuntimeError> {
-        try_function_id(self)
+        let id = self.obj_id().ok_or(RuntimeError::ExpectedFunction(self))?;
+        if self.obj_type() == Some(ObjType::Function) {
+            Ok(id)
+        } else {
+            Err(RuntimeError::ExpectedFunction(self))
+        }
     }
 
     pub fn try_closure(self) -> Result<ObjId, RuntimeError> {
-        try_closure_id(self)
+        let id = self.obj_id().ok_or(RuntimeError::ExpectedClosure(self))?;
+        if self.obj_type() == Some(ObjType::Closure) {
+            Ok(id)
+        } else {
+            Err(RuntimeError::ExpectedClosure(self))
+        }
     }
 
     #[must_use]

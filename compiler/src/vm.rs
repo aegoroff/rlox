@@ -8,7 +8,7 @@ use fnv::FnvHashMap;
 use miette::LabeledSpan;
 use num_traits::FromPrimitive;
 
-use crate::object::{ObjId, ObjType, ObjectStore, string_chars, string_key};
+use crate::object::{ObjId, ObjType, ObjectStore, string_chars};
 use crate::value::LoxValue;
 use crate::{RuntimeError, builtin};
 use crate::{
@@ -656,11 +656,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let argc = bytecode[ip + 1];
                     ip += 2;
                     self.frames[frame_index].ip = ip;
-                    let err_line = chunk.line(instruction_ip);
-                    let name_id = string_key(method_name).ok_or_else(|| {
-                        self.line = err_line;
-                        RuntimeError::ExpectedString(method_name)
-                    })?;
+                    let name_id = method_name.try_str()?;
                     let super_class_id = self.pop()?.try_class()?;
                     let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
                     else {
@@ -679,8 +675,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn invoke(&mut self, method_name: LoxValue, argc: u8) -> Result<(), RuntimeError> {
-        let method_key =
-            string_key(method_name).ok_or(RuntimeError::ExpectedString(method_name))?;
+        let method_key = method_name.try_str()?;
         let receiver = self.peek(argc as usize)?;
         let instance_id = receiver.try_instance()?;
         let (is_field, callable) = {
@@ -734,7 +729,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn define_method(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let method_key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
+        let method_key = name.try_str()?;
         let method_closure = self.pop()?;
         let class_id = self.peek(0)?.try_class()?;
         let class = self.objects.class_mut(class_id)?;
@@ -926,7 +921,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn set_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
+        let key = name.try_str()?;
         if !self.globals.contains_key(&key) {
             return Err(RuntimeError::UndefinedGlobal(
                 string_chars(&self.objects, key)?.to_owned(),
@@ -942,7 +937,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn get_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
+        let key = name.try_str()?;
         let Some(val) = self.globals.get(&key) else {
             return Err(RuntimeError::UndefinedGlobal(
                 string_chars(&self.objects, key)?.to_owned(),
@@ -954,7 +949,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn define_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
+        let key = name.try_str()?;
         self.stack_top -= 1;
         let value = self.stack[self.stack_top];
         if let Some(old) = self.globals.insert(key, value) {
