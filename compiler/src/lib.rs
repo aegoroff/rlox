@@ -77,7 +77,7 @@ impl Display for RuntimeError {
                 write!(f, "Expected {arity} arguments but got {args_count}")
             }
             RuntimeError::UndefinedGlobal(value) => {
-                write!(f, "Undefined global variable '{value}'")
+                write!(f, "Undefined variable '{value}'.")
             }
             RuntimeError::ExpectedInstance(val) => {
                 write!(f, "Only instances can have properties not '{val}'")
