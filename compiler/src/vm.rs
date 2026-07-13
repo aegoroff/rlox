@@ -28,15 +28,16 @@ struct CallFrame {
     chunk: Rc<Chunk>,
 }
 
+/// Dispatch cursor: tracks the active frame without cloning its chunk.
 struct FrameCursor {
     index: usize,
     ip: usize,
     slots: usize,
     closure: ObjId,
-    chunk: Rc<Chunk>,
 }
 
 impl FrameCursor {
+    #[inline]
     fn active<W: std::io::Write>(vm: &VirtualMachine<W>) -> Self {
         let index = vm.frame_count - 1;
         let frame = &vm.frames[index];
@@ -45,18 +46,7 @@ impl FrameCursor {
             ip: frame.ip,
             slots: frame.slots,
             closure: frame.closure,
-            chunk: Rc::clone(&frame.chunk),
         }
-    }
-
-    #[inline]
-    fn bytecode(&self) -> &[u8] {
-        self.chunk.code.as_slice()
-    }
-
-    #[inline]
-    fn constants(&self) -> &[LoxValue] {
-        self.chunk.constants.as_slice()
     }
 }
 
@@ -245,20 +235,49 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     #[inline]
-    fn read_u16(code: &[u8], offset: usize) -> usize {
-        (code[offset + 1] as usize) << 8 | code[offset] as usize
-    }
-
-    #[inline]
     fn read_u24(code: &[u8], offset: usize) -> usize {
         (code[offset + 2] as usize) << 16 | (code[offset + 1] as usize) << 8 | code[offset] as usize
     }
 
     #[inline]
-    fn constant_index(code: &[u8], offset: usize, size: usize) -> Result<usize, RuntimeError> {
+    fn frame_code_len(&self, frame: usize) -> usize {
+        self.frames[frame].chunk.code.len()
+    }
+
+    #[inline]
+    fn read_byte(&self, frame: usize, offset: usize) -> u8 {
+        self.frames[frame].chunk.code[offset]
+    }
+
+    #[inline]
+    fn frame_line(&self, frame: usize, offset: usize) -> usize {
+        self.frames[frame].chunk.line(offset)
+    }
+
+    #[inline]
+    fn read_constant(&self, frame: usize, index: usize) -> LoxValue {
+        self.frames[frame].chunk.constants[index]
+    }
+
+    #[inline]
+    fn read_u16(&self, frame: usize, offset: usize) -> usize {
+        let code = &self.frames[frame].chunk.code;
+        (code[offset + 1] as usize) << 8 | code[offset] as usize
+    }
+
+    #[inline]
+    fn read_constant_index(
+        &self,
+        frame: usize,
+        offset: usize,
+        size: usize,
+    ) -> Result<usize, RuntimeError> {
         match size {
-            CONST_SIZE => Ok(code[offset] as usize),
-            CONST_LONG_SIZE => Ok(Self::read_u24(code, offset)),
+            CONST_SIZE => Ok(self.read_byte(frame, offset) as usize),
+            CONST_LONG_SIZE => {
+                let code = &self.frames[frame].chunk.code;
+                Ok(Self::read_u24(code, offset))
+            }
             _ => Err(RuntimeError::InvalidInstruction(offset)),
         }
     }
@@ -287,17 +306,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let mut cursor = FrameCursor::active(self);
 
         'run_insns: loop {
-            let bytecode = cursor.bytecode();
-            let constants = cursor.constants();
+            let frame = cursor.index;
             let mut ip = cursor.ip;
 
-            if ip >= bytecode.len() {
+            if ip >= self.frame_code_len(frame) {
                 return Ok(());
             }
 
             let instruction_ip = ip;
-            self.line = cursor.chunk.line(instruction_ip);
-            let Some(opcode) = OpCode::from_u8(bytecode[ip]) else {
+            self.line = self.frame_line(frame, instruction_ip);
+            let Some(opcode) = OpCode::from_u8(self.read_byte(frame, ip)) else {
                 return self
                     .runtime_error(self.line, RuntimeError::InvalidInstruction(instruction_ip));
             };
@@ -323,14 +341,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
             match opcode {
                 OpCode::Constant => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    self.push(constants[ix]);
+                    self.push(self.read_constant(frame, ix));
                 }
                 OpCode::ConstantLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    self.push(constants[ix]);
+                    self.push(self.read_constant(frame, ix));
                 }
                 OpCode::Return => {
                     let ret_slot = self.stack_top - 1;
@@ -440,67 +458,67 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop()?;
                 }
                 OpCode::DefineGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    self.define_global(constants[ix])?;
+                    self.define_global(self.read_constant(frame, ix))?;
                 }
                 OpCode::DefineGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    self.define_global(constants[ix])?;
+                    self.define_global(self.read_constant(frame, ix))?;
                 }
                 OpCode::GetGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    self.get_global(constants[ix])?;
+                    self.get_global(self.read_constant(frame, ix))?;
                 }
                 OpCode::GetGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    self.get_global(constants[ix])?;
+                    self.get_global(self.read_constant(frame, ix))?;
                 }
                 OpCode::SetGlobal => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    self.set_global(constants[ix])?;
+                    self.set_global(self.read_constant(frame, ix))?;
                 }
                 OpCode::SetGlobalLong => {
-                    let ix = Self::constant_index(bytecode, ip, CONST_LONG_SIZE)?;
+                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
                     ip += CONST_LONG_SIZE;
-                    self.set_global(constants[ix])?;
+                    self.set_global(self.read_constant(frame, ix))?;
                 }
                 OpCode::GetLocal => {
-                    let frame_offset = bytecode[ip] as usize;
+                    let frame_offset = self.read_byte(frame, ip) as usize;
                     ip += 1;
                     let local_index = cursor.slots + frame_offset - 1;
                     self.push(self.stack[local_index]);
                 }
                 OpCode::SetLocal => {
-                    let frame_offset = bytecode[ip] as usize;
+                    let frame_offset = self.read_byte(frame, ip) as usize;
                     ip += 1;
                     let local_index = cursor.slots + frame_offset - 1;
                     let value = self.stack[self.stack_top - 1];
                     self.set_stack(local_index, value);
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = Self::read_u16(bytecode, ip);
+                    let offset = self.read_u16(frame, ip);
                     ip += 2;
                     if self.peek(0)?.is_falsey() {
                         ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = Self::read_u16(bytecode, ip);
+                    let offset = self.read_u16(frame, ip);
                     ip += 2;
                     ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = Self::read_u16(bytecode, ip);
+                    let offset = self.read_u16(frame, ip);
                     ip += 2;
                     ip -= offset;
                 }
                 OpCode::Call => {
-                    let args_count = bytecode[ip] as usize;
+                    let args_count = self.read_byte(frame, ip) as usize;
                     ip += 1;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
@@ -513,9 +531,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue 'run_insns;
                 }
                 OpCode::Invoke => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    let method_name = constants[method_ix];
-                    let argc = bytecode[ip + 1];
+                    let method_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let method_name = self.read_constant(frame, method_ix);
+                    let argc = self.read_byte(frame, ip + 1);
                     ip += 2;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
@@ -528,9 +546,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue 'run_insns;
                 }
                 OpCode::Closure => {
-                    let const_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let const_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let function_value = constants[const_ix];
+                    let function_value = self.read_constant(frame, const_ix);
                     let func_id = function_value.try_function()?;
                     let closure_val = self.objects.alloc_closure(func_id)?;
                     let new_closure_id = closure_val.try_closure()?;
@@ -538,8 +556,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let mut upvalues = Vec::with_capacity(upvalues_count);
 
                     for _ in 0..upvalues_count {
-                        let is_local = bytecode[ip];
-                        let index = bytecode[ip + 1];
+                        let is_local = self.read_byte(frame, ip);
+                        let index = self.read_byte(frame, ip + 1);
                         ip += 2;
                         let upvalue = if is_local == 1 {
                             self.capture_upvalue(cursor.slots + index as usize - 1)?
@@ -553,7 +571,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(closure_val);
                 }
                 OpCode::GetUpvalue => {
-                    let slot = bytecode[ip] as usize;
+                    let slot = self.read_byte(frame, ip) as usize;
                     ip += 1;
                     let upvalue_id = self.objects.closure(cursor.closure)?.upvalues[slot];
                     let upvalue = self.objects.upvalue(upvalue_id)?;
@@ -564,7 +582,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(lox_value);
                 }
                 OpCode::SetUpvalue => {
-                    let slot = bytecode[ip] as usize;
+                    let slot = self.read_byte(frame, ip) as usize;
                     ip += 1;
                     let val = self.stack[self.stack_top - 1];
                     let upvalue_id = self.objects.closure(cursor.closure)?.upvalues[slot];
@@ -588,16 +606,16 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop()?;
                 }
                 OpCode::Class => {
-                    let class_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let class_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let class_name = constants[class_ix];
+                    let class_name = self.read_constant(frame, class_ix);
                     let class = self.objects.alloc_class(class_name)?;
                     self.push(class);
                 }
                 OpCode::GetProperty => {
-                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let prop_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let property_id = constants[prop_ix].try_str()?;
+                    let property_id = self.read_constant(frame, prop_ix).try_str()?;
                     let instance_id = self.peek(0)?.try_instance()?;
                     if let Some(val) =
                         Self::get_member(instance_id, property_id, &mut self.objects)?
@@ -613,11 +631,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                 }
                 OpCode::SetProperty => {
-                    let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let prop_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let property_id = constants[prop_ix].try_str().inspect_err(|_| {
-                        self.line = cursor.chunk.line(instruction_ip);
-                    })?;
+                    let property_id =
+                        self.read_constant(frame, prop_ix)
+                            .try_str()
+                            .inspect_err(|_| {
+                                self.line = self.frame_line(frame, instruction_ip);
+                            })?;
                     self.objects.retain(self.stack[self.stack_top - 1]);
                     let property_value = self.pop()?;
                     let instance_id = self.pop()?.try_instance_field()?;
@@ -633,9 +654,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(property_value);
                 }
                 OpCode::Method => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let method_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    self.define_method(constants[method_ix])?;
+                    self.define_method(self.read_constant(frame, method_ix))?;
                 }
                 OpCode::Inherit => {
                     let Ok(super_class_id) = self.peek(1)?.try_class() else {
@@ -660,11 +681,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop()?;
                 }
                 OpCode::GetSuper => {
-                    let const_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
+                    let const_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let name_id = constants[const_ix].try_str().inspect_err(|_| {
-                        self.line = cursor.chunk.line(instruction_ip);
-                    })?;
+                    let name_id =
+                        self.read_constant(frame, const_ix)
+                            .try_str()
+                            .inspect_err(|_| {
+                                self.line = self.frame_line(frame, instruction_ip);
+                            })?;
                     let super_class_id = self.pop()?.try_class()?;
                     let instance_id = self.pop()?.try_instance()?;
                     let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
@@ -681,9 +705,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(bound);
                 }
                 OpCode::SuperInvoke => {
-                    let method_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
-                    let method_name = constants[method_ix];
-                    let argc = bytecode[ip + 1];
+                    let method_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let method_name = self.read_constant(frame, method_ix);
+                    let argc = self.read_byte(frame, ip + 1);
                     ip += 2;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
