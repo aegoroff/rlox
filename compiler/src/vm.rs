@@ -97,9 +97,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     pub fn interpret(&mut self, content: &str, printcode: bool) -> crate::Result<()> {
-        let function = {
+        let (function, line_starts) = {
             let mut parser = Parser::new(content, printcode, &mut self.objects);
-            parser.compile()?
+            let function = parser.compile()?;
+            let line_starts = parser.copy_line_starts();
+            (function, line_starts)
         };
         let function_val = self
             .objects
@@ -125,8 +127,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
             stack_trace.reverse();
             miette::miette!(
                 labels = vec![LabeledSpan::at(
-                    scanner::Lexer::new(content).line_span(self.line),
-                    format!("{e}. Stack trace:\n{}", stack_trace.join("\n"))
+                    scanner::Lexer::line_span_in(&line_starts, self.line),
+                    format!("{e} Stack trace:\n{}", stack_trace.join("\n"))
                 )],
                 "Runtime error"
             )
@@ -141,8 +143,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
             .string(self.objects.function(function_id)?.name)?
             .chars
             .clone();
-        let start = self.objects.function(function_id)?.chunk.first_line();
-        Ok(format!(" at {name}:{start}"))
+        let line = if index + 1 == self.frame_count {
+            self.line
+        } else {
+            self.objects.function(function_id)?.chunk.first_line()
+        };
+        Ok(format!(" at {name}:{line}"))
     }
 
     fn add_global(

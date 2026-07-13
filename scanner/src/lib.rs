@@ -99,6 +99,20 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    #[must_use]
+    pub fn copy_line_starts(&self) -> HashMap<usize, Range<usize>> {
+        self.lines_start.clone()
+    }
+
+    #[must_use]
+    pub fn line_span_in(line_starts: &HashMap<usize, Range<usize>>, line: usize) -> Range<usize> {
+        if let Some(range) = line_starts.get(&line) {
+            range.start..range.end
+        } else {
+            0..0
+        }
+    }
+
     fn two_char_token(
         &mut self,
         start: usize,
@@ -280,7 +294,7 @@ impl<'a> Iterator for Lexer<'a> {
             let Some((i, current)) = self.chars.next() else {
                 self.lines_start
                     .entry(self.line)
-                    .and_modify(|e| *e = e.start..self.whole.len() - 1);
+                    .and_modify(|e| *e = e.start..self.whole.len());
                 return None;
             };
             let t = match current {
@@ -466,5 +480,13 @@ err;"#;
             }
         }
         assert_eq!(err_line, Some(6));
+    }
+
+    #[test]
+    fn line_span_after_tokenization() {
+        let source = "fun foo() {}\n\nclass Subclass < foo {}";
+        let mut lexer = Lexer::new(source);
+        while lexer.next().is_some() {}
+        assert_eq!(lexer.line_span(3), 14..37);
     }
 }

@@ -2,6 +2,7 @@
 
 use std::{
     cell::{Ref, RefCell, RefMut},
+    collections::HashMap,
     ops::Range,
     rc::Rc,
 };
@@ -146,6 +147,11 @@ impl<'a> Parser<'a> {
     #[must_use]
     pub fn get_line_range(&self, line: usize) -> Range<usize> {
         self.tokens.line_span(line)
+    }
+
+    #[must_use]
+    pub fn copy_line_starts(&self) -> HashMap<usize, Range<usize>> {
+        self.tokens.copy_line_starts()
     }
 
     fn expression(&mut self) -> crate::Result<()> {
