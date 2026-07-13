@@ -319,7 +319,7 @@ impl Chunk {
 
         let mut offset = offset + 2;
         let val = self.constants[function_ix as usize];
-        if let Ok(function_id) = val.try_function(store) {
+        if let Ok(function_id) = val.try_function() {
             if let (Ok(function), Ok(name)) = (
                 store.function(function_id),
                 store

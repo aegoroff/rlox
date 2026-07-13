@@ -248,7 +248,7 @@ impl ObjectStore {
     }
 
     pub fn alloc_class(&mut self, name: LoxValue) -> Result<LoxValue, RuntimeError> {
-        let name_id = try_string_id(self, name)?;
+        let name_id = try_string_id(name)?;
         let id = self.push_object(HeapObject::Class(ObjClass {
             name: name_id,
             methods: FnvHashMap::default(),
@@ -453,7 +453,7 @@ pub fn obj_type_in(store: &ObjectStore, value: LoxValue) -> Option<ObjType> {
     })
 }
 
-pub fn try_string_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, RuntimeError> {
+pub fn try_string_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
     let id = value.obj_id().ok_or(RuntimeError::ExpectedString(value))?;
     if value.obj_type() == Some(ObjType::String) {
         Ok(id)
@@ -462,7 +462,7 @@ pub fn try_string_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, Run
     }
 }
 
-pub fn try_function_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, RuntimeError> {
+pub fn try_function_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
     let id = value
         .obj_id()
         .ok_or(RuntimeError::ExpectedFunction(value))?;
@@ -473,16 +473,7 @@ pub fn try_function_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, R
     }
 }
 
-pub fn try_native_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, RuntimeError> {
-    let id = value.obj_id().ok_or(RuntimeError::ExpectedNative(value))?;
-    if value.obj_type() == Some(ObjType::Native) {
-        Ok(id)
-    } else {
-        Err(RuntimeError::ExpectedNative(value))
-    }
-}
-
-pub fn try_closure_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, RuntimeError> {
+pub fn try_closure_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
     let id = value.obj_id().ok_or(RuntimeError::ExpectedClosure(value))?;
     if value.obj_type() == Some(ObjType::Closure) {
         Ok(id)
@@ -491,7 +482,7 @@ pub fn try_closure_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, Ru
     }
 }
 
-pub fn try_class_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, RuntimeError> {
+pub fn try_class_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
     let id = value.obj_id().ok_or(RuntimeError::ExpectedClass(value))?;
     if value.obj_type() == Some(ObjType::Class) {
         Ok(id)
@@ -500,7 +491,7 @@ pub fn try_class_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, Runt
     }
 }
 
-pub fn try_instance_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, RuntimeError> {
+pub fn try_instance_id(value: LoxValue) -> Result<ObjId, RuntimeError> {
     let id = value
         .obj_id()
         .ok_or(RuntimeError::ExpectedInstance(value))?;
@@ -511,20 +502,9 @@ pub fn try_instance_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, R
     }
 }
 
-pub fn try_bound_method_id(_store: &ObjectStore, value: LoxValue) -> Result<ObjId, RuntimeError> {
-    let id = value
-        .obj_id()
-        .ok_or(RuntimeError::ExpectedBoundMethod(value))?;
-    if value.obj_type() == Some(ObjType::BoundMethod) {
-        Ok(id)
-    } else {
-        Err(RuntimeError::ExpectedBoundMethod(value))
-    }
-}
-
 #[must_use]
-pub fn string_key(store: &ObjectStore, value: LoxValue) -> Option<ObjId> {
-    try_string_id(store, value).ok()
+pub fn string_key(value: LoxValue) -> Option<ObjId> {
+    try_string_id(value).ok()
 }
 
 pub fn string_chars(store: &ObjectStore, id: ObjId) -> Result<&str, RuntimeError> {

@@ -106,7 +106,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             .alloc_function(function)
             .map_err(|e| miette::miette!("{e}"))?;
         let function_id = function_val
-            .try_function(&self.objects)
+            .try_function()
             .map_err(|e| miette::miette!("{e}"))?;
         let closure_val = self
             .objects
@@ -346,7 +346,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Add => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    if let Ok(l_id) = a.try_str(&self.objects) {
+                    if let Ok(l_id) = a.try_str() {
                         let l = string_chars(&self.objects, l_id)?;
                         let r = if b.is_nil() {
                             String::new()
@@ -355,7 +355,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         };
                         let result = self.objects.intern_string(l.to_owned() + &r)?;
                         self.push(result);
-                    } else if let Ok(r_id) = b.try_str(&self.objects) {
+                    } else if let Ok(r_id) = b.try_str() {
                         let r = string_chars(&self.objects, r_id)?;
                         let l = if a.is_nil() {
                             String::new()
@@ -503,9 +503,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let function_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
                     let function_value = constants[function_ix];
-                    let function_id = function_value.try_function(&self.objects)?;
+                    let function_id = function_value.try_function()?;
                     let closure_val = self.objects.alloc_closure(function_id)?;
-                    let new_closure_id = closure_val.try_closure(&self.objects)?;
+                    let new_closure_id = closure_val.try_closure()?;
                     let upvalues_count = self.objects.function(function_id)?.upvalue_count;
                     let mut upvalues = Vec::with_capacity(upvalues_count);
 
@@ -569,8 +569,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::GetProperty => {
                     let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let property_id = constants[prop_ix].try_str(&self.objects)?;
-                    let instance_id = self.peek(0)?.try_instance(&self.objects)?;
+                    let property_id = constants[prop_ix].try_str()?;
+                    let instance_id = self.peek(0)?.try_instance()?;
                     if let Some(val) =
                         Self::get_member(instance_id, property_id, &mut self.objects)?
                     {
@@ -587,13 +587,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::SetProperty => {
                     let prop_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let property_id =
-                        constants[prop_ix].try_str(&self.objects).inspect_err(|_| {
-                            self.line = chunk.line(instruction_ip);
-                        })?;
+                    let property_id = constants[prop_ix].try_str().inspect_err(|_| {
+                        self.line = chunk.line(instruction_ip);
+                    })?;
                     self.objects.retain(self.stack[self.stack_top - 1]);
                     let property_value = self.pop()?;
-                    let instance_id = self.pop()?.try_instance(&self.objects)?;
+                    let instance_id = self.pop()?.try_instance()?;
                     let old = {
                         let instance = self.objects.instance_mut(instance_id)?;
                         instance.fields.insert(property_id, property_value)
@@ -611,8 +610,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.define_method(constants[method_ix])?;
                 }
                 OpCode::Inherit => {
-                    let super_class_id = self.peek(1)?.try_class(&self.objects)?;
-                    let sub_class_id = self.peek(0)?.try_class(&self.objects)?;
+                    let super_class_id = self.peek(1)?.try_class()?;
+                    let sub_class_id = self.peek(0)?.try_class()?;
                     let super_methods = self.objects.class(super_class_id)?.methods.clone();
                     for (name, method) in super_methods {
                         if !self
@@ -633,18 +632,18 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::GetSuper => {
                     let name_ix = Self::constant_index(bytecode, ip, CONST_SIZE)?;
                     ip += CONST_SIZE;
-                    let name_id = constants[name_ix].try_str(&self.objects).inspect_err(|_| {
+                    let name_id = constants[name_ix].try_str().inspect_err(|_| {
                         self.line = chunk.line(instruction_ip);
                     })?;
-                    let super_class_id = self.pop()?.try_class(&self.objects)?;
-                    let instance_id = self.pop()?.try_instance(&self.objects)?;
+                    let super_class_id = self.pop()?.try_class()?;
+                    let instance_id = self.pop()?.try_instance()?;
                     let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
                     else {
                         return Err(RuntimeError::UndefinedMethodOrProperty(
                             string_chars(&self.objects, name_id)?.to_owned(),
                         ));
                     };
-                    let method_closure_id = method.try_closure(&self.objects)?;
+                    let method_closure_id = method.try_closure()?;
                     let bound = self.objects.alloc_bound_method(
                         LoxValue::from_obj(instance_id, ObjType::Instance),
                         method_closure_id,
@@ -658,11 +657,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 2;
                     self.frames[frame_index].ip = ip;
                     let err_line = chunk.line(instruction_ip);
-                    let name_id = string_key(&self.objects, method_name).ok_or_else(|| {
+                    let name_id = string_key(method_name).ok_or_else(|| {
                         self.line = err_line;
                         RuntimeError::ExpectedString(method_name)
                     })?;
-                    let super_class_id = self.pop()?.try_class(&self.objects)?;
+                    let super_class_id = self.pop()?.try_class()?;
                     let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
                     else {
                         return Err(RuntimeError::UndefinedMethodOrProperty(
@@ -680,10 +679,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn invoke(&mut self, method_name: LoxValue, argc: u8) -> Result<(), RuntimeError> {
-        let method_key = string_key(&self.objects, method_name)
-            .ok_or(RuntimeError::ExpectedString(method_name))?;
+        let method_key =
+            string_key(method_name).ok_or(RuntimeError::ExpectedString(method_name))?;
         let receiver = self.peek(argc as usize)?;
-        let instance_id = receiver.try_instance(&self.objects)?;
+        let instance_id = receiver.try_instance()?;
         let (is_field, callable) = {
             let instance = self.objects.instance(instance_id)?;
             if let Some(field) = instance.fields.get(&method_key) {
@@ -726,7 +725,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let Some(method) = store.class(class_id)?.methods.get(&property_id).copied() else {
             return Ok(None);
         };
-        let method_closure_id = method.try_closure(store)?;
+        let method_closure_id = method.try_closure()?;
         Ok(Some(store.alloc_bound_method(
             LoxValue::from_obj(instance_id, ObjType::Instance),
             method_closure_id,
@@ -735,10 +734,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn define_method(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let method_key =
-            string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        let method_key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
         let method_closure = self.pop()?;
-        let class_id = self.peek(0)?.try_class(&self.objects)?;
+        let class_id = self.peek(0)?.try_class()?;
         let class = self.objects.class_mut(class_id)?;
         if let Some(old) = class.methods.insert(method_key, method_closure) {
             self.objects.release(old);
@@ -863,7 +861,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         closure_val: LoxValue,
         args_count: usize,
     ) -> Result<(), RuntimeError> {
-        let closure_id = closure_val.try_closure(&self.objects)?;
+        let closure_id = closure_val.try_closure()?;
         let function_id = self.objects.closure(closure_id)?.function;
         let function = self.objects.function(function_id)?;
         if function.arity != args_count {
@@ -928,7 +926,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn set_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let key = string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        let key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
         if !self.globals.contains_key(&key) {
             return Err(RuntimeError::UndefinedGlobal(
                 string_chars(&self.objects, key)?.to_owned(),
@@ -944,7 +942,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn get_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let key = string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        let key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
         let Some(val) = self.globals.get(&key) else {
             return Err(RuntimeError::UndefinedGlobal(
                 string_chars(&self.objects, key)?.to_owned(),
@@ -956,7 +954,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn define_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
-        let key = string_key(&self.objects, name).ok_or(RuntimeError::ExpectedString(name))?;
+        let key = string_key(name).ok_or(RuntimeError::ExpectedString(name))?;
         self.stack_top -= 1;
         let value = self.stack[self.stack_top];
         if let Some(old) = self.globals.insert(key, value) {

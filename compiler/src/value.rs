@@ -8,8 +8,8 @@ use crate::{
     RuntimeError,
     chunk::Chunk,
     object::{
-        ObjId, ObjType, ObjectStore, string_chars, try_bound_method_id, try_class_id,
-        try_closure_id, try_function_id, try_instance_id, try_native_id, try_string_id,
+        ObjId, ObjType, ObjectStore, string_chars, try_class_id, try_closure_id, try_function_id,
+        try_instance_id, try_string_id,
     },
 };
 
@@ -143,9 +143,7 @@ impl LoxValue {
             let right = other.is_bool() && other.as_bool();
             return Ok(!left & right);
         }
-        if let (Ok(left_id), Ok(right_id)) =
-            (try_string_id(store, self), try_string_id(store, other))
-        {
+        if let (Ok(left_id), Ok(right_id)) = (try_string_id(self), try_string_id(other)) {
             return Ok(string_chars(store, left_id)? < string_chars(store, right_id)?);
         }
         Err(RuntimeError::OperandsMustBeNumbers(self, other))
@@ -159,8 +157,8 @@ impl LoxValue {
         }
     }
 
-    pub fn try_str(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
-        try_string_id(store, self)
+    pub fn try_str(self) -> Result<ObjId, RuntimeError> {
+        try_string_id(self)
     }
 
     pub fn try_bool(self) -> Result<bool, RuntimeError> {
@@ -173,28 +171,20 @@ impl LoxValue {
         }
     }
 
-    pub fn try_class(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
-        try_class_id(store, self)
+    pub fn try_class(self) -> Result<ObjId, RuntimeError> {
+        try_class_id(self)
     }
 
-    pub fn try_instance(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
-        try_instance_id(store, self)
+    pub fn try_instance(self) -> Result<ObjId, RuntimeError> {
+        try_instance_id(self)
     }
 
-    pub fn try_function(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
-        try_function_id(store, self)
+    pub fn try_function(self) -> Result<ObjId, RuntimeError> {
+        try_function_id(self)
     }
 
-    pub fn try_closure(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
-        try_closure_id(store, self)
-    }
-
-    pub fn try_native(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
-        try_native_id(store, self)
-    }
-
-    pub fn try_bound_method(self, store: &ObjectStore) -> Result<ObjId, RuntimeError> {
-        try_bound_method_id(store, self)
+    pub fn try_closure(self) -> Result<ObjId, RuntimeError> {
+        try_closure_id(self)
     }
 
     #[must_use]
