@@ -1204,3 +1204,31 @@ impl<'a> Parser<'a> {
         function
     }
 }
+
+#[cfg(test)]
+mod line_tests {
+    use super::*;
+    use crate::object::ObjectStore;
+
+    const MULTILINE_VAR_SOURCE: &str = r#"var a = "1
+2
+3
+";
+
+err;"#;
+
+    #[test]
+    fn multiline_string_records_runtime_line() {
+        let mut objects = ObjectStore::new();
+        let mut parser = Parser::new(MULTILINE_VAR_SOURCE, false, &mut objects);
+        let function = parser.compile().unwrap();
+        let chunk = &function.chunk;
+
+        assert_eq!(
+            chunk.line(0),
+            4,
+            "string constant should be on closing quote line"
+        );
+        assert_eq!(chunk.line(4), 6, "err lookup should be on line 6");
+    }
+}

@@ -169,9 +169,12 @@ impl<'a> Lexer<'a> {
 
     fn string(&mut self, start: usize) -> Spanned<Token<'a>, usize> {
         let mut problem_ix = start;
-        for (finish, next) in self.chars.by_ref() {
+        while let Some((finish, next)) = self.chars.next() {
             problem_ix = finish;
-            if next == '"' {
+            if next == '\n' {
+                self.line += 1;
+                self.insert_line_info(finish);
+            } else if next == '"' {
                 let tok = Token::String(&self.whole[start + 1..finish]);
                 return Ok((start + 1, tok, finish));
             }
@@ -431,5 +434,37 @@ mod tests {
 
         // Assert
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn multiline_string_advances_line() {
+        // Arrange
+        let source = "\"a\nb\nc\"";
+        let mut lexer = Lexer::new(source);
+
+        // Act
+        lexer.next().unwrap().unwrap();
+
+        // Assert
+        assert_eq!(lexer.line, 3);
+    }
+
+    #[test]
+    fn multiline_string_in_var_declaration() {
+        let source = r#"var a = "1
+2
+3
+";
+
+err;"#;
+        let mut lexer = Lexer::new(source);
+        let mut err_line = None;
+        while let Some(result) = lexer.next() {
+            let (_, tok, _) = result.unwrap();
+            if matches!(tok, Token::Identifier("err")) {
+                err_line = Some(lexer.line);
+            }
+        }
+        assert_eq!(err_line, Some(6));
     }
 }
