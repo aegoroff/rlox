@@ -87,7 +87,7 @@ impl Display for RuntimeError {
                 write!(f, "Only instances can have properties not '{val}'")
             }
             RuntimeError::UndefinedMethodOrProperty(value) => {
-                write!(f, "Undefined method or property '{value}'")
+                write!(f, "Undefined property '{value}'.")
             }
             RuntimeError::StackOverflow => {
                 write!(f, "Stack overflow. Too much nestings call max available 64")
