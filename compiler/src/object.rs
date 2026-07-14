@@ -315,10 +315,10 @@ impl ObjectStore {
         method: ObjId,
     ) -> Result<LoxValue, RuntimeError> {
         let id = self.push_object(HeapObject::BoundMethod(ObjBoundMethod { receiver, method }))?;
+        // Keep the receiver alive for as long as this bound method exists.
+        // The caller owns the returned value (typically via `push`, which retains).
         self.retain(receiver);
-        let val = LoxValue::from_obj(id, ObjType::BoundMethod);
-        self.retain(val);
-        Ok(val)
+        Ok(LoxValue::from_obj(id, ObjType::BoundMethod))
     }
 
     /// Typed accessors for ids known to come from this store (VM hot path).
@@ -529,4 +529,32 @@ pub fn obj_type_in(store: &ObjectStore, value: LoxValue) -> Option<ObjType> {
 
 pub fn string_chars(store: &ObjectStore, id: ObjId) -> Result<&str, RuntimeError> {
     Ok(&store.string(id)?.chars)
+}
+
+#[cfg(test)]
+impl ObjectStore {
+    #[must_use]
+    pub fn count_live(&self, ty: ObjType) -> usize {
+        self.objects
+            .iter()
+            .filter(|object| {
+                matches!(
+                    (ty, object),
+                    (ObjType::String, HeapObject::String(_))
+                        | (ObjType::Function, HeapObject::Function(_))
+                        | (ObjType::Native, HeapObject::Native(_))
+                        | (ObjType::Closure, HeapObject::Closure(_))
+                        | (ObjType::Upvalue, HeapObject::Upvalue(_))
+                        | (ObjType::Class, HeapObject::Class(_))
+                        | (ObjType::Instance, HeapObject::Instance(_))
+                        | (ObjType::BoundMethod, HeapObject::BoundMethod(_))
+                )
+            })
+            .count()
+    }
+
+    #[must_use]
+    pub fn free_list_len(&self) -> usize {
+        self.free_list.len()
+    }
 }

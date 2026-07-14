@@ -311,8 +311,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
         if *slot == value {
             return;
         }
-        self.objects.release(*slot);
+        // Retain before release: `value` may only be kept alive by `*slot`
+        // (e.g. bound-method callee whose receiver replaces it).
         self.objects.retain(value);
+        self.objects.release(*slot);
         *slot = value;
     }
 
@@ -840,7 +842,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         }
                     };
                     let super_class_id = self.pop_unchecked().try_class()?;
-                    let instance_id = self.pop_unchecked().try_instance()?;
+                    // Peek then pop (like GetProperty) so the instance stays live
+                    // while `alloc_bound_method` retains it as the receiver.
+                    let instance_id = self.peek_unchecked(0).try_instance()?;
                     let Some(method) = self.objects.class(super_class_id)?.methods.get(name_id)
                     else {
                         return self.runtime_error_at(
@@ -856,6 +860,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         LoxValue::from_obj(instance_id, ObjType::Instance),
                         method_closure_id,
                     )?;
+                    self.pop_unchecked();
                     self.push(bound);
                 }
                 OpCode::SuperInvoke => {
@@ -1495,5 +1500,174 @@ a.m();
         assert!(actual.is_ok());
         let actual = String::from_utf8(stdout).unwrap();
         assert_eq!(actual.trim_end_matches('\n'), expected);
+    }
+
+    /// Discarding / calling temporary bound methods must free them (and their
+    /// receivers). The previous retain model left BM refcount at 1 forever.
+    #[test]
+    fn temporary_bound_method_is_collected() {
+        // Arrange
+        let mut stdout = Vec::new();
+        let mut vm = VirtualMachine::new(&mut stdout);
+        vm.init().unwrap();
+        let script = r#"
+class A {
+  init() { this.x = 1; }
+  m() { return this.x; }
+}
+for (var i = 0; i < 50; i = i + 1) {
+  A().m;
+  print A().m();
+}
+"#;
+
+        // Act
+        vm.interpret(script, false).unwrap();
+
+        // Assert
+        assert_eq!(vm.objects.count_live(ObjType::BoundMethod), 0);
+        // Only immortal / still-rooted objects should remain; no A() leftovers.
+        assert_eq!(vm.objects.count_live(ObjType::Instance), 0);
+        assert_eq!(std::str::from_utf8(&stdout).unwrap(), &"1\n".repeat(50));
+    }
+
+    /// Instance stored in a field must outlive the temporary that created it.
+    #[test]
+    fn instance_field_keeps_nested_instance_alive() {
+        // Arrange
+        let mut stdout = Vec::new();
+        let mut vm = VirtualMachine::new(&mut stdout);
+        vm.init().unwrap();
+        let script = r#"
+class Box { init(n) { this.n = n; } }
+class Holder {}
+var h = Holder();
+{
+  var b = Box(7);
+  h.f = b;
+}
+print h.f.n;
+"#;
+
+        // Act
+        vm.interpret(script, false).unwrap();
+
+        // Assert
+        assert_eq!(vm.objects.count_live(ObjType::Instance), 2); // h and h.f
+        assert_eq!(std::str::from_utf8(&stdout).unwrap(), "7\n");
+    }
+
+    /// Bound method must keep its receiver alive after the defining local dies.
+    #[test]
+    fn stored_bound_method_keeps_receiver_alive() {
+        // Arrange
+        let mut stdout = Vec::new();
+        let mut vm = VirtualMachine::new(&mut stdout);
+        vm.init().unwrap();
+        let script = r#"
+class A {
+  init(n) { this.n = n; }
+  m() { print this.n; }
+}
+var method;
+{
+  var a = A(99);
+  method = a.m;
+}
+method();
+"#;
+
+        // Act
+        vm.interpret(script, false).unwrap();
+
+        // Assert
+        assert_eq!(vm.objects.count_live(ObjType::BoundMethod), 1);
+        assert_eq!(vm.objects.count_live(ObjType::Instance), 1);
+        assert_eq!(std::str::from_utf8(&stdout).unwrap(), "99\n");
+    }
+
+    /// Field-held bound method invoked via Call / GetProperty must use `this`.
+    #[test]
+    fn field_bound_method_call_uses_receiver() {
+        // Arrange
+        let mut stdout = Vec::new();
+        let mut vm = VirtualMachine::new(&mut stdout);
+        vm.init().unwrap();
+        let script = r#"
+class A {
+  init(n) { this.n = n; }
+  m() { print this.n; }
+}
+var a = A(42);
+a.f = a.m;
+a.f();
+var b = a.f;
+b();
+"#;
+
+        // Act
+        vm.interpret(script, false).unwrap();
+
+        // Assert
+        assert_eq!(std::str::from_utf8(&stdout).unwrap(), "42\n42\n");
+    }
+
+    /// Free-list reuse after collecting temporaries must not corrupt later instances.
+    #[test]
+    fn free_list_reuse_after_temporary_instances() {
+        // Arrange
+        let mut stdout = Vec::new();
+        let mut vm = VirtualMachine::new(&mut stdout);
+        vm.init().unwrap();
+        let script = r#"
+class Box { init(n) { this.n = n; } }
+class Holder {}
+var h = Holder();
+for (var i = 0; i < 100; i = i + 1) {
+  {
+    var b = Box(i);
+    h.f = b;
+  }
+}
+print h.f.n;
+"#;
+
+        // Act
+        vm.interpret(script, false).unwrap();
+
+        // Assert
+        assert!(vm.objects.free_list_len() > 0);
+        assert_eq!(vm.objects.count_live(ObjType::Instance), 2);
+        assert_eq!(std::str::from_utf8(&stdout).unwrap(), "99\n");
+    }
+
+    /// `super.method` as a value must bind `this` and free temporaries correctly.
+    #[test]
+    fn get_super_bound_method_then_call() {
+        // Arrange
+        let mut stdout = Vec::new();
+        let mut vm = VirtualMachine::new(&mut stdout);
+        vm.init().unwrap();
+        let script = r#"
+class A {
+  method() { print this.value; }
+}
+class B < A {
+  method() {
+    var m = super.method;
+    m();
+  }
+}
+var b = B();
+b.value = 3;
+b.method();
+"#;
+
+        // Act
+        vm.interpret(script, false).unwrap();
+
+        // Assert
+        assert_eq!(vm.objects.count_live(ObjType::BoundMethod), 0);
+        assert_eq!(std::str::from_utf8(&stdout).unwrap(), "3\n");
     }
 }
