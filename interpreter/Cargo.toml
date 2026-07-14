@@ -10,3 +10,6 @@ thiserror = "2.0.18"
 
 [dev-dependencies]
 test-case = "3.3.1"
+
+[lints]
+workspace = true

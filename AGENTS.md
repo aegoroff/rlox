@@ -59,7 +59,7 @@ cargo clippy -- -W clippy::pedantic
 
 - Rust **1.97.0** or newer (CI uses `registry.egoroff.spb.ru/rustcross:1.97`)
 - Edition **2024**
-- `unsafe` is forbidden at workspace level (`[workspace.lints.rust]`)
+- `unsafe` is forbidden at workspace level (`[workspace.lints.rust]`), except in the **`compiler`** crate where scoped `unsafe` is allowed for VM hot-path optimizations (unchecked stack / bytecode reads). Document invariants at each site.
 
 ### Reference tests
 
@@ -88,7 +88,7 @@ Release builds for multiple targets are configured in `Cross.toml`, `build.sh`, 
 
 ### Don't
 
-- Don't use `unsafe` code.
+- Don't use `unsafe` outside the `compiler` crate. Inside `compiler`, keep `unsafe` minimal, document invariants, and prefer safe alternatives when they are equally fast.
 - Don't use `unwrap` or `expect` on `Option` or `Result` in non-test code. Exceptions: compile-time invariants such as valid regex literals in `LazyLock::new` or `Regex::new`.
 - Don't add concurrency (`spawn`, threads, parallel iterators).
 - Don't write tests that check performance, copy-paste duplication, or architecture — focus on behavior.

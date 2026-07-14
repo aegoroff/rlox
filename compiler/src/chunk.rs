@@ -108,7 +108,7 @@ impl Display for OpCode {
 pub struct Chunk {
     pub code: Rc<Vec<u8>>,
     pub constants: Rc<Vec<LoxValue>>,
-    lines: Rc<Vec<usize>>,
+    pub(crate) lines: Rc<Vec<usize>>,
 }
 
 impl PartialEq for Chunk {

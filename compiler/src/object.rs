@@ -120,24 +120,31 @@ impl ObjectStore {
         Ok(id)
     }
 
+    #[inline(always)]
     pub fn retain(&mut self, value: LoxValue) {
         if value.is_refcounted() {
-            let id = value.obj_id_unchecked();
-            self.ref_counts[id as usize] += 1;
+            let index = value.obj_id_unchecked() as usize;
+            // SAFETY: obj ids are allocated from this store; index is in range.
+            unsafe {
+                *self.ref_counts.get_unchecked_mut(index) += 1;
+            }
         }
     }
 
+    #[inline(always)]
     pub fn release(&mut self, value: LoxValue) {
         if !value.is_refcounted() {
             return;
         }
         let id = value.obj_id_unchecked();
         let index = id as usize;
-        if self.ref_counts[index] == 0 {
+        // SAFETY: obj ids are allocated from this store; index is in range.
+        let count = unsafe { self.ref_counts.get_unchecked_mut(index) };
+        if *count == 0 {
             return;
         }
-        self.ref_counts[index] -= 1;
-        if self.ref_counts[index] == 0 {
+        *count -= 1;
+        if *count == 0 {
             self.free_object(id);
         }
     }

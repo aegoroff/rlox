@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use fnv::FnvHashMap;
 use miette::LabeledSpan;
-use num_traits::FromPrimitive;
 
 use crate::object::{ObjId, ObjType, ObjectStore, string_chars};
 use crate::value::LoxValue;
@@ -20,6 +19,7 @@ const FRAMES_MAX: usize = 64;
 const CONST_SIZE: usize = 1;
 const CONST_LONG_SIZE: usize = 3;
 const STACK_MAX: usize = FRAMES_MAX * 256;
+const OPCODE_MAX: u8 = OpCode::Method as u8;
 
 struct CallFrame {
     closure: ObjId,
@@ -29,11 +29,21 @@ struct CallFrame {
 }
 
 /// Dispatch cursor: tracks the active frame without cloning its chunk.
+///
+/// # Safety invariants
+/// - `code` / `constants` / `lines` point into the `Rc` buffers owned by
+///   `frames[index].chunk`, which stays alive for the lifetime of that frame.
+/// - Chunk contents are immutable after compilation, so these pointers remain
+///   valid while the frame is active.
 struct FrameCursor {
     index: usize,
     ip: usize,
     slots: usize,
     closure: ObjId,
+    code: *const u8,
+    code_len: usize,
+    constants: *const LoxValue,
+    lines: *const usize,
 }
 
 impl FrameCursor {
@@ -46,7 +56,65 @@ impl FrameCursor {
             ip: frame.ip,
             slots: frame.slots,
             closure: frame.closure,
+            code: frame.chunk.code.as_ptr(),
+            code_len: frame.chunk.code.len(),
+            constants: frame.chunk.constants.as_ptr(),
+            lines: frame.chunk.lines.as_ptr(),
         }
+    }
+
+    #[inline(always)]
+    unsafe fn read_byte(&self, offset: usize) -> u8 {
+        debug_assert!(offset < self.code_len);
+        // SAFETY: caller must ensure `offset < code_len`.
+        unsafe { *self.code.add(offset) }
+    }
+
+    #[inline(always)]
+    unsafe fn read_u16(&self, offset: usize) -> usize {
+        debug_assert!(offset + 1 < self.code_len);
+        // SAFETY: caller must ensure `offset + 1 < code_len`.
+        unsafe {
+            let lo = usize::from(*self.code.add(offset));
+            let hi = usize::from(*self.code.add(offset + 1));
+            (hi << 8) | lo
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn read_u24(&self, offset: usize) -> usize {
+        debug_assert!(offset + 2 < self.code_len);
+        // SAFETY: caller must ensure `offset + 2 < code_len`.
+        unsafe {
+            let b0 = usize::from(*self.code.add(offset));
+            let b1 = usize::from(*self.code.add(offset + 1));
+            let b2 = usize::from(*self.code.add(offset + 2));
+            (b2 << 16) | (b1 << 8) | b0
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn read_constant(&self, index: usize) -> LoxValue {
+        // SAFETY: constant indices come from compiler-emitted operands.
+        unsafe { *self.constants.add(index) }
+    }
+
+    #[inline(always)]
+    unsafe fn line(&self, offset: usize) -> usize {
+        debug_assert!(offset < self.code_len);
+        // SAFETY: `lines` has the same length as `code`.
+        unsafe { *self.lines.add(offset) }
+    }
+}
+
+/// Decode a dense `#[repr(u8)]` opcode without going through `FromPrimitive`.
+#[inline(always)]
+fn decode_opcode(byte: u8) -> Option<OpCode> {
+    if byte <= OPCODE_MAX {
+        // SAFETY: OpCode is `#[repr(u8)]` with contiguous values `0..=OPCODE_MAX`.
+        Some(unsafe { std::mem::transmute::<u8, OpCode>(byte) })
+    } else {
+        None
     }
 }
 
@@ -187,42 +255,71 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     fn push(&mut self, value: LoxValue) {
+        self.push_raw(value);
         self.objects.retain(value);
-        self.stack[self.stack_top] = value;
+    }
+
+    /// Push without retain. Only for values that are never refcounted
+    /// (numbers, bools, nil, strings, closures, …) or when the caller
+    /// handles retain separately.
+    #[inline(always)]
+    fn push_raw(&mut self, value: LoxValue) {
+        debug_assert!(self.stack_top < STACK_MAX);
+        // SAFETY: compiler-enforced frame/slot limits keep `stack_top < STACK_MAX`.
+        unsafe {
+            *self.stack.get_unchecked_mut(self.stack_top) = value;
+        }
         self.stack_top += 1;
     }
 
-    #[inline]
+    #[inline(always)]
     fn pop(&mut self) -> Result<LoxValue, RuntimeError> {
         if self.stack_top == 0 {
             return Err(RuntimeError::InstructionsStackEmpty);
         }
-        self.stack_top -= 1;
-        let value = self.stack[self.stack_top];
-        self.objects.release(value);
-        Ok(value)
+        Ok(self.pop_unchecked())
     }
 
-    #[inline]
+    #[inline(always)]
+    fn pop_unchecked(&mut self) -> LoxValue {
+        let value = self.pop_raw();
+        self.objects.release(value);
+        value
+    }
+
+    /// Pop without release. Caller must release if the value is refcounted.
+    #[inline(always)]
+    fn pop_raw(&mut self) -> LoxValue {
+        debug_assert!(self.stack_top > 0);
+        self.stack_top -= 1;
+        // SAFETY: caller ensures the stack is non-empty (bytecode stack discipline).
+        unsafe { *self.stack.get_unchecked(self.stack_top) }
+    }
+
+    #[inline(always)]
     fn set_stack(&mut self, index: usize, value: LoxValue) {
-        if self.stack[index] == value {
+        // SAFETY: `index` is a live stack slot within the current frame window.
+        let slot = unsafe { self.stack.get_unchecked_mut(index) };
+        if *slot == value {
             return;
         }
-        self.objects.release(self.stack[index]);
+        self.objects.release(*slot);
         self.objects.retain(value);
-        self.stack[index] = value;
+        *slot = value;
     }
 
-    #[inline]
+    #[inline(always)]
     fn release_stack_range(&mut self, start: usize, end: usize) {
         for index in start..end {
-            self.objects.release(self.stack[index]);
+            // SAFETY: `start..end` is a live range of stack slots being discarded.
+            let value = unsafe { *self.stack.get_unchecked(index) };
+            self.objects.release(value);
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn peek(&self, distance: usize) -> Result<LoxValue, RuntimeError> {
         if self.stack_top < distance + 1 {
             Err(RuntimeError::NotEnoughStackCapacity(
@@ -230,61 +327,33 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 self.stack_top,
             ))
         } else {
-            Ok(self.stack[self.stack_top - 1 - distance])
+            Ok(self.peek_unchecked(distance))
         }
     }
 
-    #[inline]
-    fn read_u24(code: &[u8], offset: usize) -> usize {
-        (code[offset + 2] as usize) << 16 | (code[offset + 1] as usize) << 8 | code[offset] as usize
+    #[inline(always)]
+    fn peek_unchecked(&self, distance: usize) -> LoxValue {
+        debug_assert!(self.stack_top > distance);
+        // SAFETY: caller ensures `stack_top > distance`.
+        unsafe { *self.stack.get_unchecked(self.stack_top - 1 - distance) }
+    }
+
+    #[inline(always)]
+    fn stack_get(&self, index: usize) -> LoxValue {
+        // SAFETY: `index` is a live stack slot.
+        unsafe { *self.stack.get_unchecked(index) }
     }
 
     #[inline]
-    fn frame_code_len(&self, frame: usize) -> usize {
-        self.frames[frame].chunk.code.len()
-    }
-
-    #[inline]
-    fn read_byte(&self, frame: usize, offset: usize) -> u8 {
-        self.frames[frame].chunk.code[offset]
-    }
-
-    #[inline]
-    fn frame_line(&self, frame: usize, offset: usize) -> usize {
-        self.frames[frame].chunk.line(offset)
-    }
-
-    #[inline]
-    fn read_constant(&self, frame: usize, index: usize) -> LoxValue {
-        self.frames[frame].chunk.constants[index]
-    }
-
-    #[inline]
-    fn read_u16(&self, frame: usize, offset: usize) -> usize {
-        let code = &self.frames[frame].chunk.code;
-        (code[offset + 1] as usize) << 8 | code[offset] as usize
-    }
-
-    #[inline]
-    fn read_constant_index(
-        &self,
-        frame: usize,
-        offset: usize,
-        size: usize,
-    ) -> Result<usize, RuntimeError> {
-        match size {
-            CONST_SIZE => Ok(self.read_byte(frame, offset) as usize),
-            CONST_LONG_SIZE => {
-                let code = &self.frames[frame].chunk.code;
-                Ok(Self::read_u24(code, offset))
-            }
-            _ => Err(RuntimeError::InvalidInstruction(offset)),
-        }
-    }
-
-    #[inline]
-    fn runtime_error(&mut self, line: usize, err: RuntimeError) -> Result<(), RuntimeError> {
-        self.line = line;
+    fn runtime_error_at(
+        &mut self,
+        cursor: &FrameCursor,
+        ip: usize,
+        err: RuntimeError,
+    ) -> Result<(), RuntimeError> {
+        // SAFETY: `ip` is an offset into this frame's code / line table.
+        self.line = unsafe { cursor.line(ip) };
+        self.frames[cursor.index].ip = ip;
         Err(err)
     }
 
@@ -306,18 +375,21 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let mut cursor = FrameCursor::active(self);
 
         'run_insns: loop {
-            let frame = cursor.index;
             let mut ip = cursor.ip;
 
-            if ip >= self.frame_code_len(frame) {
+            if ip >= cursor.code_len {
                 return Ok(());
             }
 
             let instruction_ip = ip;
-            self.line = self.frame_line(frame, instruction_ip);
-            let Some(opcode) = OpCode::from_u8(self.read_byte(frame, ip)) else {
-                return self
-                    .runtime_error(self.line, RuntimeError::InvalidInstruction(instruction_ip));
+            // SAFETY: `ip < code_len`.
+            let byte = unsafe { cursor.read_byte(ip) };
+            let Some(opcode) = decode_opcode(byte) else {
+                return self.runtime_error_at(
+                    &cursor,
+                    instruction_ip,
+                    RuntimeError::InvalidInstruction(instruction_ip),
+                );
             };
             ip += 1;
 
@@ -341,21 +413,28 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
             match opcode {
                 OpCode::Constant => {
-                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    // SAFETY: operand byte is within the frame code.
+                    let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    self.push(self.read_constant(frame, ix));
+                    // SAFETY: constant index emitted by the compiler.
+                    let constant = unsafe { cursor.read_constant(ix) };
+                    self.push_raw(constant);
+                    self.objects.retain(constant);
                 }
                 OpCode::ConstantLong => {
-                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
+                    // SAFETY: 3-byte operand within the frame code.
+                    let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
-                    self.push(self.read_constant(frame, ix));
+                    let constant = unsafe { cursor.read_constant(ix) };
+                    self.push_raw(constant);
+                    self.objects.retain(constant);
                 }
                 OpCode::Return => {
                     let ret_slot = self.stack_top - 1;
-                    let value = self.stack[ret_slot];
+                    let value = self.stack_get(ret_slot);
                     self.stack_top = ret_slot;
                     let returns_slot0 =
-                        cursor.slots > 0 && value == self.stack[cursor.slots.saturating_sub(1)];
+                        cursor.slots > 0 && value == self.stack_get(cursor.slots.saturating_sub(1));
 
                     if cursor.slots > 0 {
                         self.close_upvalue_at(cursor.slots - 1)?;
@@ -386,139 +465,204 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue 'run_insns;
                 }
                 OpCode::Negate => {
-                    let value = self.pop()?;
-                    let value = value.try_num()?;
-                    self.push(LoxValue::number(-value));
+                    let value = self.pop_raw();
+                    if value.is_number() {
+                        self.push_raw(LoxValue::number(-value.as_number()));
+                    } else {
+                        self.objects.release(value);
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::ExpectedNumber(value),
+                        );
+                    }
                 }
                 OpCode::Add => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
+                    let b = self.pop_raw();
+                    let a = self.pop_raw();
                     if a.is_number() && b.is_number() {
-                        self.push(LoxValue::number(a.as_number() + b.as_number()));
+                        self.push_raw(LoxValue::number(a.as_number() + b.as_number()));
                     } else if let (Ok(l_id), Ok(r_id)) = (a.try_str(), b.try_str()) {
                         let l = string_chars(&self.objects, l_id)?;
                         let r = string_chars(&self.objects, r_id)?;
                         let result = self.objects.intern_string(l.to_owned() + r)?;
-                        self.push(result);
+                        self.push_raw(result);
                     } else {
-                        return Err(RuntimeError::OperandsMustBeNumbersOrStrings);
+                        self.objects.release(a);
+                        self.objects.release(b);
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::OperandsMustBeNumbersOrStrings,
+                        );
                     }
                 }
                 OpCode::Subtract => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::number(a.try_num()? - b.try_num()?));
-                }
-                OpCode::Multiply => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::number(a.try_num()? * b.try_num()?));
-                }
-                OpCode::Divide => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    let a = a.try_num()?;
-                    let b = b.try_num()?;
-                    if b == 0.0 {
-                        self.push(LoxValue::number(f64::NAN));
+                    let b = self.pop_raw();
+                    let a = self.pop_raw();
+                    if a.is_number() && b.is_number() {
+                        self.push_raw(LoxValue::number(a.as_number() - b.as_number()));
                     } else {
-                        self.push(LoxValue::number(a / b));
+                        self.objects.release(a);
+                        self.objects.release(b);
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::OperandsMustBeNumbers(a, b),
+                        );
                     }
                 }
-                OpCode::Nil => self.push(LoxValue::NIL),
-                OpCode::True => self.push(LoxValue::TRUE),
-                OpCode::False => self.push(LoxValue::FALSE),
+                OpCode::Multiply => {
+                    let b = self.pop_raw();
+                    let a = self.pop_raw();
+                    if a.is_number() && b.is_number() {
+                        self.push_raw(LoxValue::number(a.as_number() * b.as_number()));
+                    } else {
+                        self.objects.release(a);
+                        self.objects.release(b);
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::OperandsMustBeNumbers(a, b),
+                        );
+                    }
+                }
+                OpCode::Divide => {
+                    let b = self.pop_raw();
+                    let a = self.pop_raw();
+                    if a.is_number() && b.is_number() {
+                        let a = a.as_number();
+                        let b = b.as_number();
+                        if b == 0.0 {
+                            self.push_raw(LoxValue::number(f64::NAN));
+                        } else {
+                            self.push_raw(LoxValue::number(a / b));
+                        }
+                    } else {
+                        self.objects.release(a);
+                        self.objects.release(b);
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::OperandsMustBeNumbers(a, b),
+                        );
+                    }
+                }
+                OpCode::Nil => self.push_raw(LoxValue::NIL),
+                OpCode::True => self.push_raw(LoxValue::TRUE),
+                OpCode::False => self.push_raw(LoxValue::FALSE),
                 OpCode::Not => {
-                    let value = self.pop()?;
-                    self.push(LoxValue::bool_val(value.is_falsey()));
+                    let value = self.pop_raw();
+                    let result = LoxValue::bool_val(value.is_falsey());
+                    self.objects.release(value);
+                    self.push_raw(result);
                 }
                 OpCode::Equal => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::bool_val(a.equal(b)));
+                    let b = self.pop_raw();
+                    let a = self.pop_raw();
+                    let result = LoxValue::bool_val(a.equal(b));
+                    self.objects.release(a);
+                    self.objects.release(b);
+                    self.push_raw(result);
                 }
                 OpCode::Less => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    self.push(LoxValue::bool_val(a.less(b, &self.objects)?));
+                    let b = self.pop_raw();
+                    let a = self.pop_raw();
+                    if a.is_number() && b.is_number() {
+                        self.push_raw(LoxValue::bool_val(a.as_number() < b.as_number()));
+                    } else {
+                        let cmp = a.less(b, &self.objects);
+                        self.objects.release(a);
+                        self.objects.release(b);
+                        self.push_raw(LoxValue::bool_val(cmp?));
+                    }
                 }
                 OpCode::Greater => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    let lt = a.less(b, &self.objects)?;
-                    let gt = !lt && !a.equal(b);
-                    self.push(LoxValue::bool_val(gt));
+                    let b = self.pop_raw();
+                    let a = self.pop_raw();
+                    if a.is_number() && b.is_number() {
+                        self.push_raw(LoxValue::bool_val(a.as_number() > b.as_number()));
+                    } else {
+                        let lt = a.less(b, &self.objects);
+                        let eq = a.equal(b);
+                        self.objects.release(a);
+                        self.objects.release(b);
+                        let lt = lt?;
+                        self.push_raw(LoxValue::bool_val(!lt && !eq));
+                    }
                 }
                 OpCode::Print => {
-                    let value = self.peek(0)?;
+                    let value = self.peek_unchecked(0);
                     self.write_value(value)?;
-                    self.pop()?;
+                    self.pop_unchecked();
                 }
                 OpCode::Pop => {
-                    self.pop()?;
+                    self.pop_unchecked();
                 }
                 OpCode::DefineGlobal => {
-                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    self.define_global(self.read_constant(frame, ix))?;
+                    self.define_global(unsafe { cursor.read_constant(ix) })?;
                 }
                 OpCode::DefineGlobalLong => {
-                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
+                    let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
-                    self.define_global(self.read_constant(frame, ix))?;
+                    self.define_global(unsafe { cursor.read_constant(ix) })?;
                 }
                 OpCode::GetGlobal => {
-                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    self.get_global(self.read_constant(frame, ix))?;
+                    self.get_global(unsafe { cursor.read_constant(ix) })?;
                 }
                 OpCode::GetGlobalLong => {
-                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
+                    let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
-                    self.get_global(self.read_constant(frame, ix))?;
+                    self.get_global(unsafe { cursor.read_constant(ix) })?;
                 }
                 OpCode::SetGlobal => {
-                    let ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    self.set_global(self.read_constant(frame, ix))?;
+                    self.set_global(unsafe { cursor.read_constant(ix) })?;
                 }
                 OpCode::SetGlobalLong => {
-                    let ix = self.read_constant_index(frame, ip, CONST_LONG_SIZE)?;
+                    let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
-                    self.set_global(self.read_constant(frame, ix))?;
+                    self.set_global(unsafe { cursor.read_constant(ix) })?;
                 }
                 OpCode::GetLocal => {
-                    let frame_offset = self.read_byte(frame, ip) as usize;
+                    let frame_offset = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let local_index = cursor.slots + frame_offset - 1;
-                    self.push(self.stack[local_index]);
+                    let value = self.stack_get(local_index);
+                    self.push_raw(value);
+                    self.objects.retain(value);
                 }
                 OpCode::SetLocal => {
-                    let frame_offset = self.read_byte(frame, ip) as usize;
+                    let frame_offset = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let local_index = cursor.slots + frame_offset - 1;
-                    let value = self.stack[self.stack_top - 1];
+                    let value = self.peek_unchecked(0);
                     self.set_stack(local_index, value);
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = self.read_u16(frame, ip);
+                    let offset = unsafe { cursor.read_u16(ip) };
                     ip += 2;
-                    if self.peek(0)?.is_falsey() {
+                    if self.peek_unchecked(0).is_falsey() {
                         ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = self.read_u16(frame, ip);
+                    let offset = unsafe { cursor.read_u16(ip) };
                     ip += 2;
                     ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = self.read_u16(frame, ip);
+                    let offset = unsafe { cursor.read_u16(ip) };
                     ip += 2;
                     ip -= offset;
                 }
                 OpCode::Call => {
-                    let args_count = self.read_byte(frame, ip) as usize;
+                    let args_count = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
@@ -531,9 +675,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue 'run_insns;
                 }
                 OpCode::Invoke => {
-                    let method_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
-                    let method_name = self.read_constant(frame, method_ix);
-                    let argc = self.read_byte(frame, ip + 1);
+                    let method_ix = unsafe { cursor.read_byte(ip) } as usize;
+                    let method_name = unsafe { cursor.read_constant(method_ix) };
+                    let argc = unsafe { cursor.read_byte(ip + 1) };
                     ip += 2;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
@@ -546,9 +690,9 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue 'run_insns;
                 }
                 OpCode::Closure => {
-                    let const_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let const_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    let function_value = self.read_constant(frame, const_ix);
+                    let function_value = unsafe { cursor.read_constant(const_ix) };
                     let func_id = function_value.try_function()?;
                     let closure_val = self.objects.alloc_closure(func_id)?;
                     let new_closure_id = closure_val.try_closure()?;
@@ -556,8 +700,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let mut upvalues = Vec::with_capacity(upvalues_count);
 
                     for _ in 0..upvalues_count {
-                        let is_local = self.read_byte(frame, ip);
-                        let index = self.read_byte(frame, ip + 1);
+                        let is_local = unsafe { cursor.read_byte(ip) };
+                        let index = unsafe { cursor.read_byte(ip + 1) };
                         ip += 2;
                         let upvalue = if is_local == 1 {
                             self.capture_upvalue(cursor.slots + index as usize - 1)?
@@ -571,20 +715,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(closure_val);
                 }
                 OpCode::GetUpvalue => {
-                    let slot = self.read_byte(frame, ip) as usize;
+                    let slot = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let upvalue_id = self.objects.closure(cursor.closure)?.upvalues[slot];
                     let upvalue = self.objects.upvalue(upvalue_id)?;
                     let lox_value = match upvalue.location {
-                        Some(location) => self.stack[location],
+                        Some(location) => self.stack_get(location),
                         None => upvalue.closed,
                     };
                     self.push(lox_value);
                 }
                 OpCode::SetUpvalue => {
-                    let slot = self.read_byte(frame, ip) as usize;
+                    let slot = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
-                    let val = self.stack[self.stack_top - 1];
+                    let val = self.peek_unchecked(0);
                     let upvalue_id = self.objects.closure(cursor.closure)?.upvalues[slot];
                     let location = self.objects.upvalue(upvalue_id)?.location;
                     if let Some(location) = location {
@@ -603,45 +747,46 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::CloseUpvalue => {
                     let location = self.stack_top - 1;
                     self.close_upvalues(location)?;
-                    self.pop()?;
+                    self.pop_unchecked();
                 }
                 OpCode::Class => {
-                    let class_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let class_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    let class_name = self.read_constant(frame, class_ix);
+                    let class_name = unsafe { cursor.read_constant(class_ix) };
                     let class = self.objects.alloc_class(class_name)?;
                     self.push(class);
                 }
                 OpCode::GetProperty => {
-                    let prop_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let prop_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    let property_id = self.read_constant(frame, prop_ix).try_str()?;
-                    let instance_id = self.peek(0)?.try_instance()?;
+                    let property_id = unsafe { cursor.read_constant(prop_ix) }.try_str()?;
+                    let instance_id = self.peek_unchecked(0).try_instance()?;
                     if let Some(val) =
                         Self::get_member(instance_id, property_id, &mut self.objects)?
                     {
-                        self.pop()?;
+                        self.pop_unchecked();
                         self.push(val);
                     } else {
                         let name = string_chars(&self.objects, property_id)?.to_owned();
-                        return self.runtime_error(
-                            self.line,
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
                             RuntimeError::UndefinedMethodOrProperty(name),
                         );
                     }
                 }
                 OpCode::SetProperty => {
-                    let prop_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let prop_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    let property_id =
-                        self.read_constant(frame, prop_ix)
-                            .try_str()
-                            .inspect_err(|_| {
-                                self.line = self.frame_line(frame, instruction_ip);
-                            })?;
-                    self.objects.retain(self.stack[self.stack_top - 1]);
-                    let property_value = self.pop()?;
-                    let instance_id = self.pop()?.try_instance_field()?;
+                    let property_id = match unsafe { cursor.read_constant(prop_ix) }.try_str() {
+                        Ok(id) => id,
+                        Err(err) => {
+                            return self.runtime_error_at(&cursor, instruction_ip, err);
+                        }
+                    };
+                    self.objects.retain(self.peek_unchecked(0));
+                    let property_value = self.pop_unchecked();
+                    let instance_id = self.pop_unchecked().try_instance_field()?;
                     let old = {
                         let instance = self.objects.instance_mut(instance_id)?;
                         instance.fields.insert(property_id, property_value)
@@ -654,15 +799,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(property_value);
                 }
                 OpCode::Method => {
-                    let method_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let method_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    self.define_method(self.read_constant(frame, method_ix))?;
+                    self.define_method(unsafe { cursor.read_constant(method_ix) })?;
                 }
                 OpCode::Inherit => {
-                    let Ok(super_class_id) = self.peek(1)?.try_class() else {
-                        return Err(RuntimeError::SuperclassMustBeClass);
+                    let Ok(super_class_id) = self.peek_unchecked(1).try_class() else {
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::SuperclassMustBeClass,
+                        );
                     };
-                    let sub_class_id = self.peek(0)?.try_class()?;
+                    let sub_class_id = self.peek_unchecked(0).try_class()?;
                     let super_methods = self.objects.class(super_class_id)?.methods.clone();
                     for (name, method) in super_methods {
                         if !self
@@ -678,24 +827,28 @@ impl<W: std::io::Write> VirtualMachine<W> {
                                 .insert(name, method);
                         }
                     }
-                    self.pop()?;
+                    self.pop_unchecked();
                 }
                 OpCode::GetSuper => {
-                    let const_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
+                    let const_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    let name_id =
-                        self.read_constant(frame, const_ix)
-                            .try_str()
-                            .inspect_err(|_| {
-                                self.line = self.frame_line(frame, instruction_ip);
-                            })?;
-                    let super_class_id = self.pop()?.try_class()?;
-                    let instance_id = self.pop()?.try_instance()?;
+                    let name_id = match unsafe { cursor.read_constant(const_ix) }.try_str() {
+                        Ok(id) => id,
+                        Err(err) => {
+                            return self.runtime_error_at(&cursor, instruction_ip, err);
+                        }
+                    };
+                    let super_class_id = self.pop_unchecked().try_class()?;
+                    let instance_id = self.pop_unchecked().try_instance()?;
                     let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
                     else {
-                        return Err(RuntimeError::UndefinedMethodOrProperty(
-                            string_chars(&self.objects, name_id)?.to_owned(),
-                        ));
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::UndefinedMethodOrProperty(
+                                string_chars(&self.objects, name_id)?.to_owned(),
+                            ),
+                        );
                     };
                     let method_closure_id = method.try_closure()?;
                     let bound = self.objects.alloc_bound_method(
@@ -705,19 +858,23 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(bound);
                 }
                 OpCode::SuperInvoke => {
-                    let method_ix = self.read_constant_index(frame, ip, CONST_SIZE)?;
-                    let method_name = self.read_constant(frame, method_ix);
-                    let argc = self.read_byte(frame, ip + 1);
+                    let method_ix = unsafe { cursor.read_byte(ip) } as usize;
+                    let method_name = unsafe { cursor.read_constant(method_ix) };
+                    let argc = unsafe { cursor.read_byte(ip + 1) };
                     ip += 2;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
                     let name_id = method_name.try_str()?;
-                    let super_class_id = self.pop()?.try_class()?;
+                    let super_class_id = self.pop_unchecked().try_class()?;
                     let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
                     else {
-                        return Err(RuntimeError::UndefinedMethodOrProperty(
-                            string_chars(&self.objects, name_id)?.to_owned(),
-                        ));
+                        return self.runtime_error_at(
+                            &cursor,
+                            instruction_ip,
+                            RuntimeError::UndefinedMethodOrProperty(
+                                string_chars(&self.objects, name_id)?.to_owned(),
+                            ),
+                        );
                     };
                     self.call_value(*method, argc as usize)?;
                     if self.frame_count == prev_frame_count {
@@ -728,8 +885,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     continue 'run_insns;
                 }
             }
+            // Flush IP only into the cursor; frames[i].ip is updated on call/return/error.
             cursor.ip = ip;
-            self.frames[cursor.index].ip = ip;
         }
     }
 
@@ -808,7 +965,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 _ => break,
             };
             let next = self.objects.upvalue(upvalue_id)?.next;
-            let closed_value = self.stack[location];
+            let closed_value = self.stack_get(location);
             let old_closed = {
                 let upvalue = self.objects.upvalue_mut(upvalue_id)?;
                 let old = upvalue.closed;
@@ -832,7 +989,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
             let upvalue = self.objects.upvalue(upvalue_id)?;
             if upvalue.location == Some(location) {
                 let next = upvalue.next;
-                let closed_value = self.stack[location];
+                let closed_value = self.stack_get(location);
                 let old_closed = {
                     let upvalue = self.objects.upvalue_mut(upvalue_id)?;
                     let old = upvalue.closed;
@@ -889,7 +1046,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn call_value_at(&mut self, args_count: usize) -> Result<(), RuntimeError> {
-        let callee = self.stack[self.stack_top - args_count - 1];
+        let callee = self.stack_get(self.stack_top - args_count - 1);
         self.call_value(callee, args_count)
     }
 
@@ -987,7 +1144,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 string_chars(&self.objects, key)?.to_owned(),
             ));
         }
-        let value = self.stack[self.stack_top - 1];
+        let value = self.peek_unchecked(0);
         if let Some(old) = self.globals.insert(key, value) {
             self.objects.release(old);
         }
@@ -1011,7 +1168,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     fn define_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
         let key = name.try_str()?;
         self.stack_top -= 1;
-        let value = self.stack[self.stack_top];
+        let value = self.stack_get(self.stack_top);
         if let Some(old) = self.globals.insert(key, value) {
             self.objects.release(old);
         }

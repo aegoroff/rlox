@@ -89,14 +89,14 @@ impl LoxValue {
         (self.0 & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT)
     }
 
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn is_refcounted(self) -> bool {
-        self.is_obj()
-            && matches!(
-                self.obj_type(),
-                Some(ObjType::Instance | ObjType::BoundMethod)
-            )
+        if !self.is_obj() {
+            return false;
+        }
+        let ty = ((self.0 >> OBJ_TYPE_SHIFT) & 0xFF) as u8;
+        ty == ObjType::Instance as u8 || ty == ObjType::BoundMethod as u8
     }
 
     #[inline]
@@ -117,17 +117,13 @@ impl LoxValue {
         if value { Self::TRUE } else { Self::FALSE }
     }
 
-    #[inline]
+    /// Value equality matching clox: IEEE `==` for numbers, bit identity otherwise.
+    #[inline(always)]
     #[must_use]
+    #[allow(clippy::float_cmp)] // intentional: matches clox `AS_NUMBER(a) == AS_NUMBER(b)`
     pub fn equal(self, other: Self) -> bool {
         if self.is_number() && other.is_number() {
-            return (self.as_number() - other.as_number()).abs() < 0.00001;
-        }
-        if self.is_nil() && other.is_nil() {
-            return true;
-        }
-        if self.is_bool() && other.is_bool() {
-            return self.as_bool() == other.as_bool();
+            return self.as_number() == other.as_number();
         }
         self.0 == other.0
     }

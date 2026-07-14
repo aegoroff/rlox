@@ -15,3 +15,9 @@ test-case = "3.3.1"
 
 [features]
 disassembly = []
+
+# Hot-path VM optimizations use carefully scoped `unsafe` (unchecked stack /
+# bytecode access). Workspace forbids unsafe elsewhere; this crate opts out
+# of workspace lint inheritance so it can allow `unsafe_code`.
+[lints.rust]
+unsafe_code = "allow"
