@@ -1,19 +1,14 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::fmt;
-use std::hash::BuildHasherDefault;
-use std::rc::Rc;
 
-use fnv::FnvHashMap;
 use miette::LabeledSpan;
 
+use crate::obj_map::ObjMap;
 use crate::object::{ObjId, ObjType, ObjectStore, string_chars};
 use crate::value::LoxValue;
 use crate::{RuntimeError, builtin};
-use crate::{
-    chunk::{Chunk, OpCode},
-    compile::Parser,
-};
+use crate::{chunk::OpCode, compile::Parser};
 
 const FRAMES_MAX: usize = 64;
 const CONST_SIZE: usize = 1;
@@ -21,20 +16,28 @@ const CONST_LONG_SIZE: usize = 3;
 const STACK_MAX: usize = FRAMES_MAX * 256;
 const OPCODE_MAX: u8 = OpCode::Method as u8;
 
+/// Call frame with raw pointers into the callee's immutable bytecode.
+///
+/// # Safety invariants
+/// - `code` / `constants` / `lines` point into `ObjFunction.chunk` buffers.
+/// - Functions and their chunks are never freed while the VM runs (only
+///   instances / bound methods are refcounted), so these pointers stay valid
+///   for the lifetime of any frame that references the function via `closure`.
 struct CallFrame {
     closure: ObjId,
     ip: usize,
     slots: usize,
-    chunk: Rc<Chunk>,
+    code: *const u8,
+    code_len: usize,
+    constants: *const LoxValue,
+    lines: *const usize,
 }
 
 /// Dispatch cursor: tracks the active frame without cloning its chunk.
 ///
 /// # Safety invariants
-/// - `code` / `constants` / `lines` point into the `Rc` buffers owned by
-///   `frames[index].chunk`, which stays alive for the lifetime of that frame.
-/// - Chunk contents are immutable after compilation, so these pointers remain
-///   valid while the frame is active.
+/// - Pointers are copies of the active [`CallFrame`] pointers (see above).
+/// - Chunk contents are immutable after compilation.
 struct FrameCursor {
     index: usize,
     ip: usize,
@@ -56,10 +59,10 @@ impl FrameCursor {
             ip: frame.ip,
             slots: frame.slots,
             closure: frame.closure,
-            code: frame.chunk.code.as_ptr(),
-            code_len: frame.chunk.code.len(),
-            constants: frame.chunk.constants.as_ptr(),
-            lines: frame.chunk.lines.as_ptr(),
+            code: frame.code,
+            code_len: frame.code_len,
+            constants: frame.constants,
+            lines: frame.lines,
         }
     }
 
@@ -122,7 +125,7 @@ pub struct VirtualMachine<W: std::io::Write> {
     stack: [LoxValue; STACK_MAX],
     stack_top: usize,
     objects: ObjectStore,
-    globals: FnvHashMap<ObjId, LoxValue>,
+    globals: ObjMap,
     frames: [CallFrame; FRAMES_MAX],
     frame_count: usize,
     open_upvalues: Option<ObjId>,
@@ -149,12 +152,15 @@ impl<W: std::io::Write> VirtualMachine<W> {
             stack: [LoxValue::NIL; STACK_MAX],
             stack_top: 0,
             objects: ObjectStore::new(),
-            globals: FnvHashMap::with_capacity_and_hasher(32, BuildHasherDefault::default()),
+            globals: ObjMap::new(),
             frames: std::array::from_fn(|_| CallFrame {
                 closure: 0,
                 ip: 0,
                 slots: 0,
-                chunk: Rc::new(Chunk::new()),
+                code: std::ptr::null(),
+                code_len: 0,
+                constants: std::ptr::null(),
+                lines: std::ptr::null(),
             }),
             frame_count: 0,
             open_upvalues: None,
@@ -1080,11 +1086,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
         if self.frame_count == FRAMES_MAX - 1 {
             return Err(RuntimeError::StackOverflow);
         }
+        // Capture chunk pointers before taking a mutable borrow of `frames`.
+        // SAFETY: chunk buffers outlive the VM; see CallFrame invariants.
+        let code = function.chunk.code.as_ptr();
+        let code_len = function.chunk.code.len();
+        let constants = function.chunk.constants.as_ptr();
+        let lines = function.chunk.lines.as_ptr();
         let frame = &mut self.frames[self.frame_count];
         frame.slots = self.stack_top - args_count;
         frame.closure = closure_id;
         frame.ip = 0;
-        frame.chunk = Rc::clone(&function.chunk);
+        frame.code = code;
+        frame.code_len = code_len;
+        frame.constants = constants;
+        frame.lines = lines;
         self.frame_count += 1;
         Ok(())
     }
@@ -1134,7 +1149,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn set_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
         let key = name.try_str()?;
-        if !self.globals.contains_key(&key) {
+        if !self.globals.contains_key(key) {
             return Err(RuntimeError::UndefinedGlobal(
                 string_chars(&self.objects, key)?.to_owned(),
             ));
@@ -1150,7 +1165,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline]
     fn get_global(&mut self, name: LoxValue) -> Result<(), RuntimeError> {
         let key = name.try_str()?;
-        let Some(val) = self.globals.get(&key) else {
+        let Some(val) = self.globals.get(key) else {
             return Err(RuntimeError::UndefinedGlobal(
                 string_chars(&self.objects, key)?.to_owned(),
             ));

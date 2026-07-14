@@ -180,6 +180,11 @@ impl ObjMap {
             .filter(|entry| entry.is_live())
             .map(|entry| (entry.key, entry.value))
     }
+
+    pub fn clear(&mut self) {
+        self.count = 0;
+        self.entries = Box::new([]);
+    }
 }
 
 impl IntoIterator for ObjMap {
