@@ -814,12 +814,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let sub_class_id = self.peek_unchecked(0).try_class()?;
                     let super_methods = self.objects.class(super_class_id)?.methods.clone();
                     for (name, method) in super_methods {
-                        if !self
-                            .objects
-                            .class(sub_class_id)?
-                            .methods
-                            .contains_key(&name)
-                        {
+                        if !self.objects.class(sub_class_id)?.methods.contains_key(name) {
                             self.objects.retain(method);
                             self.objects
                                 .class_mut(sub_class_id)?
@@ -840,7 +835,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     };
                     let super_class_id = self.pop_unchecked().try_class()?;
                     let instance_id = self.pop_unchecked().try_instance()?;
-                    let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
+                    let Some(method) = self.objects.class(super_class_id)?.methods.get(name_id)
                     else {
                         return self.runtime_error_at(
                             &cursor,
@@ -866,7 +861,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let prev_frame_count = self.frame_count;
                     let name_id = method_name.try_str()?;
                     let super_class_id = self.pop_unchecked().try_class()?;
-                    let Some(method) = self.objects.class(super_class_id)?.methods.get(&name_id)
+                    let Some(method) = self.objects.class(super_class_id)?.methods.get(name_id)
                     else {
                         return self.runtime_error_at(
                             &cursor,
@@ -897,7 +892,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance_id = receiver.try_instance()?;
         let (is_field, callable) = {
             let instance = self.objects.instance(instance_id)?;
-            if let Some(field) = instance.fields.get(&method_key) {
+            if let Some(field) = instance.fields.get(method_key) {
                 (true, *field)
             } else {
                 let class_id = instance.class;
@@ -905,7 +900,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     .objects
                     .class(class_id)?
                     .methods
-                    .get(&method_key)
+                    .get(method_key)
                     .copied()
                 else {
                     return Err(RuntimeError::UndefinedMethodOrProperty(
@@ -929,12 +924,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
     ) -> Result<Option<LoxValue>, RuntimeError> {
         let class_id = {
             let instance = store.instance(instance_id)?;
-            if let Some(field) = instance.fields.get(&property_id) {
+            if let Some(field) = instance.fields.get(property_id) {
                 return Ok(Some(*field));
             }
             instance.class
         };
-        let Some(method) = store.class(class_id)?.methods.get(&property_id).copied() else {
+        let Some(method) = store.class(class_id)?.methods.get(property_id).copied() else {
             return Ok(None);
         };
         let method_closure_id = method.try_closure()?;
@@ -1116,7 +1111,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
         let instance = self.objects.alloc_instance(class_id)?;
         self.set_stack(self.stack_top - args_count - 1, instance);
 
-        if let Some(init) = self.objects.class(class_id)?.methods.get(&self.init_string) {
+        if let Some(init) = self.objects.class(class_id)?.methods.get(self.init_string) {
             self.call_value(*init, args_count)
         } else if args_count > 0 {
             Err(RuntimeError::InvalidFunctionArgsCount(0, args_count))

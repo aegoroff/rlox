@@ -10,6 +10,7 @@ use fnv::FnvHashMap;
 use crate::{
     RuntimeError,
     chunk::Chunk,
+    obj_map::ObjMap,
     value::{Function, LoxValue},
 };
 
@@ -59,12 +60,12 @@ pub struct ObjClosure {
 
 pub struct ObjClass {
     pub name: ObjId,
-    pub methods: FnvHashMap<ObjId, LoxValue>,
+    pub methods: ObjMap,
 }
 
 pub struct ObjInstance {
     pub class: ObjId,
-    pub fields: FnvHashMap<ObjId, LoxValue>,
+    pub fields: ObjMap,
 }
 
 pub struct ObjBoundMethod {
@@ -122,6 +123,10 @@ impl ObjectStore {
             return Ok(id);
         }
         let id = u32::try_from(self.objects.len()).map_err(|_| RuntimeError::TooManyObjects)?;
+        // Leave `u32::MAX` / `u32::MAX - 1` free for ObjMap empty/tombstone sentinels.
+        if id >= u32::MAX - 1 {
+            return Err(RuntimeError::TooManyObjects);
+        }
         self.objects.push(object);
         self.ref_counts.push(0);
         Ok(id)
@@ -291,7 +296,7 @@ impl ObjectStore {
         let name_id = name.try_str()?;
         let id = self.push_object(HeapObject::Class(ObjClass {
             name: name_id,
-            methods: FnvHashMap::default(),
+            methods: ObjMap::new(),
         }))?;
         Ok(LoxValue::from_obj(id, ObjType::Class))
     }
@@ -299,7 +304,7 @@ impl ObjectStore {
     pub fn alloc_instance(&mut self, class: ObjId) -> Result<LoxValue, RuntimeError> {
         let id = self.push_object(HeapObject::Instance(ObjInstance {
             class,
-            fields: FnvHashMap::default(),
+            fields: ObjMap::new(),
         }))?;
         Ok(LoxValue::from_obj(id, ObjType::Instance))
     }

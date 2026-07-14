@@ -6,6 +6,7 @@ use value::LoxValue;
 mod builtin;
 mod chunk;
 pub mod compile;
+mod obj_map;
 pub mod object;
 pub mod value;
 pub mod vm;
