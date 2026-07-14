@@ -73,6 +73,8 @@ pub struct ObjBoundMethod {
 }
 
 pub enum HeapObject {
+    /// Slot recycled by the free list; not a live object.
+    Free,
     String(ObjString),
     Function(ObjFunction),
     Native(ObjNative),
@@ -84,7 +86,9 @@ pub enum HeapObject {
 }
 
 pub struct ObjectStore {
-    objects: Vec<Option<HeapObject>>,
+    /// Dense object table. Freed slots hold [`HeapObject::Free`] and their
+    /// ids sit on `free_list` for reuse.
+    objects: Vec<HeapObject>,
     ref_counts: Vec<u32>,
     free_list: Vec<ObjId>,
     strings: FnvHashMap<(u32, usize), ObjId>,
@@ -110,14 +114,31 @@ impl ObjectStore {
     fn alloc_slot(&mut self, object: HeapObject) -> Result<ObjId, RuntimeError> {
         if let Some(id) = self.free_list.pop() {
             let index = id as usize;
-            self.objects[index] = Some(object);
-            self.ref_counts[index] = 0;
+            // SAFETY: free-list ids are always in-range table indices.
+            unsafe {
+                *self.objects.get_unchecked_mut(index) = object;
+                *self.ref_counts.get_unchecked_mut(index) = 0;
+            }
             return Ok(id);
         }
         let id = u32::try_from(self.objects.len()).map_err(|_| RuntimeError::TooManyObjects)?;
-        self.objects.push(Some(object));
+        self.objects.push(object);
         self.ref_counts.push(0);
         Ok(id)
+    }
+
+    /// # Safety
+    /// `id` must be a slot allocated by this store (`id as usize < objects.len()`).
+    #[inline(always)]
+    unsafe fn get_unchecked(&self, id: ObjId) -> &HeapObject {
+        unsafe { self.objects.get_unchecked(id as usize) }
+    }
+
+    /// # Safety
+    /// `id` must be a slot allocated by this store (`id as usize < objects.len()`).
+    #[inline(always)]
+    unsafe fn get_unchecked_mut(&mut self, id: ObjId) -> &mut HeapObject {
+        unsafe { self.objects.get_unchecked_mut(id as usize) }
     }
 
     #[inline(always)]
@@ -150,10 +171,10 @@ impl ObjectStore {
     }
 
     fn free_object(&mut self, id: ObjId) {
-        let Some(object) = self.objects[id as usize].take() else {
-            return;
-        };
+        // SAFETY: `id` came from a live refcounted object in this store.
+        let object = unsafe { std::mem::replace(self.get_unchecked_mut(id), HeapObject::Free) };
         match object {
+            HeapObject::Free => return,
             HeapObject::Instance(instance) => {
                 for value in instance.fields.values() {
                     self.release(*value);
@@ -176,18 +197,30 @@ impl ObjectStore {
         self.alloc_slot(object)
     }
 
+    #[inline(always)]
     pub fn try_get(&self, id: ObjId) -> Result<&HeapObject, RuntimeError> {
-        self.objects
-            .get(id as usize)
-            .and_then(|object| object.as_ref())
-            .ok_or(RuntimeError::ObjectUnavailable(id))
+        let index = id as usize;
+        if index >= self.objects.len() {
+            return Err(RuntimeError::ObjectUnavailable(id));
+        }
+        // SAFETY: bounds checked above.
+        match unsafe { self.get_unchecked(id) } {
+            HeapObject::Free => Err(RuntimeError::ObjectUnavailable(id)),
+            object => Ok(object),
+        }
     }
 
+    #[inline(always)]
     pub fn try_get_mut(&mut self, id: ObjId) -> Result<&mut HeapObject, RuntimeError> {
-        self.objects
-            .get_mut(id as usize)
-            .and_then(|object| object.as_mut())
-            .ok_or(RuntimeError::ObjectUnavailable(id))
+        let index = id as usize;
+        if index >= self.objects.len() {
+            return Err(RuntimeError::ObjectUnavailable(id));
+        }
+        // SAFETY: bounds checked above.
+        match unsafe { self.get_unchecked_mut(id) } {
+            HeapObject::Free => Err(RuntimeError::ObjectUnavailable(id)),
+            object => Ok(object),
+        }
     }
 
     pub fn intern_string(&mut self, text: impl Into<String>) -> Result<LoxValue, RuntimeError> {
@@ -238,10 +271,10 @@ impl ObjectStore {
     }
 
     pub fn alloc_closure(&mut self, function: ObjId) -> Result<LoxValue, RuntimeError> {
-        let function_obj = self.function(function)?;
+        let upvalue_count = self.function(function)?.upvalue_count;
         let id = self.push_object(HeapObject::Closure(ObjClosure {
             function,
-            upvalues: Vec::with_capacity(function_obj.upvalue_count),
+            upvalues: Vec::with_capacity(upvalue_count),
         }))?;
         Ok(LoxValue::from_obj(id, ObjType::Closure))
     }
@@ -283,85 +316,119 @@ impl ObjectStore {
         Ok(val)
     }
 
+    /// Typed accessors for ids known to come from this store (VM hot path).
+    /// Invalid / freed ids still return `ObjectUnavailable` / type errors.
+    #[inline(always)]
+    fn expect_live(&self, id: ObjId) -> Result<&HeapObject, RuntimeError> {
+        debug_assert!((id as usize) < self.objects.len());
+        // SAFETY: allocated ObjIds are always in range of `objects`.
+        match unsafe { self.get_unchecked(id) } {
+            HeapObject::Free => Err(RuntimeError::ObjectUnavailable(id)),
+            object => Ok(object),
+        }
+    }
+
+    #[inline(always)]
+    fn expect_live_mut(&mut self, id: ObjId) -> Result<&mut HeapObject, RuntimeError> {
+        debug_assert!((id as usize) < self.objects.len());
+        // SAFETY: allocated ObjIds are always in range of `objects`.
+        match unsafe { self.get_unchecked_mut(id) } {
+            HeapObject::Free => Err(RuntimeError::ObjectUnavailable(id)),
+            object => Ok(object),
+        }
+    }
+
+    #[inline(always)]
     pub fn string(&self, id: ObjId) -> Result<&ObjString, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::String(string) => Ok(string),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::String)),
         }
     }
 
+    #[inline(always)]
     pub fn function(&self, id: ObjId) -> Result<&ObjFunction, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::Function(function) => Ok(function),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Function)),
         }
     }
 
+    #[inline(always)]
     pub fn native(&self, id: ObjId) -> Result<&ObjNative, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::Native(native) => Ok(native),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Native)),
         }
     }
 
+    #[inline(always)]
     pub fn closure(&self, id: ObjId) -> Result<&ObjClosure, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::Closure(closure) => Ok(closure),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Closure)),
         }
     }
 
+    #[inline(always)]
     pub fn closure_mut(&mut self, id: ObjId) -> Result<&mut ObjClosure, RuntimeError> {
-        match self.try_get_mut(id)? {
+        match self.expect_live_mut(id)? {
             HeapObject::Closure(closure) => Ok(closure),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Closure)),
         }
     }
 
+    #[inline(always)]
     pub fn upvalue(&self, id: ObjId) -> Result<&ObjUpvalue, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::Upvalue(upvalue) => Ok(upvalue),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Upvalue)),
         }
     }
 
+    #[inline(always)]
     pub fn upvalue_mut(&mut self, id: ObjId) -> Result<&mut ObjUpvalue, RuntimeError> {
-        match self.try_get_mut(id)? {
+        match self.expect_live_mut(id)? {
             HeapObject::Upvalue(upvalue) => Ok(upvalue),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Upvalue)),
         }
     }
 
+    #[inline(always)]
     pub fn class(&self, id: ObjId) -> Result<&ObjClass, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::Class(class) => Ok(class),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Class)),
         }
     }
 
+    #[inline(always)]
     pub fn class_mut(&mut self, id: ObjId) -> Result<&mut ObjClass, RuntimeError> {
-        match self.try_get_mut(id)? {
+        match self.expect_live_mut(id)? {
             HeapObject::Class(class) => Ok(class),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Class)),
         }
     }
 
+    #[inline(always)]
     pub fn instance(&self, id: ObjId) -> Result<&ObjInstance, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::Instance(instance) => Ok(instance),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Instance)),
         }
     }
 
+    #[inline(always)]
     pub fn instance_mut(&mut self, id: ObjId) -> Result<&mut ObjInstance, RuntimeError> {
-        match self.try_get_mut(id)? {
+        match self.expect_live_mut(id)? {
             HeapObject::Instance(instance) => Ok(instance),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::Instance)),
         }
     }
 
+    #[inline(always)]
     pub fn bound_method(&self, id: ObjId) -> Result<&ObjBoundMethod, RuntimeError> {
-        match self.try_get(id)? {
+        match self.expect_live(id)? {
             HeapObject::BoundMethod(bound) => Ok(bound),
             _ => Err(RuntimeError::UnexpectedObjectType(id, ObjType::BoundMethod)),
         }
@@ -391,6 +458,7 @@ impl ObjectStore {
             return write!(f, "<freed>");
         };
         match object {
+            HeapObject::Free => write!(f, "<freed>"),
             HeapObject::String(string) => write!(f, "{}", string.chars),
             HeapObject::Function(function) => match self.string(function.name) {
                 Ok(name) => write!(f, "<fn {}>", name.chars),
@@ -442,6 +510,7 @@ pub fn obj_type_in(store: &ObjectStore, value: LoxValue) -> Option<ObjType> {
     let id = value.obj_id()?;
     let object = store.try_get(id).ok()?;
     Some(match object {
+        HeapObject::Free => return None,
         HeapObject::String(_) => ObjType::String,
         HeapObject::Function(_) => ObjType::Function,
         HeapObject::Native(_) => ObjType::Native,
