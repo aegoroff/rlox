@@ -82,7 +82,7 @@ impl Display for RuntimeError {
                 write!(f, "Expected bound method but was '{val}'")
             }
             RuntimeError::InvalidFunctionArgsCount(arity, args_count) => {
-                write!(f, "Expected {arity} arguments but got {args_count}")
+                write!(f, "Expected {arity} arguments but got {args_count}.")
             }
             RuntimeError::UndefinedGlobal(value) => {
                 write!(f, "Undefined variable '{value}'.")
