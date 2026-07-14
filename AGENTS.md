@@ -134,3 +134,9 @@ mod tests {
 ```
 
 See `compiler/src/vm.rs` and `interpreter/src/int.rs` for extensive examples.
+
+## Performance
+1. Prefer correctness to speed
+2. Prefer clarity to speed
+3. Benchmark against clox with `./bench.sh`
+4. Run the full benchmark suite against clox with `./bench_all.sh`
