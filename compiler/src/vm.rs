@@ -5,7 +5,7 @@ use std::fmt;
 use miette::LabeledSpan;
 
 use crate::obj_map::ObjMap;
-use crate::object::{ObjId, ObjType, ObjectStore, string_chars};
+use crate::object::{HeapObject, ObjId, ObjType, ObjectStore, string_chars};
 use crate::value::LoxValue;
 use crate::{RuntimeError, builtin};
 use crate::{chunk::OpCode, compile::Parser};
@@ -107,6 +107,76 @@ impl FrameCursor {
         debug_assert!(offset < self.code_len);
         // SAFETY: `lines` has the same length as `code`.
         unsafe { *self.lines.add(offset) }
+    }
+}
+
+/// Value-stack cursor kept in the dispatch loop so the top stays in a register.
+///
+/// `VirtualMachine::stack_top` is written back only when a handler reads the
+/// stack through `&mut self` (calls, globals, allocations, errors).
+///
+/// # Safety invariants
+/// - `ptr` addresses `VirtualMachine::stack`, a fixed array that does not move.
+/// - Bytecode stack discipline keeps every index below `STACK_MAX`.
+/// - A slot is not read through `ptr` while a `&mut` to that same slot is live.
+struct StackCursor {
+    ptr: *mut LoxValue,
+    top: usize,
+}
+
+impl StackCursor {
+    #[inline(always)]
+    unsafe fn peek(&self, distance: usize) -> LoxValue {
+        debug_assert!(self.top > distance);
+        // SAFETY: caller ensures `top > distance` and `top <= STACK_MAX`.
+        unsafe { *self.ptr.add(self.top - 1 - distance) }
+    }
+
+    #[inline(always)]
+    unsafe fn get(&self, index: usize) -> LoxValue {
+        debug_assert!(index < STACK_MAX);
+        // SAFETY: caller ensures `index` is a live slot.
+        unsafe { *self.ptr.add(index) }
+    }
+
+    #[inline(always)]
+    unsafe fn push(&mut self, value: LoxValue) {
+        debug_assert!(self.top < STACK_MAX);
+        // SAFETY: compiler-enforced frame limits keep `top < STACK_MAX`.
+        unsafe { *self.ptr.add(self.top) = value };
+        self.top += 1;
+    }
+
+    #[inline(always)]
+    unsafe fn pop(&mut self) -> LoxValue {
+        debug_assert!(self.top > 0);
+        self.top -= 1;
+        // SAFETY: caller ensures the stack is non-empty.
+        unsafe { *self.ptr.add(self.top) }
+    }
+
+    /// Overwrite the top of the stack without changing its height.
+    #[inline(always)]
+    unsafe fn replace_tos(&mut self, value: LoxValue) {
+        debug_assert!(self.top > 0);
+        // SAFETY: caller ensures the stack is non-empty.
+        unsafe { *self.ptr.add(self.top - 1) = value };
+    }
+
+    /// Drop the right-hand operand and store `value` as the new top.
+    #[inline(always)]
+    unsafe fn pop_and_replace(&mut self, value: LoxValue) {
+        debug_assert!(self.top >= 2);
+        self.top -= 1;
+        // SAFETY: caller ensures at least two slots are live.
+        unsafe { *self.ptr.add(self.top - 1) = value };
+    }
+
+    #[inline(always)]
+    unsafe fn set(&mut self, index: usize, value: LoxValue) {
+        debug_assert!(index < STACK_MAX);
+        // SAFETY: caller ensures `index` is a live slot.
+        unsafe { *self.ptr.add(index) = value };
     }
 }
 
@@ -381,11 +451,18 @@ impl<W: std::io::Write> VirtualMachine<W> {
         }
 
         let mut cursor = FrameCursor::active(self);
+        // SAFETY: `stack` is a fixed array and does not move for the VM lifetime.
+        // `stack.top` is the live height. `self.stack_top` is stale until a handler
+        // syncs it before reading the stack through `&mut self`.
+        let mut stack = StackCursor {
+            ptr: self.stack.as_mut_ptr(),
+            top: self.stack_top,
+        };
+        let mut ip = cursor.ip;
 
-        'run_insns: loop {
-            let mut ip = cursor.ip;
-
+        loop {
             if ip >= cursor.code_len {
+                self.stack_top = stack.top;
                 return Ok(());
             }
 
@@ -403,6 +480,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
             #[cfg(feature = "disassembly")]
             {
+                self.stack_top = stack.top;
                 print!("          ");
                 for i in 0..self.stack_top {
                     print!(
@@ -426,28 +504,37 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += CONST_SIZE;
                     // SAFETY: constant index emitted by the compiler.
                     let constant = unsafe { cursor.read_constant(ix) };
-                    self.push_raw(constant);
-                    self.objects.retain(constant);
+                    // SAFETY: a constant push stays within the frame's stack window.
+                    unsafe { stack.push(constant) };
+                    if constant.is_refcounted() {
+                        self.objects.retain(constant);
+                    }
                 }
                 OpCode::ConstantLong => {
                     // SAFETY: 3-byte operand within the frame code.
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
                     let constant = unsafe { cursor.read_constant(ix) };
-                    self.push_raw(constant);
-                    self.objects.retain(constant);
+                    // SAFETY: a constant push stays within the frame's stack window.
+                    unsafe { stack.push(constant) };
+                    if constant.is_refcounted() {
+                        self.objects.retain(constant);
+                    }
                 }
                 OpCode::Return => {
+                    self.stack_top = stack.top;
                     let ret_slot = self.stack_top - 1;
                     let value = self.stack_get(ret_slot);
                     self.stack_top = ret_slot;
                     let returns_slot0 =
                         cursor.slots > 0 && value == self.stack_get(cursor.slots.saturating_sub(1));
 
-                    if cursor.slots > 0 {
-                        self.close_upvalue_at(cursor.slots - 1)?;
+                    if self.open_upvalues.is_some() {
+                        if cursor.slots > 0 {
+                            self.close_upvalue_at(cursor.slots - 1)?;
+                        }
+                        self.close_upvalues(cursor.slots)?;
                     }
-                    self.close_upvalues(cursor.slots)?;
 
                     self.frame_count -= 1;
 
@@ -470,13 +557,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         return Ok(());
                     }
                     cursor = FrameCursor::active(self);
-                    continue 'run_insns;
+                    ip = cursor.ip;
+                    stack.top = self.stack_top;
                 }
                 OpCode::Negate => {
-                    let value = self.pop_raw();
+                    // SAFETY: `Negate` consumes one stack operand.
+                    let value = unsafe { stack.peek(0) };
                     if value.is_number() {
-                        self.push_raw(LoxValue::number(-value.as_number()));
+                        unsafe { stack.replace_tos(LoxValue::number(-value.as_number())) };
                     } else {
+                        self.stack_top = stack.top;
+                        let value = self.pop_raw();
                         self.objects.release(value);
                         return self.runtime_error_at(
                             &cursor,
@@ -486,67 +577,58 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                 }
                 OpCode::Add => {
-                    let b = self.pop_raw();
-                    let a = self.pop_raw();
+                    // SAFETY: `Add` reads the top two stack slots.
+                    let b = unsafe { stack.peek(0) };
+                    let a = unsafe { stack.peek(1) };
                     if a.is_number() && b.is_number() {
-                        self.push_raw(LoxValue::number(a.as_number() + b.as_number()));
-                    } else if let (Ok(l_id), Ok(r_id)) = (a.try_str(), b.try_str()) {
-                        let l = string_chars(&self.objects, l_id)?;
-                        let r = string_chars(&self.objects, r_id)?;
-                        let result = self.objects.intern_string(l.to_owned() + r)?;
-                        self.push_raw(result);
-                    } else {
-                        self.objects.release(a);
-                        self.objects.release(b);
-                        return self.runtime_error_at(
-                            &cursor,
-                            instruction_ip,
-                            RuntimeError::OperandsMustBeNumbersOrStrings,
-                        );
-                    }
-                }
-                OpCode::Subtract => {
-                    let b = self.pop_raw();
-                    let a = self.pop_raw();
-                    if a.is_number() && b.is_number() {
-                        self.push_raw(LoxValue::number(a.as_number() - b.as_number()));
-                    } else {
-                        self.objects.release(a);
-                        self.objects.release(b);
-                        return self.runtime_error_at(
-                            &cursor,
-                            instruction_ip,
-                            RuntimeError::OperandsMustBeNumbers(a, b),
-                        );
-                    }
-                }
-                OpCode::Multiply => {
-                    let b = self.pop_raw();
-                    let a = self.pop_raw();
-                    if a.is_number() && b.is_number() {
-                        self.push_raw(LoxValue::number(a.as_number() * b.as_number()));
-                    } else {
-                        self.objects.release(a);
-                        self.objects.release(b);
-                        return self.runtime_error_at(
-                            &cursor,
-                            instruction_ip,
-                            RuntimeError::OperandsMustBeNumbers(a, b),
-                        );
-                    }
-                }
-                OpCode::Divide => {
-                    let b = self.pop_raw();
-                    let a = self.pop_raw();
-                    if a.is_number() && b.is_number() {
-                        let a = a.as_number();
-                        let b = b.as_number();
-                        if b == 0.0 {
-                            self.push_raw(LoxValue::number(f64::NAN));
-                        } else {
-                            self.push_raw(LoxValue::number(a / b));
+                        unsafe {
+                            stack.pop_and_replace(LoxValue::number(a.as_number() + b.as_number()));
                         }
                     } else {
+                        self.stack_top = stack.top;
+                        let b = self.pop_raw();
+                        let a = self.pop_raw();
+                        if let (Ok(l_id), Ok(r_id)) = (a.try_str(), b.try_str()) {
+                            let l = string_chars(&self.objects, l_id)?;
+                            let r = string_chars(&self.objects, r_id)?;
+                            let result = self.objects.intern_string(l.to_owned() + r)?;
+                            self.push_raw(result);
+                            stack.top = self.stack_top;
+                        } else {
+                            self.objects.release(a);
+                            self.objects.release(b);
+                            return self.runtime_error_at(
+                                &cursor,
+                                instruction_ip,
+                                RuntimeError::OperandsMustBeNumbersOrStrings,
+                            );
+                        }
+                    }
+                }
+                OpCode::Subtract | OpCode::Multiply | OpCode::Divide => {
+                    // SAFETY: arithmetic reads the top two stack slots.
+                    let b = unsafe { stack.peek(0) };
+                    let a = unsafe { stack.peek(1) };
+                    if a.is_number() && b.is_number() {
+                        let left = a.as_number();
+                        let right = b.as_number();
+                        let result = match opcode {
+                            OpCode::Subtract => left - right,
+                            OpCode::Multiply => left * right,
+                            OpCode::Divide => {
+                                if right == 0.0 {
+                                    f64::NAN
+                                } else {
+                                    left / right
+                                }
+                            }
+                            _ => unreachable!("opcode is subtract, multiply, or divide"),
+                        };
+                        unsafe { stack.pop_and_replace(LoxValue::number(result)) };
+                    } else {
+                        self.stack_top = stack.top;
+                        let b = self.pop_raw();
+                        let a = self.pop_raw();
                         self.objects.release(a);
                         self.objects.release(b);
                         return self.runtime_error_at(
@@ -556,106 +638,172 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         );
                     }
                 }
-                OpCode::Nil => self.push_raw(LoxValue::NIL),
-                OpCode::True => self.push_raw(LoxValue::TRUE),
-                OpCode::False => self.push_raw(LoxValue::FALSE),
+                OpCode::Nil => unsafe { stack.push(LoxValue::NIL) },
+                OpCode::True => unsafe { stack.push(LoxValue::TRUE) },
+                OpCode::False => unsafe { stack.push(LoxValue::FALSE) },
                 OpCode::Not => {
-                    let value = self.pop_raw();
+                    // SAFETY: `Not` consumes one stack operand.
+                    let value = unsafe { stack.peek(0) };
                     let result = LoxValue::bool_val(value.is_falsey());
-                    self.objects.release(value);
-                    self.push_raw(result);
+                    if value.is_refcounted() {
+                        self.stack_top = stack.top;
+                        let value = self.pop_raw();
+                        self.objects.release(value);
+                        self.push_raw(result);
+                        stack.top = self.stack_top;
+                    } else {
+                        unsafe { stack.replace_tos(result) };
+                    }
                 }
                 OpCode::Equal => {
-                    let b = self.pop_raw();
-                    let a = self.pop_raw();
+                    // SAFETY: `Equal` reads the top two stack slots.
+                    let b = unsafe { stack.peek(0) };
+                    let a = unsafe { stack.peek(1) };
                     let result = LoxValue::bool_val(a.equal(b));
-                    self.objects.release(a);
-                    self.objects.release(b);
-                    self.push_raw(result);
+                    if a.is_refcounted() || b.is_refcounted() {
+                        self.stack_top = stack.top;
+                        let b = self.pop_raw();
+                        let a = self.pop_raw();
+                        self.objects.release(a);
+                        self.objects.release(b);
+                        self.push_raw(result);
+                        stack.top = self.stack_top;
+                    } else {
+                        unsafe { stack.pop_and_replace(result) };
+                    }
                 }
                 OpCode::Less => {
-                    let b = self.pop_raw();
-                    let a = self.pop_raw();
+                    // SAFETY: `Less` reads the top two stack slots.
+                    let b = unsafe { stack.peek(0) };
+                    let a = unsafe { stack.peek(1) };
                     if a.is_number() && b.is_number() {
-                        self.push_raw(LoxValue::bool_val(a.as_number() < b.as_number()));
+                        unsafe {
+                            stack
+                                .pop_and_replace(LoxValue::bool_val(a.as_number() < b.as_number()));
+                        }
                     } else {
+                        self.stack_top = stack.top;
+                        let b = self.pop_raw();
+                        let a = self.pop_raw();
                         let cmp = a.less(b, &self.objects);
                         self.objects.release(a);
                         self.objects.release(b);
                         self.push_raw(LoxValue::bool_val(cmp?));
+                        stack.top = self.stack_top;
                     }
                 }
                 OpCode::Greater => {
-                    let b = self.pop_raw();
-                    let a = self.pop_raw();
+                    // SAFETY: `Greater` reads the top two stack slots.
+                    let b = unsafe { stack.peek(0) };
+                    let a = unsafe { stack.peek(1) };
                     if a.is_number() && b.is_number() {
-                        self.push_raw(LoxValue::bool_val(a.as_number() > b.as_number()));
+                        unsafe {
+                            stack
+                                .pop_and_replace(LoxValue::bool_val(a.as_number() > b.as_number()));
+                        }
                     } else {
+                        self.stack_top = stack.top;
+                        let b = self.pop_raw();
+                        let a = self.pop_raw();
                         let lt = a.less(b, &self.objects);
                         let eq = a.equal(b);
                         self.objects.release(a);
                         self.objects.release(b);
                         let lt = lt?;
                         self.push_raw(LoxValue::bool_val(!lt && !eq));
+                        stack.top = self.stack_top;
                     }
                 }
                 OpCode::Print => {
+                    self.stack_top = stack.top;
                     let value = self.peek_unchecked(0);
                     self.write_value(value)?;
                     self.pop_unchecked();
+                    stack.top = self.stack_top;
                 }
                 OpCode::Pop => {
-                    self.pop_unchecked();
+                    // SAFETY: `Pop` discards the top slot.
+                    let value = unsafe { stack.peek(0) };
+                    if value.is_refcounted() {
+                        self.stack_top = stack.top;
+                        self.pop_unchecked();
+                        stack.top = self.stack_top;
+                    } else {
+                        unsafe { stack.pop() };
+                    }
                 }
                 OpCode::DefineGlobal => {
+                    self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     self.define_global(unsafe { cursor.read_constant(ix) })?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::DefineGlobalLong => {
+                    self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
                     self.define_global(unsafe { cursor.read_constant(ix) })?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::GetGlobal => {
+                    self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     self.get_global(unsafe { cursor.read_constant(ix) })?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::GetGlobalLong => {
+                    self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
                     self.get_global(unsafe { cursor.read_constant(ix) })?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::SetGlobal => {
+                    self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     self.set_global(unsafe { cursor.read_constant(ix) })?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::SetGlobalLong => {
+                    self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
                     self.set_global(unsafe { cursor.read_constant(ix) })?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::GetLocal => {
                     let frame_offset = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let local_index = cursor.slots + frame_offset - 1;
-                    let value = self.stack_get(local_index);
-                    self.push_raw(value);
-                    self.objects.retain(value);
+                    // SAFETY: local slots lie inside the caller's frame window.
+                    let value = unsafe { stack.get(local_index) };
+                    unsafe { stack.push(value) };
+                    if value.is_refcounted() {
+                        self.objects.retain(value);
+                    }
                 }
                 OpCode::SetLocal => {
                     let frame_offset = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let local_index = cursor.slots + frame_offset - 1;
-                    let value = self.peek_unchecked(0);
-                    self.set_stack(local_index, value);
+                    // SAFETY: `SetLocal` reads the top slot and writes a frame slot.
+                    let value = unsafe { stack.peek(0) };
+                    let current = unsafe { stack.get(local_index) };
+                    if value.is_refcounted() || current.is_refcounted() {
+                        self.stack_top = stack.top;
+                        self.set_stack(local_index, value);
+                    } else if current != value {
+                        unsafe { stack.set(local_index, value) };
+                    }
                 }
                 OpCode::JumpIfFalse => {
                     let offset = unsafe { cursor.read_u16(ip) };
                     ip += 2;
-                    if self.peek_unchecked(0).is_falsey() {
+                    // SAFETY: the condition is the top stack slot.
+                    if unsafe { stack.peek(0) }.is_falsey() {
                         ip += offset;
                     }
                 }
@@ -672,17 +820,22 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Call => {
                     let args_count = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
+                    self.stack_top = stack.top;
                     self.frames[cursor.index].ip = ip;
+                    // SAFETY: the callee sits under the arguments.
+                    let callee = unsafe { stack.peek(args_count) };
                     let prev_frame_count = self.frame_count;
-                    self.call_value_at(args_count)?;
-                    if self.frame_count == prev_frame_count {
-                        cursor.ip = ip;
-                    } else {
-                        cursor = FrameCursor::active(self);
+                    if !self.call_closure_fast(callee, args_count) {
+                        self.call_value(callee, args_count)?;
                     }
-                    continue 'run_insns;
+                    stack.top = self.stack_top;
+                    if self.frame_count != prev_frame_count {
+                        cursor = FrameCursor::active(self);
+                        ip = cursor.ip;
+                    }
                 }
                 OpCode::Invoke => {
+                    self.stack_top = stack.top;
                     let method_ix = unsafe { cursor.read_byte(ip) } as usize;
                     let method_name = unsafe { cursor.read_constant(method_ix) };
                     let argc = unsafe { cursor.read_byte(ip + 1) };
@@ -690,58 +843,43 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
                     self.invoke(method_name, argc)?;
-                    if self.frame_count == prev_frame_count {
-                        cursor.ip = ip;
-                    } else {
+                    stack.top = self.stack_top;
+                    if self.frame_count != prev_frame_count {
                         cursor = FrameCursor::active(self);
+                        ip = cursor.ip;
                     }
-                    continue 'run_insns;
                 }
                 OpCode::Closure => {
-                    let const_ix = unsafe { cursor.read_byte(ip) } as usize;
-                    ip += CONST_SIZE;
-                    let function_value = unsafe { cursor.read_constant(const_ix) };
-                    let func_id = function_value.try_function()?;
-                    let closure_val = self.objects.alloc_closure(func_id)?;
-                    let new_closure_id = closure_val.try_closure()?;
-                    let upvalues_count = self.objects.function(func_id)?.upvalue_count;
-                    let mut upvalues = Vec::with_capacity(upvalues_count);
-
-                    for _ in 0..upvalues_count {
-                        let is_local = unsafe { cursor.read_byte(ip) };
-                        let index = unsafe { cursor.read_byte(ip + 1) };
-                        ip += 2;
-                        let upvalue = if is_local == 1 {
-                            self.capture_upvalue(cursor.slots + index as usize - 1)?
-                        } else {
-                            self.objects.closure(cursor.closure)?.upvalues[index as usize]
-                        };
-                        upvalues.push(upvalue);
-                    }
-
-                    self.objects.closure_mut(new_closure_id)?.upvalues = upvalues;
-                    self.push(closure_val);
+                    self.stack_top = stack.top;
+                    ip = self.op_closure(&cursor, ip)?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::GetUpvalue => {
                     let slot = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let upvalue_id = self.objects.closure(cursor.closure)?.upvalues[slot];
                     let upvalue = self.objects.upvalue(upvalue_id)?;
-                    let lox_value = match upvalue.location {
-                        Some(location) => self.stack_get(location),
-                        None => upvalue.closed,
+                    let lox_value = if upvalue.location.is_null() {
+                        upvalue.closed
+                    } else {
+                        // SAFETY: an open upvalue points at a live stack slot.
+                        unsafe { *upvalue.location }
                     };
-                    self.push(lox_value);
+                    // SAFETY: pushing a loaded upvalue stays inside the frame window.
+                    unsafe { stack.push(lox_value) };
+                    if lox_value.is_refcounted() {
+                        self.objects.retain(lox_value);
+                    }
                 }
                 OpCode::SetUpvalue => {
                     let slot = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
-                    let val = self.peek_unchecked(0);
+                    // SAFETY: the assigned value is the top stack slot.
+                    let val = unsafe { stack.peek(0) };
                     let upvalue_id = self.objects.closure(cursor.closure)?.upvalues[slot];
                     let location = self.objects.upvalue(upvalue_id)?.location;
-                    if let Some(location) = location {
-                        self.set_stack(location, val);
-                    } else {
+                    if location.is_null() {
+                        self.stack_top = stack.top;
                         let old_closed = {
                             let upvalue = self.objects.upvalue_mut(upvalue_id)?;
                             let old = upvalue.closed;
@@ -750,21 +888,38 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         };
                         self.objects.release(old_closed);
                         self.objects.retain(val);
+                    } else {
+                        // SAFETY: an open upvalue points at a live stack slot.
+                        let current = unsafe { *location };
+                        if val.is_refcounted() || current.is_refcounted() {
+                            if current != val {
+                                self.objects.retain(val);
+                                self.objects.release(current);
+                                unsafe { *location = val };
+                            }
+                        } else if current != val {
+                            unsafe { *location = val };
+                        }
                     }
                 }
                 OpCode::CloseUpvalue => {
+                    self.stack_top = stack.top;
                     let location = self.stack_top - 1;
                     self.close_upvalues(location)?;
                     self.pop_unchecked();
+                    stack.top = self.stack_top;
                 }
                 OpCode::Class => {
+                    self.stack_top = stack.top;
                     let class_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     let class_name = unsafe { cursor.read_constant(class_ix) };
                     let class = self.objects.alloc_class(class_name)?;
                     self.push(class);
+                    stack.top = self.stack_top;
                 }
                 OpCode::GetProperty => {
+                    self.stack_top = stack.top;
                     let prop_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     let property_id = unsafe { cursor.read_constant(prop_ix) }.try_str()?;
@@ -782,8 +937,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             RuntimeError::UndefinedMethodOrProperty(name),
                         );
                     }
+                    stack.top = self.stack_top;
                 }
                 OpCode::SetProperty => {
+                    self.stack_top = stack.top;
                     let prop_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     let property_id = match unsafe { cursor.read_constant(prop_ix) }.try_str() {
@@ -805,13 +962,17 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.objects.release(old);
                     }
                     self.push(property_value);
+                    stack.top = self.stack_top;
                 }
                 OpCode::Method => {
+                    self.stack_top = stack.top;
                     let method_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     self.define_method(unsafe { cursor.read_constant(method_ix) })?;
+                    stack.top = self.stack_top;
                 }
                 OpCode::Inherit => {
+                    self.stack_top = stack.top;
                     let Ok(super_class_id) = self.peek_unchecked(1).try_class() else {
                         return self.runtime_error_at(
                             &cursor,
@@ -831,8 +992,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         }
                     }
                     self.pop_unchecked();
+                    stack.top = self.stack_top;
                 }
                 OpCode::GetSuper => {
+                    self.stack_top = stack.top;
                     let const_ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     let name_id = match unsafe { cursor.read_constant(const_ix) }.try_str() {
@@ -862,8 +1025,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     )?;
                     self.pop_unchecked();
                     self.push(bound);
+                    stack.top = self.stack_top;
                 }
                 OpCode::SuperInvoke => {
+                    self.stack_top = stack.top;
                     let method_ix = unsafe { cursor.read_byte(ip) } as usize;
                     let method_name = unsafe { cursor.read_constant(method_ix) };
                     let argc = unsafe { cursor.read_byte(ip + 1) };
@@ -883,17 +1048,44 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         );
                     };
                     self.call_value(*method, argc as usize)?;
-                    if self.frame_count == prev_frame_count {
-                        cursor.ip = ip;
-                    } else {
+                    stack.top = self.stack_top;
+                    if self.frame_count != prev_frame_count {
                         cursor = FrameCursor::active(self);
+                        ip = cursor.ip;
                     }
-                    continue 'run_insns;
                 }
             }
-            // Flush IP only into the cursor; frames[i].ip is updated on call/return/error.
-            cursor.ip = ip;
         }
+    }
+
+    /// `OP_CLOSURE` is cold and bulky. Keeping it out of `run` leaves the
+    /// dispatch loop small enough to stay in the instruction cache.
+    #[inline(never)]
+    fn op_closure(&mut self, cursor: &FrameCursor, mut ip: usize) -> Result<usize, RuntimeError> {
+        let const_ix = unsafe { cursor.read_byte(ip) } as usize;
+        ip += CONST_SIZE;
+        let function_value = unsafe { cursor.read_constant(const_ix) };
+        let func_id = function_value.try_function()?;
+        let closure_val = self.objects.alloc_closure(func_id)?;
+        let new_closure_id = closure_val.try_closure()?;
+        let upvalues_count = self.objects.function(func_id)?.upvalue_count;
+        let mut upvalues = Vec::with_capacity(upvalues_count);
+
+        for _ in 0..upvalues_count {
+            let is_local = unsafe { cursor.read_byte(ip) };
+            let index = unsafe { cursor.read_byte(ip + 1) };
+            ip += 2;
+            let upvalue = if is_local == 1 {
+                self.capture_upvalue(cursor.slots + index as usize - 1)?
+            } else {
+                self.objects.closure(cursor.closure)?.upvalues[index as usize]
+            };
+            upvalues.push(upvalue);
+        }
+
+        self.objects.closure_mut(new_closure_id)?.upvalues = upvalues;
+        self.push(closure_val);
+        Ok(ip)
     }
 
     #[inline]
@@ -963,20 +1155,29 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(())
     }
 
+    #[inline(always)]
+    fn stack_ptr(&mut self, index: usize) -> *mut LoxValue {
+        debug_assert!(index < STACK_MAX);
+        // SAFETY: `index` is a stack slot. The array does not move.
+        unsafe { self.stack.as_mut_ptr().add(index) }
+    }
+
     #[inline]
     fn close_upvalues(&mut self, from_slot: usize) -> Result<(), RuntimeError> {
+        let from_ptr = self.stack_ptr(from_slot) as usize;
         while let Some(upvalue_id) = self.open_upvalues {
-            let location = match self.objects.upvalue(upvalue_id)?.location {
-                Some(location) if location >= from_slot => location,
-                _ => break,
-            };
+            let location = self.objects.upvalue(upvalue_id)?.location;
+            if location.is_null() || (location as usize) < from_ptr {
+                break;
+            }
             let next = self.objects.upvalue(upvalue_id)?.next;
-            let closed_value = self.stack_get(location);
+            // SAFETY: `location` is an open upvalue pointing at a live stack slot.
+            let closed_value = unsafe { *location };
             let old_closed = {
                 let upvalue = self.objects.upvalue_mut(upvalue_id)?;
                 let old = upvalue.closed;
                 upvalue.closed = closed_value;
-                upvalue.location = None;
+                upvalue.location = std::ptr::null_mut();
                 old
             };
             self.objects.release(old_closed);
@@ -988,19 +1189,21 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn close_upvalue_at(&mut self, location: usize) -> Result<(), RuntimeError> {
+        let slot = self.stack_ptr(location);
         let mut prev: Option<ObjId> = None;
         let mut current = self.open_upvalues;
 
         while let Some(upvalue_id) = current {
             let upvalue = self.objects.upvalue(upvalue_id)?;
-            if upvalue.location == Some(location) {
+            if upvalue.location == slot {
                 let next = upvalue.next;
-                let closed_value = self.stack_get(location);
+                // SAFETY: `slot` is the open upvalue's stack address.
+                let closed_value = unsafe { *slot };
                 let old_closed = {
                     let upvalue = self.objects.upvalue_mut(upvalue_id)?;
                     let old = upvalue.closed;
                     upvalue.closed = closed_value;
-                    upvalue.location = None;
+                    upvalue.location = std::ptr::null_mut();
                     old
                 };
                 self.objects.release(old_closed);
@@ -1020,22 +1223,25 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
     #[inline]
     fn capture_upvalue(&mut self, location: usize) -> Result<ObjId, RuntimeError> {
+        let slot = self.stack_ptr(location);
+        let slot_addr = slot as usize;
         let mut prev: Option<ObjId> = None;
         let mut current = self.open_upvalues;
 
         while let Some(upvalue_id) = current {
             let upvalue = self.objects.upvalue(upvalue_id)?;
-            match upvalue.location {
-                Some(loc) if loc > location => {
-                    prev = Some(upvalue_id);
-                    current = upvalue.next;
-                }
-                Some(loc) if loc == location => return Ok(upvalue_id),
-                _ => break,
+            let loc = upvalue.location;
+            if !loc.is_null() && (loc as usize) > slot_addr {
+                prev = Some(upvalue_id);
+                current = upvalue.next;
+            } else if loc == slot {
+                return Ok(upvalue_id);
+            } else {
+                break;
             }
         }
 
-        let created = self.objects.alloc_upvalue(location)?;
+        let created = self.objects.alloc_upvalue(slot)?;
         {
             let created_upvalue = self.objects.upvalue_mut(created)?;
             created_upvalue.next = current;
@@ -1050,10 +1256,48 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Ok(created)
     }
 
-    #[inline]
-    fn call_value_at(&mut self, args_count: usize) -> Result<(), RuntimeError> {
-        let callee = self.stack_get(self.stack_top - args_count - 1);
-        self.call_value(callee, args_count)
+    /// Happy path for `OP_CALL` of a closure. Returns `false` without touching
+    /// frames when the callee is not a closure, the arity does not match, or
+    /// the frame stack is full. The caller reports that through [`Self::call_value`].
+    ///
+    /// `self.stack_top` must already include the callee and arguments.
+    #[inline(always)]
+    fn call_closure_fast(&mut self, callee: LoxValue, args_count: usize) -> bool {
+        if callee.obj_type() != Some(ObjType::Closure) {
+            return false;
+        }
+        let closure_id = callee.obj_id_unchecked();
+        // SAFETY: a closure value's id was allocated by this store.
+        let function_id = match unsafe { self.objects.get_unchecked(closure_id) } {
+            HeapObject::Closure(closure) => closure.function,
+            _ => return false,
+        };
+        // SAFETY: the function id stored on a closure comes from this store.
+        // Copy the chunk pointers out before borrowing `frames`.
+        let (arity, code, code_len, constants, lines) =
+            match unsafe { self.objects.get_unchecked(function_id) } {
+                HeapObject::Function(function) => (
+                    function.arity,
+                    function.chunk.code.as_ptr(),
+                    function.chunk.code.len(),
+                    function.chunk.constants.as_ptr(),
+                    function.chunk.lines.as_ptr(),
+                ),
+                _ => return false,
+            };
+        if arity != args_count || self.frame_count == FRAMES_MAX - 1 {
+            return false;
+        }
+        let frame = &mut self.frames[self.frame_count];
+        frame.slots = self.stack_top - args_count;
+        frame.closure = closure_id;
+        frame.ip = 0;
+        frame.code = code;
+        frame.code_len = code_len;
+        frame.constants = constants;
+        frame.lines = lines;
+        self.frame_count += 1;
+        true
     }
 
     #[inline]

@@ -48,7 +48,12 @@ pub struct ObjNative {
 }
 
 pub struct ObjUpvalue {
-    pub location: Option<usize>,
+    /// Stack slot while the upvalue is open. Null once it is closed; the
+    /// value then lives in `closed`.
+    ///
+    /// The pointer addresses `VirtualMachine::stack`, a fixed array that does
+    /// not move for the VM lifetime.
+    pub location: *mut LoxValue,
     pub closed: LoxValue,
     pub next: Option<ObjId>,
 }
@@ -135,7 +140,7 @@ impl ObjectStore {
     /// # Safety
     /// `id` must be a slot allocated by this store (`id as usize < objects.len()`).
     #[inline(always)]
-    unsafe fn get_unchecked(&self, id: ObjId) -> &HeapObject {
+    pub(crate) unsafe fn get_unchecked(&self, id: ObjId) -> &HeapObject {
         unsafe { self.objects.get_unchecked(id as usize) }
     }
 
@@ -284,9 +289,9 @@ impl ObjectStore {
         Ok(LoxValue::from_obj(id, ObjType::Closure))
     }
 
-    pub fn alloc_upvalue(&mut self, location: usize) -> Result<ObjId, RuntimeError> {
+    pub fn alloc_upvalue(&mut self, location: *mut LoxValue) -> Result<ObjId, RuntimeError> {
         self.push_object(HeapObject::Upvalue(ObjUpvalue {
-            location: Some(location),
+            location,
             closed: LoxValue::NIL,
             next: None,
         }))
