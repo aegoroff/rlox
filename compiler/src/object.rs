@@ -58,9 +58,13 @@ pub struct ObjUpvalue {
     pub next: Option<ObjId>,
 }
 
+/// A function with its captured upvalues. `arity` and `chunk` repeat the
+/// function's so a call reaches the bytecode without a second store lookup.
 pub struct ObjClosure {
     pub function: ObjId,
-    pub upvalues: Vec<ObjId>,
+    pub arity: u32,
+    pub chunk: Rc<Chunk>,
+    pub upvalues: Box<[ObjId]>,
 }
 
 pub struct ObjClass {
@@ -147,7 +151,7 @@ impl ObjectStore {
     /// # Safety
     /// `id` must be a slot allocated by this store (`id as usize < objects.len()`).
     #[inline(always)]
-    unsafe fn get_unchecked_mut(&mut self, id: ObjId) -> &mut HeapObject {
+    pub(crate) unsafe fn get_unchecked_mut(&mut self, id: ObjId) -> &mut HeapObject {
         unsafe { self.objects.get_unchecked_mut(id as usize) }
     }
 
@@ -280,11 +284,22 @@ impl ObjectStore {
         Ok(LoxValue::from_obj(id, ObjType::Native))
     }
 
-    pub fn alloc_closure(&mut self, function: ObjId) -> Result<LoxValue, RuntimeError> {
-        let upvalue_count = self.function(function)?.upvalue_count;
+    pub fn alloc_closure(
+        &mut self,
+        function: ObjId,
+        upvalues: Box<[ObjId]>,
+    ) -> Result<LoxValue, RuntimeError> {
+        let (arity, chunk) = {
+            let function = self.function(function)?;
+            let arity = u32::try_from(function.arity)
+                .map_err(|_| RuntimeError::Common("Function arity out of range".to_owned()))?;
+            (arity, Rc::clone(&function.chunk))
+        };
         let id = self.push_object(HeapObject::Closure(ObjClosure {
             function,
-            upvalues: Vec::with_capacity(upvalue_count),
+            arity,
+            chunk,
+            upvalues,
         }))?;
         Ok(LoxValue::from_obj(id, ObjType::Closure))
     }

@@ -99,20 +99,44 @@ impl ObjMap {
         }
     }
 
+    /// Index of the live entry for `key`, if any.
+    ///
+    /// Reads skip tombstones: a live key never equals a reserved one, and
+    /// the load factor keeps at least one empty slot to stop the probe.
     #[inline(always)]
-    #[must_use]
-    pub fn get(&self, key: ObjId) -> Option<&LoxValue> {
+    fn find_live(&self, key: ObjId) -> Option<usize> {
+        debug_assert!(key != EMPTY_KEY && key != TOMBSTONE_KEY);
         if self.entries.is_empty() {
             return None;
         }
-        let index = Self::find_entry(&self.entries, key);
-        // SAFETY: find_entry returns an in-range index.
-        let entry = unsafe { self.entries.get_unchecked(index) };
-        if entry.is_live() && entry.key == key {
-            Some(&entry.value)
-        } else {
-            None
+        let mask = self.entries.len() - 1;
+        let mut index = Self::hash(key) & mask;
+        loop {
+            // SAFETY: `index` stays in range via `& mask`.
+            let entry = unsafe { self.entries.get_unchecked(index) };
+            if entry.key == key {
+                return Some(index);
+            }
+            if entry.is_empty() {
+                return None;
+            }
+            index = (index + 1) & mask;
         }
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn get(&self, key: ObjId) -> Option<&LoxValue> {
+        let index = self.find_live(key)?;
+        // SAFETY: find_live returns an in-range index.
+        Some(unsafe { &self.entries.get_unchecked(index).value })
+    }
+
+    #[inline(always)]
+    pub fn get_mut(&mut self, key: ObjId) -> Option<&mut LoxValue> {
+        let index = self.find_live(key)?;
+        // SAFETY: find_live returns an in-range index.
+        Some(unsafe { &mut self.entries.get_unchecked_mut(index).value })
     }
 
     #[inline(always)]

@@ -89,6 +89,14 @@ impl LoxValue {
         (self.0 & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT)
     }
 
+    /// Single-compare check for an object of type `ty`.
+    #[inline(always)]
+    #[must_use]
+    pub fn is_obj_type(self, ty: ObjType) -> bool {
+        const MASK: u64 = SIGN_BIT | QNAN | (0xFF << OBJ_TYPE_SHIFT);
+        (self.0 & MASK) == (SIGN_BIT | QNAN | (u64::from(ty as u8) << OBJ_TYPE_SHIFT))
+    }
+
     #[inline(always)]
     #[must_use]
     pub fn is_refcounted(self) -> bool {
