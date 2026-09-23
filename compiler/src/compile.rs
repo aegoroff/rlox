@@ -793,6 +793,19 @@ impl<'a> Parser<'a> {
     }
 
     fn super_(&mut self) -> crate::Result<()> {
+        let error = match self.class_compiler {
+            None => Some("Can't use 'super' outside of a class."),
+            Some(ref class) if !class.borrow().has_superclass => {
+                Some("Can't use 'super' in a class with no superclass.")
+            }
+            Some(_) => None,
+        };
+        if let Some(message) = error {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), message)],
+                "Invalid super usage"
+            ));
+        }
         self.consume(&Token::Dot)?;
         let Token::Identifier(id) = *self.current.borrow() else {
             return Err(miette::miette!(

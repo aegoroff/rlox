@@ -2251,6 +2251,29 @@ b.method();
         assert!(output.is_empty());
     }
 
+    #[test_case("super.foo();", "Can't use 'super' outside of a class." ; "at top level")]
+    #[test_case("fun f() { super.foo(); }", "Can't use 'super' outside of a class." ; "in a function")]
+    #[test_case(
+        "class A { f() { return super.f(); } }",
+        "Can't use 'super' in a class with no superclass." ; "call without superclass"
+    )]
+    #[test_case(
+        "class A { f() { return super.f; } }",
+        "Can't use 'super' in a class with no superclass." ; "access without superclass"
+    )]
+    #[test_case(
+        "class A {} class B < A { f() { class C { g() { super.g(); } } } }",
+        "Can't use 'super' in a class with no superclass." ; "nested class without superclass"
+    )]
+    fn invalid_super_is_compile_error(source: &str, message: &str) {
+        // Act
+        let (result, output) = run_script(source);
+
+        // Assert
+        assert!(error_text(result).contains(message));
+        assert!(output.is_empty());
+    }
+
     #[test]
     fn strings_with_colliding_hashes_stay_distinct() {
         // Arrange: "glbvs" and "yacxa" share the same FNV-1a hash and length.
