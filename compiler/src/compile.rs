@@ -14,7 +14,7 @@ use scanner::{Lexer, Token};
 
 use crate::{
     RuntimeError,
-    chunk::{MAX_SHORT_VALUE, OpCode},
+    chunk::{MAX_LONG_VALUE, MAX_SHORT_VALUE, OpCode},
     object::ObjectStore,
     value::{Function, LoxValue},
 };
@@ -184,10 +184,9 @@ impl<'a> Parser<'a> {
         let constant = self.identifier_constant(class_name)?;
         self.declare_variable(class_name)?;
 
-        self.emit_opcode(OpCode::Class);
-        self.emit_operand(constant);
+        self.emit_indexed(OpCode::Class, OpCode::ClassLong, constant)?;
 
-        self.define_variable(constant);
+        self.define_variable(constant)?;
 
         let class_compiler = ClassCompiler {
             enclosing: self.class_compiler.clone(),
@@ -217,7 +216,7 @@ impl<'a> Parser<'a> {
             }
             self.begin_scope();
             self.add_local(scanner::SUPER)?;
-            self.define_variable(0);
+            self.define_variable(0)?;
 
             self.named_variable(class_name_token.clone(), false)?;
             self.emit_opcode(OpCode::Inherit);
@@ -266,8 +265,7 @@ impl<'a> Parser<'a> {
             FunctionType::Method
         };
         self.function(function_type)?;
-        self.emit_opcode(OpCode::Method);
-        self.emit_operand(constant);
+        self.emit_indexed(OpCode::Method, OpCode::MethodLong, constant)?;
         Ok(())
     }
 
@@ -275,8 +273,7 @@ impl<'a> Parser<'a> {
         let global = self.parse_variable()?;
         self.mark_initialized();
         self.function(FunctionType::Function)?;
-        self.define_variable(global);
-        Ok(())
+        self.define_variable(global)
     }
 
     fn function(&mut self, fun_type: FunctionType) -> crate::Result<()> {
@@ -305,7 +302,7 @@ impl<'a> Parser<'a> {
             }
 
             let constant = self.parse_variable()?;
-            self.define_variable(constant);
+            self.define_variable(constant)?;
             if self.check(&Token::RightParen) {
                 break;
             }
@@ -316,25 +313,20 @@ impl<'a> Parser<'a> {
         self.consume(&Token::LeftBrace)?;
         self.block()?;
         // IMPORTANT: upvalues collecting MUST be before self.end_compiler() call because it changes the current compiler.
-        let uvals: Vec<(usize, usize)> = self
+        let uvals: Vec<(bool, usize)> = self
             .compiler
             .borrow()
             .upvalues
             .iter()
-            .map(|upval| {
-                let is_local = usize::from(upval.is_local);
-                (is_local, upval.index)
-            })
+            .map(|upval| (upval.is_local, upval.index))
             .collect();
         let function = self.end_compiler();
-        self.emit_opcode(OpCode::Closure);
-
         let func_val = heap_value(self.objects.alloc_function(function))?;
         let constant = self.make_constant(func_val);
-        self.emit_operand(constant);
+        self.emit_indexed(OpCode::Closure, OpCode::ClosureLong, constant)?;
         for (is_local, index) in uvals {
-            self.emit_operand(is_local);
-            self.emit_operand(index);
+            self.emit_byte(u8::from(is_local));
+            self.emit_byte_operand(index)?;
         }
 
         Ok(())
@@ -348,8 +340,7 @@ impl<'a> Parser<'a> {
             self.emit_opcode(OpCode::Nil);
         }
         self.consume(&Token::Semicolon)?;
-        self.define_variable(global);
-        Ok(())
+        self.define_variable(global)
     }
 
     fn parse_variable(&mut self) -> crate::Result<usize> {
@@ -399,7 +390,8 @@ impl<'a> Parser<'a> {
         if self.compiler.borrow().scope_depth == 0 {
             return Ok(());
         }
-        if self.compiler.borrow().locals.len() >= MAX_SHORT_VALUE {
+        // Local slots are addressed by a one-byte operand: at most 256 of them.
+        if self.compiler.borrow().locals.len() > MAX_SHORT_VALUE {
             return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),
@@ -418,17 +410,12 @@ impl<'a> Parser<'a> {
         Ok(self.make_constant(name))
     }
 
-    fn define_variable(&mut self, global: usize) {
+    fn define_variable(&mut self, global: usize) -> crate::Result<()> {
         if self.compiler.borrow().scope_depth > 0 {
             self.mark_initialized();
-            return;
+            return Ok(());
         }
-        if global > MAX_SHORT_VALUE {
-            self.emit_opcode(OpCode::DefineGlobalLong);
-        } else {
-            self.emit_opcode(OpCode::DefineGlobal);
-        }
-        self.emit_operand(global);
+        self.emit_indexed(OpCode::DefineGlobal, OpCode::DefineGlobalLong, global)
     }
 
     fn mark_initialized(&mut self) {
@@ -531,14 +518,14 @@ impl<'a> Parser<'a> {
             self.consume(&Token::RightParen)?;
             self.emit_loop(loop_start)?;
             loop_start = increment_start;
-            self.patch_jump(body_jump);
+            self.patch_jump(body_jump)?;
         }
 
         self.statement()?;
         self.emit_loop(loop_start)?;
 
         if let Some(exit_jump) = exit_jump {
-            self.patch_jump(exit_jump);
+            self.patch_jump(exit_jump)?;
             self.emit_opcode(OpCode::Pop);
         }
         self.end_scope();
@@ -556,7 +543,7 @@ impl<'a> Parser<'a> {
         self.statement()?;
         self.emit_loop(loop_start)?;
 
-        self.patch_jump(exit_jump);
+        self.patch_jump(exit_jump)?;
         self.emit_opcode(OpCode::Pop);
         Ok(())
     }
@@ -569,12 +556,12 @@ impl<'a> Parser<'a> {
         self.emit_opcode(OpCode::Pop);
         self.statement()?;
         let else_jump = self.emit_jump(OpCode::Jump);
-        self.patch_jump(then_jump);
+        self.patch_jump(then_jump)?;
         self.emit_opcode(OpCode::Pop);
         if self.matches(&Token::Else)? {
             self.statement()?;
         }
-        self.patch_jump(else_jump);
+        self.patch_jump(else_jump)?;
         Ok(())
     }
 
@@ -646,7 +633,7 @@ impl<'a> Parser<'a> {
     fn call(&mut self) -> crate::Result<()> {
         let args_count = self.argument_list()?;
         self.emit_opcode(OpCode::Call);
-        self.emit_operand(args_count);
+        self.emit_byte_operand(args_count)?;
         Ok(())
     }
 
@@ -665,16 +652,13 @@ impl<'a> Parser<'a> {
         let name_ix = self.identifier_constant(id)?;
         if can_assign && self.matches(&Token::Equal)? {
             self.expression()?;
-            self.emit_opcode(OpCode::SetProperty);
-            self.emit_operand(name_ix);
+            self.emit_indexed(OpCode::SetProperty, OpCode::SetPropertyLong, name_ix)?;
         } else if self.matches(&Token::LeftParen)? {
             let argc = self.argument_list()?;
-            self.emit_opcode(OpCode::Invoke);
-            self.emit_operand(name_ix);
-            self.emit_operand(argc);
+            self.emit_indexed(OpCode::Invoke, OpCode::InvokeLong, name_ix)?;
+            self.emit_byte_operand(argc)?;
         } else {
-            self.emit_opcode(OpCode::GetProperty);
-            self.emit_operand(name_ix);
+            self.emit_indexed(OpCode::GetProperty, OpCode::GetPropertyLong, name_ix)?;
         }
 
         Ok(())
@@ -684,7 +668,7 @@ impl<'a> Parser<'a> {
         let and_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_opcode(OpCode::Pop);
         self.parse_precedence(Precedence::And)?;
-        self.patch_jump(and_jump);
+        self.patch_jump(and_jump)?;
         Ok(())
     }
 
@@ -692,11 +676,11 @@ impl<'a> Parser<'a> {
         let else_jump = self.emit_jump(OpCode::JumpIfFalse);
         let end_jump = self.emit_jump(OpCode::Jump);
 
-        self.patch_jump(else_jump);
+        self.patch_jump(else_jump)?;
         self.emit_opcode(OpCode::Pop);
 
         self.parse_precedence(Precedence::Or)?;
-        self.patch_jump(end_jump);
+        self.patch_jump(end_jump)?;
         Ok(())
     }
 
@@ -734,8 +718,7 @@ impl<'a> Parser<'a> {
                 "Number error"
             ));
         };
-        self.emit_constant(LoxValue::number(number));
-        Ok(())
+        self.emit_constant(LoxValue::number(number))
     }
 
     fn current_span(&self) -> Range<usize> {
@@ -756,8 +739,7 @@ impl<'a> Parser<'a> {
             ));
         };
         let value = heap_value(self.objects.intern_string(str.to_owned()))?;
-        self.emit_constant(value);
-        Ok(())
+        self.emit_constant(value)
     }
 
     fn literal(&mut self) -> crate::Result<()> {
@@ -819,13 +801,11 @@ impl<'a> Parser<'a> {
         if self.matches(&Token::LeftParen)? {
             let argc = self.argument_list()?;
             self.named_variable(Rc::new(RefCell::new(Token::Super)), false)?;
-            self.emit_opcode(OpCode::SuperInvoke);
-            self.emit_operand(name);
-            self.emit_operand(argc);
+            self.emit_indexed(OpCode::SuperInvoke, OpCode::SuperInvokeLong, name)?;
+            self.emit_byte_operand(argc)?;
         } else {
             self.named_variable(Rc::new(RefCell::new(Token::Super)), false)?;
-            self.emit_opcode(OpCode::GetSuper);
-            self.emit_operand(name);
+            self.emit_indexed(OpCode::GetSuper, OpCode::GetSuperLong, name)?;
         }
 
         Ok(())
@@ -882,35 +862,32 @@ impl<'a> Parser<'a> {
                 ));
             }
         };
-        let mut set_code = OpCode::SetGlobal;
-        let mut get_code = OpCode::GetGlobal;
-        let arg = if let Some(i) = self.resolve_local(self.compiler.borrow(), id)? {
-            set_code = OpCode::SetLocal;
-            get_code = OpCode::GetLocal;
-            i
-        } else if let Some(i) = self.resolve_upvalue(self.compiler.borrow_mut(), id)? {
-            set_code = OpCode::SetUpvalue;
-            get_code = OpCode::GetUpvalue;
-            i
-        } else {
-            self.identifier_constant(id)?
-        };
+        let (get_code, set_code, arg) =
+            if let Some(i) = self.resolve_local(self.compiler.borrow(), id)? {
+                (OpCode::GetLocal, OpCode::SetLocal, i)
+            } else if let Some(i) = self.resolve_upvalue(self.compiler.borrow_mut(), id)? {
+                (OpCode::GetUpvalue, OpCode::SetUpvalue, i)
+            } else {
+                let constant = self.identifier_constant(id)?;
+                return self.global_variable(constant, can_assign);
+            };
 
         if can_assign && self.matches(&Token::Equal)? {
             self.expression()?;
-            if arg > MAX_SHORT_VALUE {
-                self.emit_opcode(OpCode::SetGlobalLong);
-            } else {
-                self.emit_opcode(set_code);
-            }
-        } else if arg > MAX_SHORT_VALUE {
-            self.emit_opcode(OpCode::GetGlobalLong);
+            self.emit_opcode(set_code);
         } else {
             self.emit_opcode(get_code);
         }
-        self.emit_operand(arg);
+        self.emit_byte_operand(arg)
+    }
 
-        Ok(())
+    fn global_variable(&mut self, constant: usize, can_assign: bool) -> crate::Result<()> {
+        if can_assign && self.matches(&Token::Equal)? {
+            self.expression()?;
+            self.emit_indexed(OpCode::SetGlobal, OpCode::SetGlobalLong, constant)
+        } else {
+            self.emit_indexed(OpCode::GetGlobal, OpCode::GetGlobalLong, constant)
+        }
     }
 
     fn resolve_upvalue(
@@ -923,31 +900,41 @@ impl<'a> Parser<'a> {
         };
         let result = if let Some(local) = self.resolve_local(enclosing.borrow(), name)? {
             enclosing.borrow_mut().locals[local].is_captured = true;
-            let value = Parser::add_upvalue(compiler, local, true);
-            Some(value)
+            Some(self.add_upvalue(compiler, local, true)?)
         } else if let Some(upvalue) = self.resolve_upvalue(enclosing.borrow_mut(), name)? {
-            let value = Parser::add_upvalue(compiler, upvalue, false);
-            Some(value)
+            Some(self.add_upvalue(compiler, upvalue, false)?)
         } else {
             None
         };
         Ok(result)
     }
 
-    fn add_upvalue(mut compiler: RefMut<Compiler<'a>>, index: usize, is_local: bool) -> usize {
+    fn add_upvalue(
+        &self,
+        mut compiler: RefMut<Compiler<'a>>,
+        index: usize,
+        is_local: bool,
+    ) -> crate::Result<usize> {
         let existing = compiler
             .upvalues
             .iter()
-            .enumerate()
-            .find(|(_, upval)| upval.index == index && upval.is_local == is_local)
-            .map(|(i, _)| i);
+            .position(|upval| upval.index == index && upval.is_local == is_local);
         if let Some(upvalue_ix) = existing {
-            upvalue_ix
-        } else {
-            compiler.upvalues.push(Upvalue { index, is_local });
-            compiler.function.upvalue_count = compiler.upvalues.len();
-            compiler.function.upvalue_count - 1
+            return Ok(upvalue_ix);
         }
+        // Upvalue indices are encoded as a single byte operand.
+        if compiler.upvalues.len() > MAX_SHORT_VALUE {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Too many closure variables in function."
+                )],
+                "Closure variables error"
+            ));
+        }
+        compiler.upvalues.push(Upvalue { index, is_local });
+        compiler.function.upvalue_count = compiler.upvalues.len();
+        Ok(compiler.function.upvalue_count - 1)
     }
 
     fn resolve_local(
@@ -1114,20 +1101,29 @@ impl<'a> Parser<'a> {
         *self.current.borrow() == *token
     }
 
-    fn patch_jump(&mut self, exit_jump: usize) {
+    fn patch_jump(&mut self, exit_jump: usize) -> crate::Result<()> {
+        // -2 to adjust for the bytecode for the jump offset itself.
+        let jump = self.chunk_code_size() - 2 - exit_jump;
+        if jump > u16::MAX as usize {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Too much code to jump over."
+                )],
+                "Jump error"
+            ));
+        }
         self.compiler
             .borrow_mut()
             .function
             .chunk
             .patch_jump(exit_jump);
+        Ok(())
     }
 
-    fn emit_constant(&mut self, value: LoxValue) {
-        self.compiler
-            .borrow_mut()
-            .function
-            .chunk
-            .write_constant(value, self.tokens.line);
+    fn emit_constant(&mut self, value: LoxValue) -> crate::Result<()> {
+        let constant = self.make_constant(value);
+        self.emit_indexed(OpCode::Constant, OpCode::ConstantLong, constant)
     }
 
     fn make_constant(&mut self, value: LoxValue) -> usize {
@@ -1140,8 +1136,8 @@ impl<'a> Parser<'a> {
 
     fn emit_jump(&mut self, opcode: OpCode) -> usize {
         self.emit_opcode(opcode);
-        self.emit_operand(0xFF);
-        self.emit_operand(0xFF);
+        self.emit_byte(0xFF);
+        self.emit_byte(0xFF);
         self.chunk_code_size() - 2
     }
 
@@ -1175,12 +1171,52 @@ impl<'a> Parser<'a> {
             .write_code(opcode, self.tokens.line);
     }
 
-    fn emit_operand(&mut self, value: usize) {
+    fn emit_byte(&mut self, value: u8) {
         self.compiler
             .borrow_mut()
             .function
             .chunk
-            .write_operand(value, self.tokens.line);
+            .write_byte(value, self.tokens.line);
+    }
+
+    /// Emits a one-byte operand. The VM decodes such operands as a single byte,
+    /// so a wider value would desynchronize the bytecode.
+    fn emit_byte_operand(&mut self, value: usize) -> crate::Result<()> {
+        let Ok(byte) = u8::try_from(value) else {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    format!("Operand {value} does not fit into one byte")
+                )],
+                "Operand error"
+            ));
+        };
+        self.emit_byte(byte);
+        Ok(())
+    }
+
+    /// Emits `short` with a one-byte constant index, or `long` with a three-byte one.
+    fn emit_indexed(&mut self, short: OpCode, long: OpCode, index: usize) -> crate::Result<()> {
+        if index <= MAX_SHORT_VALUE {
+            self.emit_opcode(short);
+            return self.emit_byte_operand(index);
+        }
+        if index > MAX_LONG_VALUE {
+            return Err(miette::miette!(
+                labels = vec![LabeledSpan::at(
+                    self.current_span(),
+                    "Too many constants in one chunk."
+                )],
+                "Constants error"
+            ));
+        }
+        self.emit_opcode(long);
+        self.compiler
+            .borrow_mut()
+            .function
+            .chunk
+            .write_u24(index, self.tokens.line);
+        Ok(())
     }
 
     fn emit_return(&mut self) {
@@ -1189,7 +1225,7 @@ impl<'a> Parser<'a> {
             FunctionType::TypeInitializer
         ) {
             self.emit_opcode(OpCode::GetLocal);
-            self.emit_operand(0);
+            self.emit_byte(0);
         } else {
             self.emit_opcode(OpCode::Nil);
         }

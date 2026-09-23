@@ -97,7 +97,7 @@ impl Display for RuntimeError {
                 write!(f, "Undefined property '{value}'.")
             }
             RuntimeError::StackOverflow => {
-                write!(f, "Stack overflow. Too much nestings call max available 64")
+                write!(f, "Stack overflow.")
             }
             RuntimeError::ObjectUnavailable(id) => {
                 write!(f, "Object {id} is no longer available")

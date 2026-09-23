@@ -14,7 +14,7 @@ const FRAMES_MAX: usize = 64;
 const CONST_SIZE: usize = 1;
 const CONST_LONG_SIZE: usize = 3;
 const STACK_MAX: usize = FRAMES_MAX * 256;
-const OPCODE_MAX: u8 = OpCode::Method as u8;
+const OPCODE_MAX: u8 = OpCode::SuperInvokeLong as u8;
 
 /// Call frame with raw pointers into the callee's immutable bytecode.
 ///
@@ -89,11 +89,36 @@ impl FrameCursor {
         }
     }
 
+    /// Reads a constant-index operand and returns it with its width in bytes:
+    /// one byte for short opcodes, three for their `*Long` variants.
+    #[inline(always)]
+    unsafe fn read_index(&self, offset: usize, long: bool) -> (usize, usize) {
+        // SAFETY: caller must ensure the operand lies within the code.
+        unsafe {
+            if long {
+                (self.read_u24(offset), CONST_LONG_SIZE)
+            } else {
+                (usize::from(self.read_byte(offset)), CONST_SIZE)
+            }
+        }
+    }
+
     #[inline(always)]
     unsafe fn read_constant(&self, index: usize) -> LoxValue {
         // SAFETY: constant indices come from compiler-emitted operands.
         unsafe { *self.constants.add(index) }
     }
+}
+
+/// Returns a stack overflow runtime error from `run` when the value stack has
+/// no free slot. Must precede every instruction that grows the stack.
+macro_rules! ensure_stack_room {
+    ($vm:ident, $stack:ident, $cursor:ident, $ip:ident) => {
+        if $stack.top >= STACK_MAX {
+            $vm.stack_top = $stack.top;
+            return $vm.stack_overflow(&$cursor, $ip);
+        }
+    };
 }
 
 /// Value-stack cursor kept in the dispatch loop so the top stays in a register.
@@ -103,7 +128,9 @@ impl FrameCursor {
 ///
 /// # Safety invariants
 /// - `ptr` addresses `VirtualMachine::stack`, a fixed array that does not move.
-/// - Bytecode stack discipline keeps every index below `STACK_MAX`.
+/// - Every instruction that grows the stack (by exactly one slot) first
+///   checks `top < STACK_MAX` via `ensure_stack_room!`. The frame limit alone
+///   is not enough: temporaries within one frame are unbounded.
 /// - A slot is not read through `ptr` while a `&mut` to that same slot is live.
 struct StackCursor {
     ptr: *mut LoxValue,
@@ -128,7 +155,7 @@ impl StackCursor {
     #[inline(always)]
     unsafe fn push(&mut self, value: LoxValue) {
         debug_assert!(self.top < STACK_MAX);
-        // SAFETY: compiler-enforced frame limits keep `top < STACK_MAX`.
+        // SAFETY: growing instructions check `top < STACK_MAX` via `ensure_stack_room!`.
         unsafe { *self.ptr.add(self.top) = value };
         self.top += 1;
     }
@@ -330,7 +357,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
     #[inline(always)]
     fn push_raw(&mut self, value: LoxValue) {
         debug_assert!(self.stack_top < STACK_MAX);
-        // SAFETY: compiler-enforced frame/slot limits keep `stack_top < STACK_MAX`.
+        // SAFETY: growing instructions check `top < STACK_MAX` via `ensure_stack_room!`;
+        // other callers push only after popping.
         unsafe {
             *self.stack.get_unchecked_mut(self.stack_top) = value;
         }
@@ -409,6 +437,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
         unsafe { *self.stack.get_unchecked(index) }
     }
 
+    #[cold]
+    #[inline(never)]
+    fn stack_overflow(&mut self, cursor: &FrameCursor, ip: usize) -> Result<(), RuntimeError> {
+        self.runtime_error_at(cursor, ip, RuntimeError::StackOverflow)
+    }
+
     #[inline]
     fn runtime_error_at(
         &mut self,
@@ -480,6 +514,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
             match opcode {
                 OpCode::Constant => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     // SAFETY: operand byte is within the frame code.
                     let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
@@ -492,6 +527,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                 }
                 OpCode::ConstantLong => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     // SAFETY: 3-byte operand within the frame code.
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
@@ -603,9 +639,18 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         );
                     }
                 }
-                OpCode::Nil => unsafe { stack.push(LoxValue::NIL) },
-                OpCode::True => unsafe { stack.push(LoxValue::TRUE) },
-                OpCode::False => unsafe { stack.push(LoxValue::FALSE) },
+                OpCode::Nil => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
+                    unsafe { stack.push(LoxValue::NIL) };
+                }
+                OpCode::True => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
+                    unsafe { stack.push(LoxValue::TRUE) };
+                }
+                OpCode::False => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
+                    unsafe { stack.push(LoxValue::FALSE) };
+                }
                 OpCode::Not => {
                     // SAFETY: `Not` consumes one stack operand.
                     let value = unsafe { stack.peek(0) };
@@ -712,6 +757,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     stack.top = self.stack_top;
                 }
                 OpCode::GetGlobal => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
                     let name = unsafe { cursor.read_constant(ix) };
@@ -726,6 +772,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                 }
                 OpCode::GetGlobalLong => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
                     let name = unsafe { cursor.read_constant(ix) };
@@ -754,6 +801,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     stack.top = self.stack_top;
                 }
                 OpCode::GetLocal => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     let frame_offset = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let local_index = cursor.slots + frame_offset - 1;
@@ -815,11 +863,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         (cursor, ip) = FrameCursor::active(self);
                     }
                 }
-                OpCode::Invoke => {
-                    let method_ix = unsafe { cursor.read_byte(ip) } as usize;
+                OpCode::Invoke | OpCode::InvokeLong => {
+                    let (method_ix, width) =
+                        unsafe { cursor.read_index(ip, matches!(opcode, OpCode::InvokeLong)) };
                     let method_name = unsafe { cursor.read_constant(method_ix) };
-                    let argc = unsafe { cursor.read_byte(ip + 1) };
-                    ip += 2;
+                    let argc = unsafe { cursor.read_byte(ip + width) };
+                    ip += width + 1;
                     self.frames[cursor.index].ip = ip;
                     // SAFETY: the receiver sits under the arguments.
                     let receiver = unsafe { stack.peek(argc as usize) };
@@ -839,12 +888,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         (cursor, ip) = FrameCursor::active(self);
                     }
                 }
-                OpCode::Closure => {
+                OpCode::Closure | OpCode::ClosureLong => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     self.stack_top = stack.top;
-                    ip = self.op_closure(&cursor, ip)?;
+                    ip = self.op_closure(&cursor, ip, matches!(opcode, OpCode::ClosureLong))?;
                     stack.top = self.stack_top;
                 }
                 OpCode::GetUpvalue => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     let slot = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
                     let upvalue_id = self
@@ -905,22 +956,25 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop_unchecked();
                     stack.top = self.stack_top;
                 }
-                OpCode::Class => {
+                OpCode::Class | OpCode::ClassLong => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
                     self.stack_top = stack.top;
-                    let class_ix = unsafe { cursor.read_byte(ip) } as usize;
-                    ip += CONST_SIZE;
+                    let (class_ix, width) =
+                        unsafe { cursor.read_index(ip, matches!(opcode, OpCode::ClassLong)) };
+                    ip += width;
                     let class_name = unsafe { cursor.read_constant(class_ix) };
                     let class = self.objects.alloc_class(class_name)?;
                     self.push(class);
                     stack.top = self.stack_top;
                 }
-                OpCode::GetProperty => {
-                    let prop_ix = unsafe { cursor.read_byte(ip) } as usize;
+                OpCode::GetProperty | OpCode::GetPropertyLong => {
+                    let (prop_ix, width) =
+                        unsafe { cursor.read_index(ip, matches!(opcode, OpCode::GetPropertyLong)) };
                     // SAFETY: the receiver is the top stack slot.
                     let receiver = unsafe { stack.peek(0) };
                     let name = unsafe { cursor.read_constant(prop_ix) };
                     if let Some(value) = self.instance_field(receiver, name) {
-                        ip += CONST_SIZE;
+                        ip += width;
                         // Retain before release: dropping a temporary receiver
                         // also drops its fields.
                         self.objects.retain(value);
@@ -929,7 +983,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         continue;
                     }
                     self.stack_top = stack.top;
-                    ip += CONST_SIZE;
+                    ip += width;
                     let property_id = unsafe { cursor.read_constant(prop_ix) }.try_str()?;
                     let instance_id = self.peek_unchecked(0).try_instance()?;
                     if let Some(val) =
@@ -947,9 +1001,10 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                     stack.top = self.stack_top;
                 }
-                OpCode::SetProperty => {
-                    let prop_ix = unsafe { cursor.read_byte(ip) } as usize;
-                    ip += CONST_SIZE;
+                OpCode::SetProperty | OpCode::SetPropertyLong => {
+                    let (prop_ix, width) =
+                        unsafe { cursor.read_index(ip, matches!(opcode, OpCode::SetPropertyLong)) };
+                    ip += width;
                     // SAFETY: `SetProperty` reads the value and the receiver under it.
                     let value = unsafe { stack.peek(0) };
                     let receiver = unsafe { stack.peek(1) };
@@ -982,10 +1037,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(property_value);
                     stack.top = self.stack_top;
                 }
-                OpCode::Method => {
+                OpCode::Method | OpCode::MethodLong => {
                     self.stack_top = stack.top;
-                    let method_ix = unsafe { cursor.read_byte(ip) } as usize;
-                    ip += CONST_SIZE;
+                    let (method_ix, width) =
+                        unsafe { cursor.read_index(ip, matches!(opcode, OpCode::MethodLong)) };
+                    ip += width;
                     self.define_method(unsafe { cursor.read_constant(method_ix) })?;
                     stack.top = self.stack_top;
                 }
@@ -1012,10 +1068,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.pop_unchecked();
                     stack.top = self.stack_top;
                 }
-                OpCode::GetSuper => {
+                OpCode::GetSuper | OpCode::GetSuperLong => {
                     self.stack_top = stack.top;
-                    let const_ix = unsafe { cursor.read_byte(ip) } as usize;
-                    ip += CONST_SIZE;
+                    let (const_ix, width) =
+                        unsafe { cursor.read_index(ip, matches!(opcode, OpCode::GetSuperLong)) };
+                    ip += width;
                     let name_id = match unsafe { cursor.read_constant(const_ix) }.try_str() {
                         Ok(id) => id,
                         Err(err) => {
@@ -1045,12 +1102,13 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.push(bound);
                     stack.top = self.stack_top;
                 }
-                OpCode::SuperInvoke => {
+                OpCode::SuperInvoke | OpCode::SuperInvokeLong => {
                     self.stack_top = stack.top;
-                    let method_ix = unsafe { cursor.read_byte(ip) } as usize;
+                    let (method_ix, width) =
+                        unsafe { cursor.read_index(ip, matches!(opcode, OpCode::SuperInvokeLong)) };
                     let method_name = unsafe { cursor.read_constant(method_ix) };
-                    let argc = unsafe { cursor.read_byte(ip + 1) };
-                    ip += 2;
+                    let argc = unsafe { cursor.read_byte(ip + width) };
+                    ip += width + 1;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
                     let name_id = method_name.try_str()?;
@@ -1078,9 +1136,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
     /// `OP_CLOSURE` is cold and bulky. Keeping it out of `run` leaves the
     /// dispatch loop small enough to stay in the instruction cache.
     #[inline(never)]
-    fn op_closure(&mut self, cursor: &FrameCursor, mut ip: usize) -> Result<usize, RuntimeError> {
-        let const_ix = unsafe { cursor.read_byte(ip) } as usize;
-        ip += CONST_SIZE;
+    fn op_closure(
+        &mut self,
+        cursor: &FrameCursor,
+        mut ip: usize,
+        long: bool,
+    ) -> Result<usize, RuntimeError> {
+        let (const_ix, width) = unsafe { cursor.read_index(ip, long) };
+        ip += width;
         let function_value = unsafe { cursor.read_constant(const_ix) };
         let func_id = function_value.try_function()?;
         let upvalues_count = self.objects.function(func_id)?.upvalue_count;
@@ -2026,5 +2089,146 @@ b.method();
         // Assert
         assert_eq!(vm.objects.count_live(ObjType::BoundMethod), 0);
         assert_eq!(std::str::from_utf8(&stdout).unwrap(), "3\n");
+    }
+
+    fn run_script(source: &str) -> (crate::Result<()>, String) {
+        let mut stdout = Vec::new();
+        let mut vm = VirtualMachine::new(&mut stdout);
+        vm.init().unwrap();
+        let result = vm.interpret(source, false);
+        (result, String::from_utf8(stdout).unwrap())
+    }
+
+    /// Declares enough globals to push every later constant index above 255.
+    fn many_globals() -> String {
+        (0..300)
+            .map(|i| format!("var g{i} = \"s{i}\";\n"))
+            .collect()
+    }
+
+    fn error_text(result: crate::Result<()>) -> String {
+        let err = result.unwrap_err();
+        let labels: Vec<String> = err
+            .labels()
+            .into_iter()
+            .flatten()
+            .filter_map(|l| l.label().map(str::to_owned))
+            .collect();
+        format!("{err} {}", labels.join(" "))
+    }
+
+    #[test]
+    fn long_constant_indices_in_class_ops() {
+        // Arrange
+        let source = many_globals()
+            + r#"
+class Base {
+  init(x) { this.x = x; }
+  get() { return this.x; }
+}
+class Derived < Base {
+  init(x) { super.init(x + 1); }
+  get() { return super.get() * 10; }
+  viaSuper() { var m = super.get; return m(); }
+}
+var d = Derived(1);
+print d.x;
+d.x = 3;
+print d.get();
+print d.viaSuper();
+fun outer() { var v = "closure"; fun inner() { return v; } return inner; }
+print outer()();
+print g299;
+"#;
+
+        // Act
+        let (result, output) = run_script(&source);
+
+        // Assert
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(output, "2\n30\n3\nclosure\ns299\n");
+    }
+
+    #[test]
+    fn function_with_max_parameters() {
+        // Arrange
+        let params: Vec<String> = (0..255).map(|i| format!("p{i}")).collect();
+        let args: Vec<String> = (0..255).map(|i| i.to_string()).collect();
+        let source = format!(
+            "fun f({}) {{ return p0 + p254; }}\nprint f({});",
+            params.join(","),
+            args.join(",")
+        );
+
+        // Act
+        let (result, output) = run_script(&source);
+
+        // Assert
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(output, "254\n");
+    }
+
+    #[test]
+    fn too_many_upvalues_is_compile_error() {
+        // Arrange
+        let mut source = String::from("fun outer() {\n");
+        for i in 0..200 {
+            source += &format!("var a{i} = {i};\n");
+        }
+        source += "fun mid() {\n";
+        for i in 0..100 {
+            source += &format!("var b{i} = {i};\n");
+        }
+        source += "fun inner() {\n";
+        for i in 0..200 {
+            source += &format!("a{i};\n");
+        }
+        for i in 0..100 {
+            source += &format!("b{i};\n");
+        }
+        source += "}\n}\n}\n";
+
+        // Act
+        let (result, _) = run_script(&source);
+
+        // Assert
+        assert!(error_text(result).contains("Too many closure variables in function."));
+    }
+
+    #[test]
+    fn too_large_jump_is_compile_error() {
+        // Arrange
+        let source = format!(
+            "var a = 0;\nif (false) {{\n{}}}\nprint a;",
+            "a = a + 1;\n".repeat(20_000)
+        );
+
+        // Act
+        let (result, output) = run_script(&source);
+
+        // Assert
+        assert!(error_text(result).contains("Too much code to jump over."));
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn value_stack_overflow_within_one_frame_is_runtime_error() {
+        // Arrange: nested 255-argument calls keep every outer argument on the
+        // stack, overflowing it before a single call frame is pushed.
+        let params: Vec<String> = (0..255).map(|i| format!("p{i}")).collect();
+        let args = "1,".repeat(254);
+        let depth = 70;
+        let source = format!(
+            "fun f({}) {{ return 0; }}\nprint {}0{};",
+            params.join(","),
+            format!("f({args}").repeat(depth),
+            ")".repeat(depth)
+        );
+
+        // Act
+        let (result, _) = run_script(&source);
+
+        // Assert
+        assert!(error_text(result).contains("Stack overflow."));
     }
 }

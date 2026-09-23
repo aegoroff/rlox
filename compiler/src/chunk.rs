@@ -52,9 +52,19 @@ pub enum OpCode {
     Class = 38,
     Inherit = 39,
     Method = 40,
+    ClassLong = 41,
+    MethodLong = 42,
+    ClosureLong = 43,
+    GetPropertyLong = 44,
+    SetPropertyLong = 45,
+    InvokeLong = 46,
+    GetSuperLong = 47,
+    SuperInvokeLong = 48,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
+/// The largest index a 3-byte (`*Long`) operand can encode.
+pub const MAX_LONG_VALUE: usize = 0x00FF_FFFF;
 
 impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -100,6 +110,14 @@ impl Display for OpCode {
             OpCode::Inherit => write!(f, "OP_INHERIT"),
             OpCode::GetSuper => write!(f, "OP_GET_SUPER"),
             OpCode::SuperInvoke => write!(f, "OP_SUPER_INVOKE"),
+            OpCode::ClassLong => write!(f, "OP_CLASS_LONG"),
+            OpCode::MethodLong => write!(f, "OP_METHOD_LONG"),
+            OpCode::ClosureLong => write!(f, "OP_CLOSURE_LONG"),
+            OpCode::GetPropertyLong => write!(f, "OP_GET_PROPERTY_LONG"),
+            OpCode::SetPropertyLong => write!(f, "OP_SET_PROPERTY_LONG"),
+            OpCode::InvokeLong => write!(f, "OP_INVOKE_LONG"),
+            OpCode::GetSuperLong => write!(f, "OP_GET_SUPER_LONG"),
+            OpCode::SuperInvokeLong => write!(f, "OP_SUPER_INVOKE_LONG"),
         }
     }
 }
@@ -133,28 +151,19 @@ impl Chunk {
     }
 
     pub fn write_code(&mut self, code: OpCode, line: usize) {
-        self.write_operand(code as usize, line);
+        self.write_byte(code as u8, line);
     }
 
-    pub fn write_constant(&mut self, value: LoxValue, line: usize) {
-        let constant = self.add_constant(value);
-        if constant > MAX_SHORT_VALUE {
-            self.write_code(OpCode::ConstantLong, line);
-        } else {
-            self.write_code(OpCode::Constant, line);
-        }
-        self.write_operand(constant, line);
+    pub fn write_byte(&mut self, value: u8, line: usize) {
+        Rc::make_mut(&mut self.code).push(value);
+        Rc::make_mut(&mut self.lines).push(line);
     }
 
-    pub fn write_operand(&mut self, value: usize, line: usize) {
-        if value > MAX_SHORT_VALUE {
-            for b in into_three_bytes(value) {
-                Rc::make_mut(&mut self.code).push(b);
-                Rc::make_mut(&mut self.lines).push(line);
-            }
-        } else {
-            Rc::make_mut(&mut self.code).push(value as u8);
-            Rc::make_mut(&mut self.lines).push(line);
+    /// Writes a 3-byte little-endian operand. `value` must not exceed [`MAX_LONG_VALUE`].
+    pub fn write_u24(&mut self, value: usize, line: usize) {
+        debug_assert!(value <= MAX_LONG_VALUE);
+        for b in into_three_bytes(value) {
+            self.write_byte(b, line);
         }
     }
 
@@ -239,15 +248,15 @@ impl Chunk {
             | OpCode::DefineGlobal
             | OpCode::GetGlobal
             | OpCode::SetGlobal
-            | OpCode::GetSuper => self.disassembly_constant(offset, &code, 1),
+            | OpCode::GetSuper
+            | OpCode::Class
+            | OpCode::Method
+            | OpCode::GetProperty
+            | OpCode::SetProperty => self.disassembly_constant(offset, &code, 1),
             OpCode::SetLocal
             | OpCode::GetLocal
             | OpCode::Call
             | OpCode::GetUpvalue
-            | OpCode::Class
-            | OpCode::Method
-            | OpCode::GetProperty
-            | OpCode::SetProperty
             | OpCode::SetUpvalue => self.disassembly_byte_instruction(offset, &code),
             OpCode::Return
             | OpCode::Nil
@@ -269,14 +278,23 @@ impl Chunk {
             OpCode::GetGlobalLong
             | OpCode::SetGlobalLong
             | OpCode::DefineGlobalLong
-            | OpCode::ConstantLong => self.disassembly_constant(offset, &code, 3),
+            | OpCode::ConstantLong
+            | OpCode::GetSuperLong
+            | OpCode::ClassLong
+            | OpCode::MethodLong
+            | OpCode::GetPropertyLong
+            | OpCode::SetPropertyLong => self.disassembly_constant(offset, &code, 3),
             OpCode::JumpIfFalse | OpCode::Jump => {
                 self.disassembly_jump_instruction(offset, &code, 1)
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
-            OpCode::Closure => self.disassembly_closure_instruction(offset, store),
+            OpCode::Closure => self.disassembly_closure_instruction(offset, store, 1),
+            OpCode::ClosureLong => self.disassembly_closure_instruction(offset, store, 3),
             OpCode::Invoke | OpCode::SuperInvoke => {
-                self.disassembly_invoke_instruction(offset, &code)
+                self.disassembly_invoke_instruction(offset, &code, 1)
+            }
+            OpCode::InvokeLong | OpCode::SuperInvokeLong => {
+                self.disassembly_invoke_instruction(offset, &code, 3)
             }
         }
     }
@@ -303,22 +321,32 @@ impl Chunk {
         offset + 2
     }
 
-    fn disassembly_invoke_instruction(&self, offset: usize, code: &OpCode) -> usize {
-        let constant = self.code[offset + 1];
-        let arg_count = self.code[offset + 2];
-        let val = &self.constants[constant as usize];
+    fn disassembly_invoke_instruction(
+        &self,
+        offset: usize,
+        code: &OpCode,
+        constant_size: usize,
+    ) -> usize {
+        let constant = self.get_constant_ix(offset + 1, constant_size);
+        let arg_count = self.code[offset + 1 + constant_size];
+        let val = &self.constants[constant];
         println!(
             "{:<16}    ({arg_count} args) {constant:4} '{val}'",
             code.to_string()
         );
-        offset + 3
+        offset + constant_size + 2
     }
 
-    fn disassembly_closure_instruction(&self, offset: usize, store: &ObjectStore) -> usize {
-        let function_ix = self.code[offset + 1];
+    fn disassembly_closure_instruction(
+        &self,
+        offset: usize,
+        store: &ObjectStore,
+        constant_size: usize,
+    ) -> usize {
+        let function_ix = self.get_constant_ix(offset + 1, constant_size);
 
-        let mut offset = offset + 2;
-        let val = self.constants[function_ix as usize];
+        let mut offset = offset + 1 + constant_size;
+        let val = self.constants[function_ix];
         if let Ok(function_id) = val.try_function() {
             if let (Ok(function), Ok(name)) = (
                 store.function(function_id),
