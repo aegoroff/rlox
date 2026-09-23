@@ -206,8 +206,10 @@ impl<'a> Lexer<'a> {
         if let Some((i, next)) = self.chars.peek()
             && *next == '.'
         {
+            // `i` is a byte offset from CharIndices. Digits are ASCII, so the
+            // next byte is the next character; char indexing would drift after UTF-8.
             let next_ix = *i + 1;
-            if let Some('0'..='9') = self.whole.chars().nth(next_ix) {
+            if let Some(b'0'..=b'9') = self.whole.as_bytes().get(next_ix) {
                 self.chars.next(); // consume dot
                 finish = self.skip_digits(next_ix);
             }
@@ -432,6 +434,8 @@ mod tests {
     #[test_case(r#"1.2"#, vec![Token::Number(1.2)] ; "Single number")]
     #[test_case(r#"3 4"#, vec![Token::Number(3.0), Token::Number(4.0)] ; "Couple nums separated space")]
     #[test_case(r#"3 45"#, vec![Token::Number(3.0), Token::Number(45.0)] ; "Couple nums separated space second above 10")]
+    #[test_case("\"é\" 1.5", vec![Token::String("é"), Token::Number(1.5)] ; "Decimal after multibyte string")]
+    #[test_case("// é\n1.5", vec![Token::Number(1.5)] ; "Decimal after unicode comment")]
     #[test_case(r#"123."#, vec![Token::Number(123.0), Token::Dot] ; "Number with trailing dot")]
     #[test_case(r#" .456 123. "#, vec![Token::Dot, Token::Number(456.0), Token::Number(123.0),
         Token::Dot] ; "Number with starting dot and number with trailing dot")]
