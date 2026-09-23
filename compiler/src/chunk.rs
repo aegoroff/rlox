@@ -19,47 +19,49 @@ pub enum OpCode {
     Pop = 5,
     GetLocal = 6,
     SetLocal = 7,
-    GetGlobal = 8,
-    GetGlobalLong = 9,
-    DefineGlobal = 10,
-    DefineGlobalLong = 11,
-    SetGlobal = 12,
-    SetGlobalLong = 13,
-    GetUpvalue = 14,
-    SetUpvalue = 15,
-    GetProperty = 16,
-    SetProperty = 17,
-    GetSuper = 18,
-    Equal = 19,
-    Greater = 20,
-    Less = 21,
-    Add = 22,
-    Subtract = 23,
-    Multiply = 24,
-    Divide = 25,
-    Not = 26,
-    Negate = 27,
-    Print = 28,
-    Jump = 29,
-    JumpIfFalse = 30,
-    Loop = 31,
-    Call = 32,
-    Invoke = 33,
-    SuperInvoke = 34,
-    Closure = 35,
-    CloseUpvalue = 36,
-    Return = 37,
-    Class = 38,
-    Inherit = 39,
-    Method = 40,
-    ClassLong = 41,
-    MethodLong = 42,
+    GetLocalLong = 8,
+    SetLocalLong = 9,
+    GetGlobal = 10,
+    GetGlobalLong = 11,
+    DefineGlobal = 12,
+    DefineGlobalLong = 13,
+    SetGlobal = 14,
+    SetGlobalLong = 15,
+    GetUpvalue = 16,
+    SetUpvalue = 17,
+    GetProperty = 18,
+    SetProperty = 19,
+    GetSuper = 20,
+    Equal = 21,
+    Greater = 22,
+    Less = 23,
+    Add = 24,
+    Subtract = 25,
+    Multiply = 26,
+    Divide = 27,
+    Not = 28,
+    Negate = 29,
+    Print = 30,
+    Jump = 31,
+    JumpIfFalse = 32,
+    Loop = 33,
+    Call = 34,
+    Invoke = 35,
+    SuperInvoke = 36,
+    Closure = 37,
+    CloseUpvalue = 38,
+    Return = 39,
+    Class = 40,
+    Inherit = 41,
+    Method = 42,
     ClosureLong = 43,
-    GetPropertyLong = 44,
-    SetPropertyLong = 45,
-    InvokeLong = 46,
-    GetSuperLong = 47,
-    SuperInvokeLong = 48,
+    ClassLong = 44,
+    MethodLong = 45,
+    GetPropertyLong = 46,
+    SetPropertyLong = 47,
+    GetSuperLong = 48,
+    InvokeLong = 49,
+    SuperInvokeLong = 50,
 }
 
 pub const MAX_SHORT_VALUE: usize = 255;
@@ -94,6 +96,8 @@ impl Display for OpCode {
             OpCode::SetGlobalLong => write!(f, "OP_SET_GLOBAL_LONG"),
             OpCode::GetLocal => write!(f, "OP_GET_LOCAL"),
             OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
+            OpCode::GetLocalLong => write!(f, "OP_GET_LOCAL_LONG"),
+            OpCode::SetLocalLong => write!(f, "OP_SET_LOCAL_LONG"),
             OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
             OpCode::Jump => write!(f, "OP_JUMP"),
             OpCode::Loop => write!(f, "OP_LOOP"),
@@ -257,7 +261,10 @@ impl Chunk {
             | OpCode::GetLocal
             | OpCode::Call
             | OpCode::GetUpvalue
-            | OpCode::SetUpvalue => self.disassembly_byte_instruction(offset, &code),
+            | OpCode::SetUpvalue => self.disassembly_byte_instruction(offset, &code, 1),
+            OpCode::GetLocalLong | OpCode::SetLocalLong => {
+                self.disassembly_byte_instruction(offset, &code, 3)
+            }
             OpCode::Return
             | OpCode::Nil
             | OpCode::True
@@ -315,10 +322,15 @@ impl Chunk {
         }
     }
 
-    fn disassembly_byte_instruction(&self, offset: usize, code: &OpCode) -> usize {
-        let ix = self.code[offset + 1];
+    fn disassembly_byte_instruction(
+        &self,
+        offset: usize,
+        code: &OpCode,
+        operand_size: usize,
+    ) -> usize {
+        let ix = self.get_constant_ix(offset + 1, operand_size);
         println!("{:<16} {ix:4}", code.to_string());
-        offset + 2
+        offset + 1 + operand_size
     }
 
     fn disassembly_invoke_instruction(

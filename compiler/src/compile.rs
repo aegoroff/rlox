@@ -862,23 +862,30 @@ impl<'a> Parser<'a> {
                 ));
             }
         };
-        let (get_code, set_code, arg) =
-            if let Some(i) = self.resolve_local(self.compiler.borrow(), id)? {
-                (OpCode::GetLocal, OpCode::SetLocal, i)
-            } else if let Some(i) = self.resolve_upvalue(self.compiler.borrow_mut(), id)? {
-                (OpCode::GetUpvalue, OpCode::SetUpvalue, i)
-            } else {
-                let constant = self.identifier_constant(id)?;
-                return self.global_variable(constant, can_assign);
-            };
+        if let Some(slot) = self.resolve_local(self.compiler.borrow(), id)? {
+            return self.local_variable(slot, can_assign);
+        }
+        let Some(upvalue) = self.resolve_upvalue(self.compiler.borrow_mut(), id)? else {
+            let constant = self.identifier_constant(id)?;
+            return self.global_variable(constant, can_assign);
+        };
 
         if can_assign && self.matches(&Token::Equal)? {
             self.expression()?;
-            self.emit_opcode(set_code);
+            self.emit_opcode(OpCode::SetUpvalue);
         } else {
-            self.emit_opcode(get_code);
+            self.emit_opcode(OpCode::GetUpvalue);
         }
-        self.emit_byte_operand(arg)
+        self.emit_byte_operand(upvalue)
+    }
+
+    fn local_variable(&mut self, slot: usize, can_assign: bool) -> crate::Result<()> {
+        if can_assign && self.matches(&Token::Equal)? {
+            self.expression()?;
+            self.emit_indexed(OpCode::SetLocal, OpCode::SetLocalLong, slot)
+        } else {
+            self.emit_indexed(OpCode::GetLocal, OpCode::GetLocalLong, slot)
+        }
     }
 
     fn global_variable(&mut self, constant: usize, can_assign: bool) -> crate::Result<()> {
@@ -1195,7 +1202,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// Emits `short` with a one-byte constant index, or `long` with a three-byte one.
+    /// Emits `short` with a one-byte index operand, or `long` with a three-byte one.
     fn emit_indexed(&mut self, short: OpCode, long: OpCode, index: usize) -> crate::Result<()> {
         if index <= MAX_SHORT_VALUE {
             self.emit_opcode(short);
@@ -1272,5 +1279,46 @@ err;"#;
             "string constant should be on closing quote line"
         );
         assert_eq!(chunk.line(4), 6, "err lookup should be on line 6");
+    }
+}
+
+#[cfg(test)]
+mod local_tests {
+    use super::*;
+    use crate::object::ObjectStore;
+    use test_case::test_case;
+
+    #[test_case(7, &[OpCode::GetLocal as u8, 7] ; "short slot")]
+    #[test_case(300, &[OpCode::GetLocalLong as u8, 0x2C, 0x01, 0x00] ; "long slot")]
+    fn local_get_operand_width(slot: usize, expected: &[u8]) {
+        // Arrange
+        let mut objects = ObjectStore::new();
+        let mut parser = Parser::new("", false, &mut objects);
+
+        // Act
+        parser.local_variable(slot, false).unwrap();
+
+        // Assert
+        assert_eq!(
+            parser.compiler.borrow().function.chunk.code.as_slice(),
+            expected
+        );
+    }
+
+    #[test_case(7, &[OpCode::SetLocal as u8, 7] ; "short slot")]
+    #[test_case(300, &[OpCode::SetLocalLong as u8, 0x2C, 0x01, 0x00] ; "long slot")]
+    fn local_set_operand_width(slot: usize, expected: &[u8]) {
+        // Arrange
+        let mut objects = ObjectStore::new();
+        let mut parser = Parser::new("= nil", false, &mut objects);
+        parser.advance().unwrap();
+
+        // Act
+        parser.local_variable(slot, true).unwrap();
+
+        // Assert
+        let chunk = &parser.compiler.borrow().function.chunk;
+        assert_eq!(chunk.code[0], OpCode::Nil as u8);
+        assert_eq!(&chunk.code[1..], expected);
     }
 }

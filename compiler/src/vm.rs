@@ -826,6 +826,32 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         unsafe { stack.set(local_index, value) };
                     }
                 }
+                OpCode::GetLocalLong => {
+                    ensure_stack_room!(self, stack, cursor, instruction_ip);
+                    let frame_offset = unsafe { cursor.read_u24(ip) };
+                    ip += CONST_LONG_SIZE;
+                    let local_index = cursor.slots + frame_offset - 1;
+                    // SAFETY: local slots lie inside the caller's frame window.
+                    let value = unsafe { stack.get(local_index) };
+                    unsafe { stack.push(value) };
+                    if value.is_refcounted() {
+                        self.objects.retain(value);
+                    }
+                }
+                OpCode::SetLocalLong => {
+                    let frame_offset = unsafe { cursor.read_u24(ip) };
+                    ip += CONST_LONG_SIZE;
+                    let local_index = cursor.slots + frame_offset - 1;
+                    // SAFETY: `SetLocalLong` reads the top slot and writes a frame slot.
+                    let value = unsafe { stack.peek(0) };
+                    let current = unsafe { stack.get(local_index) };
+                    if value.is_refcounted() || current.is_refcounted() {
+                        self.stack_top = stack.top;
+                        self.set_stack(local_index, value);
+                    } else if current != value {
+                        unsafe { stack.set(local_index, value) };
+                    }
+                }
                 OpCode::JumpIfFalse => {
                     let offset = unsafe { cursor.read_u16(ip) };
                     ip += 2;
