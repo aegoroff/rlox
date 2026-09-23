@@ -102,7 +102,7 @@ The project uses `miette` for rich error reporting. Propagate errors with `?`.
 | Layer | Error type | Notes |
 |-------|-----------|-------|
 | `scanner` | `miette::Result<T>` | `LabeledSpan` on scan errors |
-| `interpreter` | `LoxError` | `Error(miette::Report)` for diagnostics; `Return(LoxValue)` for control flow |
+| `interpreter` | `LoxError` | `Error(miette::Report)` for diagnostics; `Return` for control flow (the value is kept by the interpreter) |
 | `compiler` | `miette::Report` | `RuntimeError` enum converted to reports in VM |
 | `rlox` CLI | `miette::Result<()>` | Attaches source code via `.with_source_code(content)` |
 
@@ -111,7 +111,7 @@ In the CLI, interpreter errors are mapped to attach the original source:
 ```rust
 resolver.interpret(&stmts).map_err(|err| match err {
     LoxError::Error(e) => e.with_source_code(content),
-    LoxError::Return(val) => miette!("Unexpected return value: {val}"),
+    LoxError::Return => miette!("Unexpected return outside of a function"),
 })
 ```
 

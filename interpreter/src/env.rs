@@ -3,12 +3,12 @@ use miette::miette;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Default, Debug)]
-pub struct Environment {
-    values: HashMap<String, LoxValue>,
-    enclosing: Option<Rc<RefCell<Environment>>>,
+pub struct Environment<'a> {
+    values: HashMap<&'a str, LoxValue<'a>>,
+    enclosing: Option<Rc<RefCell<Environment<'a>>>>,
 }
 
-impl Environment {
+impl<'a> Environment<'a> {
     pub fn new() -> Self {
         Self {
             values: HashMap::new(),
@@ -16,87 +16,82 @@ impl Environment {
         }
     }
 
-    pub fn child(enclosing: Rc<RefCell<Environment>>) -> Self {
+    pub fn child(enclosing: Rc<RefCell<Environment<'a>>>) -> Self {
         Self {
             values: HashMap::new(),
             enclosing: Some(enclosing),
         }
     }
 
-    pub fn get(&self, id: &str) -> crate::Result<LoxValue> {
+    pub fn get(&self, id: &str) -> crate::Result<LoxValue<'a>> {
         if let Some(var) = self.values.get(id) {
             Ok(var.clone())
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow().get(id)
         } else {
-            Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
+            Err(undefined(id))
         }
     }
 
-    pub fn get_at(&self, distance: usize, id: &str) -> crate::Result<LoxValue> {
+    /// Reads a variable from the scope `distance` hops up the chain, as
+    /// computed by the resolver. Unlike [`Environment::get`] it does not fall
+    /// back to outer scopes.
+    pub fn get_at(&self, distance: usize, id: &str) -> crate::Result<LoxValue<'a>> {
         if distance == 0 {
-            self.get(id)
-        } else if let Some(e) = self.get_env_at(distance) {
-            e.borrow().get(id)
-        } else {
-            Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
+            return self.get_here(id);
         }
+        let env = self.ancestor(distance).ok_or_else(|| undefined(id))?;
+        env.borrow().get_here(id)
     }
 
-    pub fn define(&mut self, id: String, initializer: LoxValue) {
-        if self.values.contains_key(&id) {
-            self.values.entry(id).and_modify(|e| *e = initializer);
-        } else {
-            self.values.entry(id).or_insert(initializer);
-        }
+    pub fn define(&mut self, id: &'a str, value: LoxValue<'a>) {
+        self.values.insert(id, value);
     }
 
-    // to make super work, we need to define the variable at the distance of the superclass
-    pub fn define_at(&mut self, distance: usize, id: String, initializer: LoxValue) {
-        if distance == 0 {
-            self.define(id, initializer);
-        } else if let Some(e) = self.get_env_at(distance) {
-            e.borrow_mut().define(id, initializer);
-        }
-    }
-
-    pub fn assign(&mut self, id: String, initializer: LoxValue) -> crate::Result<()> {
-        if self.values.contains_key(&id) {
-            self.values.entry(id).and_modify(|e| *e = initializer);
+    pub fn assign(&mut self, id: &'a str, value: LoxValue<'a>) -> crate::Result<()> {
+        if let Some(slot) = self.values.get_mut(id) {
+            *slot = value;
             Ok(())
-        } else if let Some(enclosing) = &mut self.enclosing {
-            enclosing.borrow_mut().assign(id, initializer)
+        } else if let Some(enclosing) = &self.enclosing {
+            enclosing.borrow_mut().assign(id, value)
         } else {
-            Err(LoxError::Error(miette!(
-                "assignment to undefined variable '{id}'"
-            )))
+            Err(undefined(id))
         }
     }
 
     pub fn assign_at(
         &mut self,
         distance: usize,
-        id: String,
-        initializer: LoxValue,
+        id: &'a str,
+        value: LoxValue<'a>,
     ) -> crate::Result<()> {
         if distance == 0 {
-            self.assign(id, initializer)
-        } else if let Some(e) = self.get_env_at(distance) {
-            e.borrow_mut().assign(id, initializer)
-        } else {
-            Err(LoxError::Error(miette!("Undefined identifier: '{id}'")))
+            return self.assign_here(id, value);
         }
+        let env = self.ancestor(distance).ok_or_else(|| undefined(id))?;
+        env.borrow_mut().assign_here(id, value)
     }
 
-    fn get_env_at(&self, distance: usize) -> Option<Rc<RefCell<Environment>>> {
-        let mut parent: Option<Rc<RefCell<Environment>>> = self.enclosing.clone();
-        for _ in 1..distance {
-            if let Some(e) = parent {
-                let mut temp: Option<Rc<RefCell<Environment>>> = None;
-                temp.clone_from(&e.borrow().enclosing);
-                parent = temp;
-            }
-        }
-        parent
+    fn get_here(&self, id: &str) -> crate::Result<LoxValue<'a>> {
+        self.values.get(id).cloned().ok_or_else(|| undefined(id))
     }
+
+    fn assign_here(&mut self, id: &str, value: LoxValue<'a>) -> crate::Result<()> {
+        let slot = self.values.get_mut(id).ok_or_else(|| undefined(id))?;
+        *slot = value;
+        Ok(())
+    }
+
+    fn ancestor(&self, distance: usize) -> Option<Rc<RefCell<Environment<'a>>>> {
+        let mut env = self.enclosing.clone()?;
+        for _ in 1..distance {
+            let next = env.borrow().enclosing.clone()?;
+            env = next;
+        }
+        Some(env)
+    }
+}
+
+fn undefined(id: &str) -> LoxError {
+    LoxError::Error(miette!("Undefined variable '{id}'."))
 }

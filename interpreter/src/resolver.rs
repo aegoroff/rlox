@@ -1,11 +1,14 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+};
 
 use crate::{
     LoxError,
-    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtVisitor},
-    int::Interpreter,
+    ast::{Expr, ExprKind, ExprVisitor, FunctionKind, Stmt, StmtKind, StmtVisitor},
+    int::{Interpreter, function_body},
 };
 use miette::{LabeledSpan, miette};
 use scanner::{SUPER, THIS, Token};
@@ -22,6 +25,8 @@ pub struct Resolver<'a, W: std::io::Write> {
     scopes: Vec<HashMap<&'a str, bool>>,
     current_function: FunctionKind,
     current_class: ClassKind,
+    /// Location of the statement being resolved, for errors on declared names.
+    statement_location: Range<usize>,
 }
 
 impl<'a, W: std::io::Write> Resolver<'a, W> {
@@ -31,45 +36,49 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
             scopes: vec![],
             current_function: FunctionKind::None,
             current_class: ClassKind::None,
+            statement_location: 0..0,
         }
     }
 
+    /// Resolves the whole program and runs it only if there are no static errors.
     pub fn interpret(mut self, stmts: &'a [crate::Result<Stmt<'a>>]) -> crate::Result<()> {
         self.resolve_statements(stmts)?;
         self.interpreter.interpret(stmts)
     }
 
     fn resolve_statement(&mut self, stmt: &'a crate::Result<Stmt<'a>>) -> crate::Result<()> {
-        if let Ok(stmt) = stmt {
-            stmt.accept(self)
-        } else {
-            Err(LoxError::Error(miette!("Failed to resolve statement")))
+        match stmt {
+            Ok(stmt) => {
+                self.statement_location = stmt.location.clone();
+                stmt.accept(self)
+            }
+            Err(e) => Err(e.duplicate()),
         }
     }
 
+    /// Resolves every statement, reporting all static errors at once.
     fn resolve_statements(
         &mut self,
         statements: &'a [crate::Result<Stmt<'a>>],
     ) -> crate::Result<()> {
-        let mut errors = vec![];
-
+        let mut errors: Vec<LabeledSpan> = vec![];
         let mut spans = HashSet::new();
-        let mut add_error = |e: LoxError| {
-            if let LoxError::Error(report) = e
-                && let Some(label) = report.labels()
-            {
-                for l in label {
-                    if !spans.contains(&(l.len(), l.offset())) {
-                        spans.insert((l.len(), l.offset()));
-                        errors.push(l);
-                    }
-                }
-            }
-        };
 
         for stmt in statements {
-            if let Err(e) = self.resolve_statement(stmt) {
-                add_error(e);
+            let Err(LoxError::Error(report)) = self.resolve_statement(stmt) else {
+                continue;
+            };
+            let labels: Vec<LabeledSpan> = match report.labels() {
+                Some(labels) => labels.collect(),
+                None => vec![LabeledSpan::at(
+                    self.statement_location.clone(),
+                    report.to_string(),
+                )],
+            };
+            for label in labels {
+                if spans.insert((label.len(), label.offset())) {
+                    errors.push(label);
+                }
             }
         }
         if errors.is_empty() {
@@ -94,8 +103,25 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, token: &Token<'a>) {
+    fn declare(&mut self, token: &Token<'a>) -> crate::Result<()> {
+        self.declare_at(token, self.statement_location.clone())
+    }
+
+    fn declare_at(&mut self, token: &Token<'a>, location: Range<usize>) -> crate::Result<()> {
+        if let Some(scope) = self.scopes.last()
+            && let Token::Identifier(id) = token
+            && scope.contains_key(id)
+        {
+            return Err(LoxError::Error(miette!(
+                labels = vec![LabeledSpan::at(
+                    location,
+                    format!("Already a variable named '{id}' in this scope.")
+                )],
+                "Syntax error"
+            )));
+        }
         self.add_id_to_scope(token, false);
+        Ok(())
     }
 
     fn define(&mut self, token: &Token<'a>) {
@@ -137,18 +163,27 @@ impl<'a, W: std::io::Write> Resolver<'a, W> {
         kind: FunctionKind,
     ) -> crate::Result<()> {
         let enclosing_function = self.current_function;
-        self.begin_scope();
-        for p in params {
-            if let ExprKind::Variable(p) = &p.kind {
-                self.declare(p);
-                self.define(p);
-            }
-        }
         self.current_function = kind;
-        self.resolve_statement(body)?;
+        self.begin_scope();
+        // Parameters and body share one scope, as in the interpreter.
+        let result = self.resolve_parameters_and_body(params, body);
         self.end_scope();
         self.current_function = enclosing_function;
-        Ok(())
+        result
+    }
+
+    fn resolve_parameters_and_body(
+        &mut self,
+        params: &[Box<Expr<'a>>],
+        body: &'a crate::Result<Stmt<'a>>,
+    ) -> crate::Result<()> {
+        for p in params {
+            if let ExprKind::Variable(name) = &p.kind {
+                self.declare_at(name, p.location.clone())?;
+                self.define(name);
+            }
+        }
+        self.resolve_statements(function_body(body)?)
     }
 }
 
@@ -168,7 +203,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
     ) -> crate::Result<()> {
         let enclosing_class = self.current_class;
         self.current_class = ClassKind::Class;
-        self.declare(name);
+        self.declare(name)?;
         self.define(name);
         if let Some(superclass) = superclass {
             self.current_class = ClassKind::Subclass;
@@ -192,7 +227,11 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
         self.define(&Token::Identifier(THIS));
 
         for method in methods {
-            self.resolve_statement(method)?;
+            let method = method.as_ref().map_err(LoxError::duplicate)?;
+            // Method names are not variables, so they are not declared in any scope.
+            if let StmtKind::Function(kind, _, params, body) = &method.kind {
+                self.resolve_function(params, body, *kind)?;
+            }
         }
         self.end_scope();
         if superclass.is_some() {
@@ -213,7 +252,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
         params: &[Box<Expr<'a>>],
         body: &'a crate::Result<Stmt<'a>>,
     ) -> crate::Result<()> {
-        self.declare(token);
+        self.declare(token)?;
         self.define(token);
         self.resolve_function(params, body, kind)
     }
@@ -246,6 +285,8 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
                 )],
                 "Syntax error"
             ))),
+            // A bare `return;` parses as an empty literal and is allowed in `init`.
+            FunctionKind::Initializer if matches!(value.kind, ExprKind::Literal(None)) => Ok(()),
             FunctionKind::Initializer => Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
                     value.location.clone(),
@@ -262,7 +303,7 @@ impl<'a, W: std::io::Write> StmtVisitor<'a, crate::Result<()>> for Resolver<'a, 
         name: &Token<'a>,
         initializer: &Option<Box<Expr<'a>>>,
     ) -> crate::Result<()> {
-        self.declare(name);
+        self.declare(name)?;
         if let Some(init) = initializer {
             self.resolve_expression(init)?;
         }

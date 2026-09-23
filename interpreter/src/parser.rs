@@ -28,9 +28,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses the next declaration. `None` means the input is exhausted.
     fn declaration(&mut self) -> Option<crate::Result<Stmt<'a>>> {
         let current = self.tokens.peek()?;
-        match current {
+        let declaration = match current {
             Ok((_, Token::Var, _)) => self.var_declaration(),
             Ok((_, Token::Class, _)) => self.class_declaration(),
             Ok((_, Token::Fun, _)) => {
@@ -38,7 +39,10 @@ impl<'a> Parser<'a> {
                 self.function(FunctionKind::Function)
             }
             _ => self.statement(),
-        }
+        };
+        // A declaration had started, so running out of tokens mid-way is an error
+        // rather than the end of the program.
+        Some(declaration.unwrap_or_else(|| Err(unexpected_end_of_input())))
     }
 
     fn function(&mut self, kind: FunctionKind) -> Option<crate::Result<Stmt<'a>>> {
@@ -128,8 +132,11 @@ impl<'a> Parser<'a> {
     }
 
     fn class_declaration(&mut self) -> Option<crate::Result<Stmt<'a>>> {
-        let t = self.tokens.next(); // consume CLASS token TODO: include CLASS start position into stmt location
-        let (start, _, finish) = t.unwrap().unwrap(); // TODO: handle error
+        // consume CLASS token TODO: include CLASS start position into stmt location
+        let (start, _, finish) = match self.advance() {
+            Ok(token) => token,
+            Err(e) => return Some(Err(e)),
+        };
         let name = match self.consume_name("class", start, finish) {
             Ok(name) => name,
             Err(e) => return Some(Err(e)),
@@ -153,8 +160,13 @@ impl<'a> Parser<'a> {
         let mut methods = vec![];
         if self.matches(&[Token::RightBrace]).is_none() {
             loop {
-                let method = self.function(FunctionKind::Method)?;
-                methods.push(method);
+                // Stop at the first bad method: a method that consumed no tokens
+                // would otherwise be parsed again forever.
+                let method = match self.function(FunctionKind::Method)? {
+                    Ok(method) => method,
+                    Err(e) => return Some(Err(e)),
+                };
+                methods.push(Ok(method));
 
                 if self.matches(&[Token::RightBrace]).is_some() {
                     break;
@@ -171,8 +183,11 @@ impl<'a> Parser<'a> {
     }
 
     fn var_declaration(&mut self) -> Option<crate::Result<Stmt<'a>>> {
-        let t = self.tokens.next(); // consume VAR token TODO: include VAR start position into stmt location
-        let (start, _, mut finish) = t.unwrap().unwrap(); // TODO: handle error
+        // consume VAR token TODO: include VAR start position into stmt location
+        let (start, _, mut finish) = match self.advance() {
+            Ok(token) => token,
+            Err(e) => return Some(Err(e)),
+        };
         // IMPORTANT: dont call expression here so as not to conflict with assignment
         let name = match self.or_expression() {
             Some(result) => match result {
@@ -429,24 +444,24 @@ impl<'a> Parser<'a> {
     }
 
     fn return_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
-        if let Some(Ok((start, keyword, end))) = self.tokens.next() {
-            let expr = if self.matches(&[Token::Semicolon]).is_some() {
-                Expr {
-                    kind: ExprKind::Literal(None),
-                    location: start..end,
-                }
-            } else {
-                let Some(Ok(expr)) = self.semicolon_terminated_expression() else {
-                    return None;
-                };
-                expr
-            };
-            let location = start..expr.location.end;
-            let kind = StmtKind::Return(keyword, Box::new(expr));
-            Some(Ok(Stmt { kind, location }))
+        let (start, keyword, end) = match self.advance() {
+            Ok(token) => token,
+            Err(e) => return Some(Err(e)),
+        };
+        let expr = if self.matches(&[Token::Semicolon]).is_some() {
+            Expr {
+                kind: ExprKind::Literal(None),
+                location: start..end,
+            }
         } else {
-            None
-        }
+            match self.semicolon_terminated_expression()? {
+                Ok(expr) => expr,
+                Err(e) => return Some(Err(e)),
+            }
+        };
+        let location = start..expr.location.end;
+        let kind = StmtKind::Return(keyword, Box::new(expr));
+        Some(Ok(Stmt { kind, location }))
     }
 
     fn expr_statement(&mut self) -> Option<crate::Result<Stmt<'a>>> {
@@ -468,11 +483,15 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            if let Some(opt) = self.declaration() {
-                let decl = opt?;
-                finish = decl.location.end;
-                statements.push(Ok(decl));
-            }
+            let Some(decl) = self.declaration() else {
+                return Err(LoxError::Error(miette!(
+                    labels = vec![LabeledSpan::at(start..start, "Block starts here")],
+                    "Missing closing }}"
+                )));
+            };
+            let decl = decl?;
+            finish = decl.location.end;
+            statements.push(Ok(decl));
         }
         let kind = StmtKind::Block(statements);
         Ok(Stmt {
@@ -1071,7 +1090,8 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_current_and_open_paren(&mut self, token: &str) -> crate::Result<Range<usize>> {
-        let (start_token, _, end_token) = self.tokens.next().unwrap().unwrap(); // consume token TODO: include print start position into stmt location
+        // consume token TODO: include print start position into stmt location
+        let (start_token, _, end_token) = self.advance()?;
         if self.tokens.peek().is_none() {
             return Err(LoxError::Error(miette!(
                 labels = vec![LabeledSpan::at(
@@ -1084,6 +1104,15 @@ impl<'a> Parser<'a> {
         let loc = self.consume(&Token::LeftParen)?;
         let result = start_token..loc.end;
         Ok(result)
+    }
+
+    /// Consumes the next token, turning end of input or a scanner error into an error.
+    fn advance(&mut self) -> crate::Result<(usize, Token<'a>, usize)> {
+        match self.tokens.next() {
+            Some(Ok(token)) => Ok(token),
+            Some(Err(e)) => Err(LoxError::Error(e)),
+            None => Err(unexpected_end_of_input()),
+        }
     }
 
     /// Validates current token matches any of tokens specifies and if so
@@ -1104,15 +1133,12 @@ impl<'a> Parser<'a> {
     }
 
     fn consume(&mut self, token: &Token<'a>) -> crate::Result<Range<usize>> {
-        let Some(current) = self.tokens.peek() else {
-            return Err(LoxError::Error(miette!("Expected {token} here")));
-        };
-        let Ok((start, next_tok, end)) = current else {
-            // Consume and validate token
-            match self.tokens.next() {
-                Some(Ok(_)) | None => unreachable!(),
-                Some(Err(e)) => return Err(LoxError::Error(e)),
-            }
+        let Some(Ok((start, next_tok, end))) = self.tokens.peek() else {
+            // End of input or a scanner error, which is reported as is.
+            return Err(match self.tokens.next() {
+                Some(Err(e)) => LoxError::Error(e),
+                _ => LoxError::Error(miette!("Expected {token} here")),
+            });
         };
         let start = *start;
         let end = *end;
@@ -1129,6 +1155,10 @@ impl<'a> Parser<'a> {
         self.tokens.next(); // consume 
         Ok(start..end)
     }
+}
+
+fn unexpected_end_of_input() -> LoxError {
+    LoxError::Error(miette!("Unexpected end of input"))
 }
 
 #[cfg(test)]
@@ -1196,10 +1226,6 @@ mod tests {
     }
 
     #[test_case("(\"a\" + \"b\") + \"c\"", "abc")]
-    #[test_case("(\"a\" + 4) + \"c\"", "a4c")]
-    #[test_case("(4 + \"a\") + \"c\"", "4ac")]
-    #[test_case("(true + \"a\") + \"c\"", "trueac")]
-    #[test_case("(nil + \"a\") + \"c\"", "ac")]
     fn eval_string_positive_tests(input: &str, expected: &str) {
         // Arrange
         let mut parser = Parser::new(input);
@@ -1235,9 +1261,7 @@ mod tests {
     #[test_case("3 > 1 == true", true)]
     #[test_case("20 <= 20", true)]
     #[test_case("40 <= 50", true)]
-    #[test_case("nil <= false", true ; "nil lrs less or equal")]
-    #[test_case("nil < false", false ; "nil lrs less")]
-    #[test_case("nil == false", true ; "nil lrs equal")]
+    #[test_case("nil == false", false ; "nil is not equal to false")]
     #[test_case("!nil", true ; "not nil")]
     #[test_case("40 <= 50 and 1 > 2 or 2 < 3", true ; "two ands + or")]
     #[test_case("40 <= 50 and 1 < 2 and 2 < 3", true ; "three ands")]
@@ -1258,5 +1282,59 @@ mod tests {
         } else {
             todo!()
         }
+    }
+
+    #[test_case("(\"a\" + 4) + \"c\"" ; "string plus number")]
+    #[test_case("(4 + \"a\") + \"c\"" ; "number plus string")]
+    #[test_case("(true + \"a\") + \"c\"" ; "bool plus string")]
+    #[test_case("(nil + \"a\") + \"c\"" ; "nil plus string")]
+    #[test_case("nil <= false" ; "nil compared with bool")]
+    #[test_case("nil < false" ; "nil less than bool")]
+    fn eval_negative_tests(input: &str) {
+        // Arrange
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap().unwrap();
+        let mut eval = Interpreter::new(stdout());
+
+        // Act
+        let actual = eval.evaluate(&expr);
+
+        // Assert
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn advance_at_end_of_input_is_error() {
+        // Arrange
+        let mut parser = Parser::new("");
+
+        // Act
+        let result = parser.advance();
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test_case("class" ; "class without name")]
+    #[test_case("var" ; "var without name")]
+    #[test_case("print" ; "print without expression")]
+    #[test_case("while" ; "while without condition")]
+    #[test_case("var a = \"unterminated" ; "scanner error after declaration")]
+    #[test_case("print 1; print" ; "truncated second statement")]
+    #[test_case("fun f(" ; "truncated parameter list")]
+    #[test_case("{" ; "unclosed empty block")]
+    #[test_case("{ print 1;" ; "unclosed block")]
+    #[test_case("class A { m() {}" ; "unclosed class body")]
+    #[test_case("fun f() { return 1 +; }" ; "invalid return value")]
+    #[test_case("class A { 123 }" ; "non-method in class body")]
+    fn truncated_input_is_error(input: &str) {
+        // Arrange
+        let mut parser = Parser::new(input);
+
+        // Act
+        let stmts: Vec<crate::Result<Stmt>> = (&mut parser).collect();
+
+        // Assert
+        assert!(stmts.iter().any(Result::is_err));
     }
 }

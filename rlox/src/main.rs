@@ -91,7 +91,7 @@ fn interpret(content: String) -> miette::Result<()> {
     let stmts: Vec<interpreter::Result<Stmt>> = parser.collect();
     resolver.interpret(&stmts).map_err(|err| match err {
         interpreter::LoxError::Error(e) => e.with_source_code(content),
-        interpreter::LoxError::Return(val) => miette!("Unexpected return value: {val}"),
+        interpreter::LoxError::Return => miette!("Unexpected return outside of a function"),
     })
 }
 

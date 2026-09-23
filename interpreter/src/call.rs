@@ -1,10 +1,8 @@
-#![allow(clippy::borrowed_box)]
-#![allow(clippy::cast_precision_loss)]
-
 use miette::miette;
 use std::{
     cell::RefCell,
     collections::HashMap,
+    fmt::Debug,
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -15,321 +13,252 @@ use crate::{
     env::Environment,
 };
 
-use scanner::{INIT, SUPER, THIS};
+use scanner::{INIT, THIS};
 
-pub enum CallResult<'a> {
-    Value(LoxValue),
-    Code(&'a crate::Result<Stmt<'a>>, Rc<RefCell<Environment>>),
+type NativeFn = for<'a> fn(&[LoxValue<'a>]) -> crate::Result<LoxValue<'a>>;
+
+/// Built-in function implemented in Rust.
+#[derive(Clone, Copy)]
+pub struct Native {
+    name: &'static str,
+    arity: usize,
+    func: NativeFn,
 }
 
-pub trait LoxCallable<'a> {
-    fn arity(&self) -> usize;
-    fn name(&self) -> &'a str;
-    fn parent(&self) -> Option<&'a str>;
-    fn call(&self, arguments: &[LoxValue]) -> crate::Result<CallResult<'a>>;
-    fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>;
-}
-
-pub const CLOCK: &str = "clock";
-pub const SQRT: &str = "sqrt";
-pub const MIN: &str = "min";
-pub const MAX: &str = "max";
-
-#[derive(Default)]
-pub struct Catalogue<'a> {
-    storage: HashMap<&'a str, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
-}
-
-impl<'a> Catalogue<'a> {
-    pub fn new() -> Self {
-        Self {
-            storage: HashMap::new(),
-        }
-    }
-
-    pub fn get(&self, id: &str) -> crate::Result<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        if let Some(var) = self.storage.get(id) {
-            Ok(var.clone())
-        } else {
-            let report = miette!("Undefined identifier: '{id}'");
-            Err(LoxError::Error(report))
-        }
-    }
-
-    pub fn define(&mut self, id: &'a str, initializer: Rc<RefCell<dyn LoxCallable<'a> + 'a>>) {
-        self.storage.entry(id).or_insert(initializer);
+impl Debug for Native {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<native {}>", self.name)
     }
 }
 
-pub struct Clock;
-
-impl<'a> LoxCallable<'a> for Clock {
-    fn arity(&self) -> usize {
-        0
-    }
-
-    fn name(&self) -> &'a str {
-        CLOCK
-    }
-
-    fn parent(&self) -> Option<&'a str> {
-        None
-    }
-
-    fn call(&self, _: &[LoxValue]) -> crate::Result<CallResult<'a>> {
-        let start = SystemTime::now();
-        let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let seconds = since_the_epoch.as_secs();
-        let val = LoxValue::Number(seconds as f64);
-        Ok(CallResult::Value(val))
-    }
-
-    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        None
-    }
-}
-
-pub struct Sqrt;
-
-impl<'a> LoxCallable<'a> for Sqrt {
-    fn arity(&self) -> usize {
-        1
-    }
-
-    fn name(&self) -> &'a str {
-        SQRT
-    }
-
-    fn parent(&self) -> Option<&'a str> {
-        None
-    }
-
-    fn call(&self, args: &[LoxValue]) -> crate::Result<CallResult<'a>> {
-        if let LoxValue::Number(num) = args[0] {
-            Ok(CallResult::Value(LoxValue::Number(num.sqrt())))
-        } else {
-            let report = miette!("Expected number but was '{:?}'", args[0]);
-            Err(LoxError::Error(report))
-        }
-    }
-
-    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        None
-    }
-}
-
-pub struct Min;
-
-impl<'a> LoxCallable<'a> for Min {
-    fn arity(&self) -> usize {
-        2
-    }
-
-    fn name(&self) -> &'a str {
-        MIN
-    }
-
-    fn parent(&self) -> Option<&'a str> {
-        None
-    }
-
-    fn call(&self, args: &[LoxValue]) -> crate::Result<CallResult<'a>> {
-        if let LoxValue::Number(a) = args[0] {
-            if let LoxValue::Number(b) = args[1] {
-                Ok(CallResult::Value(LoxValue::Number(a.min(b))))
-            } else {
-                let report = miette!("Expected number but was '{:?}'", args[1]);
-                Err(LoxError::Error(report))
-            }
-        } else {
-            let report = miette!("Expected number but was '{:?}'", args[0]);
-            Err(LoxError::Error(report))
-        }
-    }
-
-    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        None
-    }
-}
-
-pub struct Max;
-
-impl<'a> LoxCallable<'a> for Max {
-    fn arity(&self) -> usize {
-        2
-    }
-
-    fn name(&self) -> &'a str {
-        MAX
-    }
-
-    fn parent(&self) -> Option<&'a str> {
-        None
-    }
-
-    fn call(&self, args: &[LoxValue]) -> crate::Result<CallResult<'a>> {
-        if let LoxValue::Number(a) = args[0] {
-            if let LoxValue::Number(b) = args[1] {
-                Ok(CallResult::Value(LoxValue::Number(a.max(b))))
-            } else {
-                let report = miette!("Expected number but was '{:?}'", args[1]);
-                Err(LoxError::Error(report))
-            }
-        } else {
-            let report = miette!("Expected number but was '{:?}'", args[0]);
-            Err(LoxError::Error(report))
-        }
-    }
-
-    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        None
-    }
-}
-
-pub struct Function<'a> {
-    name: &'a str,
-    parameters: Vec<&'a str>,
-    body: &'a crate::Result<Stmt<'a>>,
-    closure: Rc<RefCell<Environment>>,
-}
-
-impl<'a> LoxCallable<'a> for Function<'a> {
-    fn arity(&self) -> usize {
-        self.parameters.len()
-    }
-
-    fn name(&self) -> &'a str {
+impl Native {
+    #[must_use]
+    pub fn name(&self) -> &'static str {
         self.name
     }
 
-    fn parent(&self) -> Option<&'a str> {
-        None
+    #[must_use]
+    pub fn arity(&self) -> usize {
+        self.arity
     }
 
-    fn call(&self, arguments: &[LoxValue]) -> crate::Result<CallResult<'a>> {
-        let expected = self.arity();
-        let actual = arguments.len();
-        if expected != actual {
-            let report = miette!(
-                "Invalid arguments number passed to '{}'. Expected: {} passed: {}",
-                self.name,
-                expected,
-                actual
-            );
-            return Err(LoxError::Error(report));
-        }
-        // We need new closure here to support recursive calls for example fibonacci calculation
-        let closure = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
-
-        for (i, name) in self.parameters.iter().enumerate() {
-            closure
-                .borrow_mut()
-                .define((*name).to_string(), arguments[i].clone());
-        }
-
-        Ok(CallResult::Code(self.body, closure))
+    pub fn call<'a>(&self, args: &[LoxValue<'a>]) -> crate::Result<LoxValue<'a>> {
+        (self.func)(args)
     }
+}
 
-    fn get(&self, _: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        None
+pub const NATIVES: [Native; 4] = [
+    Native {
+        name: "clock",
+        arity: 0,
+        func: clock,
+    },
+    Native {
+        name: "sqrt",
+        arity: 1,
+        func: sqrt,
+    },
+    Native {
+        name: "min",
+        arity: 2,
+        func: min,
+    },
+    Native {
+        name: "max",
+        arity: 2,
+        func: max,
+    },
+];
+
+#[allow(clippy::unnecessary_wraps)] // the signature is fixed by `NativeFn`
+fn clock<'a>(_: &[LoxValue<'a>]) -> crate::Result<LoxValue<'a>> {
+    let since_the_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    Ok(LoxValue::Number(since_the_epoch.as_secs_f64()))
+}
+
+fn sqrt<'a>(args: &[LoxValue<'a>]) -> crate::Result<LoxValue<'a>> {
+    Ok(LoxValue::Number(number(&args[0])?.sqrt()))
+}
+
+fn min<'a>(args: &[LoxValue<'a>]) -> crate::Result<LoxValue<'a>> {
+    Ok(LoxValue::Number(number(&args[0])?.min(number(&args[1])?)))
+}
+
+fn max<'a>(args: &[LoxValue<'a>]) -> crate::Result<LoxValue<'a>> {
+    Ok(LoxValue::Number(number(&args[0])?.max(number(&args[1])?)))
+}
+
+fn number(value: &LoxValue) -> crate::Result<f64> {
+    if let LoxValue::Number(n) = value {
+        Ok(*n)
+    } else {
+        Err(LoxError::Error(miette!(
+            "Expected number but was '{value}'"
+        )))
+    }
+}
+
+/// User-defined function or method together with the scope it closes over.
+pub struct Function<'a> {
+    name: &'a str,
+    parameters: Vec<&'a str>,
+    body: &'a [crate::Result<Stmt<'a>>],
+    closure: Rc<RefCell<Environment<'a>>>,
+    is_initializer: bool,
+}
+
+impl Debug for Function<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<fn {}>", self.name)
     }
 }
 
 impl<'a> Function<'a> {
+    #[must_use]
     pub fn new(
         name: &'a str,
         parameters: Vec<&'a str>,
-        body: &'a crate::Result<Stmt<'a>>,
-        closure: Rc<RefCell<Environment>>,
+        body: &'a [crate::Result<Stmt<'a>>],
+        closure: Rc<RefCell<Environment<'a>>>,
+        is_initializer: bool,
     ) -> Self {
         Self {
             name,
             parameters,
             body,
             closure,
+            is_initializer,
+        }
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &'a str {
+        self.name
+    }
+
+    #[must_use]
+    pub fn arity(&self) -> usize {
+        self.parameters.len()
+    }
+
+    #[must_use]
+    pub fn parameters(&self) -> &[&'a str] {
+        &self.parameters
+    }
+
+    pub fn body(&self) -> &'a [crate::Result<Stmt<'a>>] {
+        self.body
+    }
+
+    #[must_use]
+    pub fn closure(&self) -> Rc<RefCell<Environment<'a>>> {
+        self.closure.clone()
+    }
+
+    #[must_use]
+    pub fn is_initializer(&self) -> bool {
+        self.is_initializer
+    }
+
+    /// Returns a copy of the method whose scope has `this` bound to `instance`.
+    #[must_use]
+    pub fn bind(&self, instance: Rc<RefCell<Instance<'a>>>) -> Function<'a> {
+        let mut env = Environment::child(self.closure.clone());
+        env.define(THIS, LoxValue::Instance(instance));
+        Function {
+            name: self.name,
+            parameters: self.parameters.clone(),
+            body: self.body,
+            closure: Rc::new(RefCell::new(env)),
+            is_initializer: self.is_initializer,
         }
     }
 }
 
 pub struct Class<'a> {
     name: &'a str,
-    closure: Rc<RefCell<Environment>>,
-    methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
-    superclass: Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
+    superclass: Option<Rc<Class<'a>>>,
+    methods: HashMap<&'a str, Rc<Function<'a>>>,
 }
 
-impl<'a> LoxCallable<'a> for Class<'a> {
-    fn arity(&self) -> usize {
-        if let Some(method) = self.methods.get(INIT) {
-            method.borrow().arity()
-        } else {
-            0
-        }
-    }
-
-    fn name(&self) -> &'a str {
-        self.name
-    }
-
-    fn parent(&self) -> Option<&'a str> {
-        if let Some(p) = &self.superclass {
-            Some(p.borrow().name())
-        } else {
-            None
-        }
-    }
-
-    fn call(&self, _: &[LoxValue]) -> crate::Result<CallResult<'a>> {
-        let child = Rc::new(RefCell::new(Environment::child(self.closure.clone())));
-
-        if let Some(superclass) = &self.superclass {
-            let super_instance =
-                LoxValue::Instance(superclass.borrow().name().to_string(), child.clone());
-            self.closure
-                .borrow_mut()
-                .define_at(1, SUPER.to_string(), super_instance.clone());
-        }
-        let instance = LoxValue::Instance(self.name.to_string(), child.clone());
-        self.closure
-            .borrow_mut()
-            .define(THIS.to_string(), instance.clone());
-
-        Ok(CallResult::Value(instance))
-    }
-
-    fn get(&self, child: &str) -> Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>> {
-        let method = self.methods.get(child).cloned();
-        if method.is_some() {
-            method
-        } else if let Some(superclass) = &self.superclass {
-            // dont call superclass initializer
-            if child == INIT {
-                None
-            } else {
-                superclass.borrow().get(child)
-            }
-        } else {
-            None
-        }
+impl Debug for Class<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<class {}>", self.name)
     }
 }
 
 impl<'a> Class<'a> {
+    #[must_use]
     pub fn new(
         name: &'a str,
-        closure: Rc<RefCell<Environment>>,
-        functions: Vec<Function<'a>>,
-        superclass: Option<Rc<RefCell<dyn LoxCallable<'a> + 'a>>>,
+        superclass: Option<Rc<Class<'a>>>,
+        methods: HashMap<&'a str, Rc<Function<'a>>>,
     ) -> Self {
-        let mut methods: HashMap<String, Rc<RefCell<dyn LoxCallable<'a> + 'a>>> = HashMap::new();
-        for func in functions {
-            methods.insert(func.name().to_string(), Rc::new(RefCell::new(func)));
-        }
         Self {
             name,
-            closure,
-            methods,
             superclass,
+            methods,
         }
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &'a str {
+        self.name
+    }
+
+    #[must_use]
+    pub fn find_method(&self, name: &str) -> Option<Rc<Function<'a>>> {
+        self.methods.get(name).cloned().or_else(|| {
+            self.superclass
+                .as_ref()
+                .and_then(|superclass| superclass.find_method(name))
+        })
+    }
+
+    #[must_use]
+    pub fn arity(&self) -> usize {
+        self.find_method(INIT).map_or(0, |init| init.arity())
+    }
+}
+
+pub struct Instance<'a> {
+    class: Rc<Class<'a>>,
+    fields: HashMap<&'a str, LoxValue<'a>>,
+}
+
+impl Debug for Instance<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} instance", self.class.name)
+    }
+}
+
+impl<'a> Instance<'a> {
+    #[must_use]
+    pub fn new(class: Rc<Class<'a>>) -> Self {
+        Self {
+            class,
+            fields: HashMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn class_name(&self) -> &'a str {
+        self.class.name
+    }
+
+    #[must_use]
+    pub fn class(&self) -> Rc<Class<'a>> {
+        self.class.clone()
+    }
+
+    #[must_use]
+    pub fn field(&self, name: &str) -> Option<LoxValue<'a>> {
+        self.fields.get(name).cloned()
+    }
+
+    pub fn set_field(&mut self, name: &'a str, value: LoxValue<'a>) {
+        self.fields.insert(name, value);
     }
 }

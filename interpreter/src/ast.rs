@@ -8,7 +8,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::{LoxError, env::Environment};
+use crate::call::{Class, Function, Instance, Native};
 use scanner::Token;
 
 // Traits
@@ -192,105 +192,54 @@ pub enum StmtKind<'a> {
 
 // Values
 
-const ERROR_MARGIN: f64 = 0.00001;
-
 #[derive(Clone, Debug)]
-pub enum LoxValue {
+pub enum LoxValue<'a> {
     String(String),
     Number(f64),
     Bool(bool),
     Nil,
-    Callable(&'static str, String, Option<String>, Option<Box<LoxValue>>),
-    Instance(String, Rc<RefCell<Environment>>),
+    Native(Native),
+    Function(Rc<Function<'a>>),
+    Class(Rc<Class<'a>>),
+    Instance(Rc<RefCell<Instance<'a>>>),
 }
 
-impl Display for LoxValue {
+impl Display for LoxValue<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxValue::String(s) => write!(f, "{s}"),
-            LoxValue::Callable(kind, val, parent, _receiver) => {
-                if let Some(parent) = parent {
-                    write!(f, "<{kind} {parent}.{val}>")
-                } else {
-                    write!(f, "<{kind} {val}>")
-                }
-            }
             LoxValue::Number(n) => write!(f, "{n}"),
             LoxValue::Bool(b) => write!(f, "{b}"),
-            LoxValue::Nil => write!(f, ""),
-            LoxValue::Instance(class, _) => write!(f, "instance of {class}"),
+            LoxValue::Nil => write!(f, "nil"),
+            LoxValue::Native(_) => write!(f, "<native fn>"),
+            LoxValue::Function(function) => write!(f, "<fn {}>", function.name()),
+            LoxValue::Class(class) => write!(f, "{}", class.name()),
+            LoxValue::Instance(instance) => {
+                write!(f, "{} instance", instance.borrow().class_name())
+            }
         }
     }
 }
 
-impl LoxValue {
-    pub fn try_num(&self) -> crate::Result<f64> {
-        if let LoxValue::Number(n) = self {
-            Ok(*n)
-        } else {
-            Err(LoxError::Error(miette::miette!("Expected number")))
-        }
-    }
-
-    pub fn try_str(&self) -> crate::Result<&String> {
-        if let LoxValue::String(s) = self {
-            Ok(s)
-        } else {
-            Err(LoxError::Error(miette::miette!("Expected string")))
-        }
-    }
-
-    pub fn try_bool(&self) -> crate::Result<bool> {
-        match self {
-            LoxValue::Bool(b) => Ok(*b),
-            LoxValue::Nil => Ok(false),
-            _ => Err(LoxError::Error(miette::miette!("Expected boolean"))),
-        }
-    }
-
+impl<'a> LoxValue<'a> {
     #[must_use]
     pub fn is_truthy(&self) -> bool {
-        self.try_bool().unwrap_or(true)
+        !matches!(self, LoxValue::Nil | LoxValue::Bool(false))
     }
 
     #[must_use]
-    pub fn equal(&self, other: &LoxValue) -> bool {
-        if let Ok(l) = self.try_num() {
-            let Ok(r) = other.try_num() else {
-                return false;
-            };
-            (l - r).abs() < ERROR_MARGIN
-        } else if let Ok(l) = self.try_bool() {
-            let Ok(r) = other.try_bool() else {
-                return false;
-            };
-            l == r
-        } else if let Ok(l) = self.try_str() {
-            let Ok(r) = other.try_str() else {
-                return false;
-            };
-            l == r
-        } else if let LoxValue::Nil = self {
-            matches!(other, LoxValue::Nil)
-        } else if let LoxValue::Nil = other {
-            matches!(self, LoxValue::Nil)
-        } else {
-            false
-        }
-    }
-
-    pub fn less(&self, other: &LoxValue) -> crate::Result<bool> {
-        if let Ok(l) = self.try_num() {
-            let r = other.try_num()?;
-            Ok(l < r)
-        } else if let Ok(l) = self.try_bool() {
-            let r = other.try_bool()?;
-            Ok(!l & r)
-        } else if let Ok(l) = self.try_str() {
-            let r = other.try_str()?;
-            Ok(l < r)
-        } else {
-            Err(LoxError::Error(miette::miette!("Operands must be numbers")))
+    pub fn equal(&self, other: &LoxValue<'a>) -> bool {
+        match (self, other) {
+            (LoxValue::Nil, LoxValue::Nil) => true,
+            (LoxValue::Bool(l), LoxValue::Bool(r)) => l == r,
+            #[allow(clippy::float_cmp)] // Lox equality is exact IEEE equality
+            (LoxValue::Number(l), LoxValue::Number(r)) => l == r,
+            (LoxValue::String(l), LoxValue::String(r)) => l == r,
+            (LoxValue::Native(l), LoxValue::Native(r)) => l.name() == r.name(),
+            (LoxValue::Function(l), LoxValue::Function(r)) => Rc::ptr_eq(l, r),
+            (LoxValue::Class(l), LoxValue::Class(r)) => Rc::ptr_eq(l, r),
+            (LoxValue::Instance(l), LoxValue::Instance(r)) => Rc::ptr_eq(l, r),
+            _ => false,
         }
     }
 }
