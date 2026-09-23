@@ -2128,6 +2128,19 @@ b.method();
         (result, String::from_utf8(stdout).unwrap())
     }
 
+    #[test_case("print ;;" ; "empty print")]
+    #[test_case("var a = ;; print a;" ; "empty initializer")]
+    #[test_case("print (;);" ; "empty grouping")]
+    #[test_case("-;; -;;" ; "empty unary operand")]
+    fn missing_expression_is_compile_error(source: &str) {
+        // Act
+        let (result, output) = run_script(source);
+
+        // Assert
+        assert!(error_text(result).contains("Expect expression."));
+        assert!(output.is_empty());
+    }
+
     /// Declares enough globals to push every later constant index above 255.
     fn many_globals() -> String {
         (0..300)

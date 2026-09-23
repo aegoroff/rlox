@@ -1068,7 +1068,12 @@ impl<'a> Parser<'a> {
             Token::This => self.this(),
             Token::Super => self.super_(),
             Token::True | Token::False | Token::Nil => self.literal(),
-            _ => Ok(()),
+            // Without a prefix rule nothing is pushed, so the bytecode that
+            // follows would pop below the frame.
+            _ => Err(miette::miette!(
+                labels = vec![LabeledSpan::at(self.current_span(), "Expect expression.")],
+                "Expression error"
+            )),
         }
     }
 
