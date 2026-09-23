@@ -2141,6 +2141,29 @@ b.method();
         assert!(output.is_empty());
     }
 
+    #[test]
+    fn strings_with_colliding_hashes_stay_distinct() {
+        // Arrange: "glbvs" and "yacxa" share the same FNV-1a hash and length.
+        let source = r#"
+var a = "glbvs";
+var b = "yacxa";
+print "glb" + "vs" == a;
+print "yac" + "xa" == b;
+print a == b;
+var glbvs = 1;
+var yacxa = 2;
+print glbvs;
+print yacxa;
+"#;
+
+        // Act
+        let (result, output) = run_script(source);
+
+        // Assert
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(output, "true\ntrue\nfalse\n1\n2\n");
+    }
+
     /// Declares enough globals to push every later constant index above 255.
     fn many_globals() -> String {
         (0..300)

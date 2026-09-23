@@ -1,5 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
+use std::collections::hash_map::Entry;
 use std::fmt;
 use std::rc::Rc;
 
@@ -101,7 +102,10 @@ pub struct ObjectStore {
     objects: Vec<HeapObject>,
     ref_counts: Vec<u32>,
     free_list: Vec<ObjId>,
+    /// Interned strings by `(hash, len)`: the first string with a key.
     strings: FnvHashMap<(u32, usize), ObjId>,
+    /// Later strings whose `(hash, len)` collides with one in `strings`.
+    string_collisions: FnvHashMap<(u32, usize), Vec<ObjId>>,
 }
 
 impl Default for ObjectStore {
@@ -118,6 +122,7 @@ impl ObjectStore {
             ref_counts: Vec::new(),
             free_list: Vec::new(),
             strings: FnvHashMap::default(),
+            string_collisions: FnvHashMap::default(),
         }
     }
 
@@ -241,16 +246,26 @@ impl ObjectStore {
         let chars = text.into();
         let hash = hash_string(&chars);
         let key = (hash, chars.len());
-        if let Some(&existing_id) = self.strings.get(&key)
-            && let Ok(existing) = self.string(existing_id)
-            && existing.chars == chars
-        {
+        if let Some(existing_id) = self.find_interned(key, &chars) {
             return Ok(LoxValue::from_obj(existing_id, ObjType::String));
         }
 
         let id = self.push_object(HeapObject::String(ObjString { chars, hash }))?;
-        self.strings.insert(key, id);
+        if let Entry::Vacant(entry) = self.strings.entry(key) {
+            entry.insert(id);
+        } else {
+            self.string_collisions.entry(key).or_default().push(id);
+        }
         Ok(LoxValue::from_obj(id, ObjType::String))
+    }
+
+    fn find_interned(&self, key: (u32, usize), chars: &str) -> Option<ObjId> {
+        let first = self.strings.get(&key)?;
+        let collisions = self.string_collisions.get(&key).into_iter().flatten();
+        std::iter::once(first)
+            .chain(collisions)
+            .copied()
+            .find(|&id| self.string(id).is_ok_and(|s| s.chars == chars))
     }
 
     pub fn alloc_function(&mut self, function: Function) -> Result<LoxValue, RuntimeError> {
@@ -576,5 +591,31 @@ impl ObjectStore {
     #[must_use]
     pub fn free_list_len(&self) -> usize {
         self.free_list.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// "glbvs" and "yacxa" share the same FNV-1a hash and length.
+    const COLLIDING: [&str; 2] = ["glbvs", "yacxa"];
+
+    #[test]
+    fn colliding_strings_are_interned_separately() {
+        // Arrange
+        let mut store = ObjectStore::new();
+        assert_eq!(hash_string(COLLIDING[0]), hash_string(COLLIDING[1]));
+
+        // Act
+        let first = store.intern_string(COLLIDING[0]).unwrap();
+        let second = store.intern_string(COLLIDING[1]).unwrap();
+        let first_again = store.intern_string(COLLIDING[0]).unwrap();
+        let second_again = store.intern_string(COLLIDING[1]).unwrap();
+
+        // Assert
+        assert_ne!(first, second);
+        assert_eq!(first, first_again);
+        assert_eq!(second, second_again);
     }
 }
