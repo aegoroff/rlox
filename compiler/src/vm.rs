@@ -124,6 +124,22 @@ macro_rules! ensure_stack_room {
     };
 }
 
+/// Unwraps `$result` inside `run`, or returns its error with the line of the
+/// failing instruction recorded. A bare `?` would report a stale line.
+///
+/// The frame's `ip` is saved before `$result` runs, so the cold error exit
+/// needs nothing from the dispatch loop's registers. Passing them to the exit
+/// instead slows the whole loop down.
+macro_rules! vm_try {
+    ($vm:ident, $cursor:ident, $ip:ident, $result:expr) => {{
+        $vm.frames[$cursor.index].ip = $ip;
+        match $result {
+            Ok(value) => value,
+            Err(err) => return $vm.fail_at_saved_ip(err),
+        }
+    }};
+}
+
 /// Value-stack cursor kept in the dispatch loop so the top stays in a register.
 ///
 /// `VirtualMachine::stack_top` is written back only when a handler reads the
@@ -319,17 +335,18 @@ impl<W: std::io::Write> VirtualMachine<W> {
     }
 
     fn format_frame(&self, index: usize) -> Result<String, RuntimeError> {
-        let closure_id = self.frames[index].closure;
-        let function_id = self.objects.closure(closure_id)?.function;
+        let frame = &self.frames[index];
+        let closure = self.objects.closure(frame.closure)?;
         let name = self
             .objects
-            .string(self.objects.function(function_id)?.name)?
+            .string(self.objects.function(closure.function)?.name)?
             .chars
             .clone();
         let line = if index + 1 == self.frame_count {
             self.line
         } else {
-            self.objects.function(function_id)?.chunk.first_line()
+            // A caller frame's `ip` sits just past its call instruction.
+            closure.chunk.line(frame.ip.saturating_sub(1))
         };
         Ok(format!(" at {name}:{line}"))
     }
@@ -462,6 +479,22 @@ impl<W: std::io::Write> VirtualMachine<W> {
         Err(err)
     }
 
+    /// Cold exit for errors raised through [`vm_try!`]. They all fail before
+    /// a call pushes a frame, so the failing frame is the top one, and its
+    /// `ip` was saved past the failing opcode. Every byte of one instruction
+    /// is written with the same line, so `ip - 1` yields that instruction's
+    /// line.
+    #[cold]
+    #[inline(never)]
+    fn fail_at_saved_ip(&mut self, err: RuntimeError) -> Result<(), RuntimeError> {
+        let frame = &self.frames[self.frame_count - 1];
+        debug_assert!(frame.ip > 0 && frame.ip <= frame.code_len);
+        // SAFETY: the saved `ip` is past an opcode of this frame's code, and
+        // `lines` has one entry per code byte.
+        self.line = unsafe { *frame.lines.add(frame.ip - 1) };
+        Err(err)
+    }
+
     fn write_value(&mut self, value: LoxValue) -> Result<(), RuntimeError> {
         let formatted = FormattedValue {
             store: &self.objects,
@@ -548,7 +581,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let base = cursor.slots - 1;
                     self.stack_top = stack.top;
                     if self.open_upvalues.is_some() {
-                        self.close_upvalues(base)?;
+                        vm_try!(self, cursor, ip, self.close_upvalues(base));
                     }
                     self.release_stack_range(base, stack.top);
                     // The popped reference to `value` moves into the callee slot,
@@ -593,9 +626,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         let b = self.pop_raw();
                         let a = self.pop_raw();
                         if let (Ok(l_id), Ok(r_id)) = (a.try_str(), b.try_str()) {
-                            let l = string_chars(&self.objects, l_id)?;
-                            let r = string_chars(&self.objects, r_id)?;
-                            let result = self.objects.intern_string(l.to_owned() + r)?;
+                            let l = vm_try!(self, cursor, ip, string_chars(&self.objects, l_id));
+                            let r = vm_try!(self, cursor, ip, string_chars(&self.objects, r_id));
+                            let result = vm_try!(
+                                self,
+                                cursor,
+                                ip,
+                                self.objects.intern_string(l.to_owned() + r)
+                            );
                             self.push_raw(result);
                             stack.top = self.stack_top;
                         } else {
@@ -701,7 +739,8 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         let cmp = a.less(b, &self.objects);
                         self.objects.release(a);
                         self.objects.release(b);
-                        self.push_raw(LoxValue::bool_val(cmp?));
+                        let cmp = vm_try!(self, cursor, ip, cmp);
+                        self.push_raw(LoxValue::bool_val(cmp));
                         stack.top = self.stack_top;
                     }
                 }
@@ -722,7 +761,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         let eq = a.equal(b);
                         self.objects.release(a);
                         self.objects.release(b);
-                        let lt = lt?;
+                        let lt = vm_try!(self, cursor, ip, lt);
                         self.push_raw(LoxValue::bool_val(!lt && !eq));
                         stack.top = self.stack_top;
                     }
@@ -730,7 +769,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Print => {
                     self.stack_top = stack.top;
                     let value = self.peek_unchecked(0);
-                    self.write_value(value)?;
+                    vm_try!(self, cursor, ip, self.write_value(value));
                     self.pop_unchecked();
                     stack.top = self.stack_top;
                 }
@@ -749,14 +788,24 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    self.define_global(unsafe { cursor.read_constant(ix) })?;
+                    vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.define_global(unsafe { cursor.read_constant(ix) })
+                    );
                     stack.top = self.stack_top;
                 }
                 OpCode::DefineGlobalLong => {
                     self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
-                    self.define_global(unsafe { cursor.read_constant(ix) })?;
+                    vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.define_global(unsafe { cursor.read_constant(ix) })
+                    );
                     stack.top = self.stack_top;
                 }
                 OpCode::GetGlobal => {
@@ -770,7 +819,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.objects.retain(value);
                     } else {
                         self.stack_top = stack.top;
-                        self.get_global(name)?;
+                        vm_try!(self, cursor, ip, self.get_global(name));
                         stack.top = self.stack_top;
                     }
                 }
@@ -785,7 +834,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         self.objects.retain(value);
                     } else {
                         self.stack_top = stack.top;
-                        self.get_global(name)?;
+                        vm_try!(self, cursor, ip, self.get_global(name));
                         stack.top = self.stack_top;
                     }
                 }
@@ -793,14 +842,24 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_byte(ip) } as usize;
                     ip += CONST_SIZE;
-                    self.set_global(unsafe { cursor.read_constant(ix) })?;
+                    vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.set_global(unsafe { cursor.read_constant(ix) })
+                    );
                     stack.top = self.stack_top;
                 }
                 OpCode::SetGlobalLong => {
                     self.stack_top = stack.top;
                     let ix = unsafe { cursor.read_u24(ip) };
                     ip += CONST_LONG_SIZE;
-                    self.set_global(unsafe { cursor.read_constant(ix) })?;
+                    vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.set_global(unsafe { cursor.read_constant(ix) })
+                    );
                     stack.top = self.stack_top;
                 }
                 OpCode::GetLocal => {
@@ -886,7 +945,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                     self.stack_top = stack.top;
                     let prev_frame_count = self.frame_count;
-                    self.call_value(callee, args_count)?;
+                    vm_try!(self, cursor, ip, self.call_value(callee, args_count));
                     stack.top = self.stack_top;
                     if self.frame_count != prev_frame_count {
                         (cursor, ip) = FrameCursor::active(self);
@@ -911,7 +970,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                     self.stack_top = stack.top;
                     let prev_frame_count = self.frame_count;
-                    self.invoke(method_name, argc)?;
+                    vm_try!(self, cursor, ip, self.invoke(method_name, argc));
                     stack.top = self.stack_top;
                     if self.frame_count != prev_frame_count {
                         (cursor, ip) = FrameCursor::active(self);
@@ -920,18 +979,26 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::Closure | OpCode::ClosureLong => {
                     ensure_stack_room!(self, stack, cursor, instruction_ip);
                     self.stack_top = stack.top;
-                    ip = self.op_closure(&cursor, ip, matches!(opcode, OpCode::ClosureLong))?;
+                    ip = vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.op_closure(&cursor, ip, matches!(opcode, OpCode::ClosureLong))
+                    );
                     stack.top = self.stack_top;
                 }
                 OpCode::GetUpvalue => {
                     ensure_stack_room!(self, stack, cursor, instruction_ip);
                     let slot = unsafe { cursor.read_byte(ip) } as usize;
                     ip += 1;
-                    let upvalue_id = self
-                        .objects
-                        .closure(self.frames[cursor.index].closure)?
-                        .upvalues[slot];
-                    let upvalue = self.objects.upvalue(upvalue_id)?;
+                    let upvalue_id = vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.objects.closure(self.frames[cursor.index].closure)
+                    )
+                    .upvalues[slot];
+                    let upvalue = vm_try!(self, cursor, ip, self.objects.upvalue(upvalue_id));
                     let lox_value = if upvalue.location.is_null() {
                         upvalue.closed
                     } else {
@@ -949,15 +1016,20 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += 1;
                     // SAFETY: the assigned value is the top stack slot.
                     let val = unsafe { stack.peek(0) };
-                    let upvalue_id = self
-                        .objects
-                        .closure(self.frames[cursor.index].closure)?
-                        .upvalues[slot];
-                    let location = self.objects.upvalue(upvalue_id)?.location;
+                    let upvalue_id = vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.objects.closure(self.frames[cursor.index].closure)
+                    )
+                    .upvalues[slot];
+                    let location =
+                        vm_try!(self, cursor, ip, self.objects.upvalue(upvalue_id)).location;
                     if location.is_null() {
                         self.stack_top = stack.top;
                         let old_closed = {
-                            let upvalue = self.objects.upvalue_mut(upvalue_id)?;
+                            let upvalue =
+                                vm_try!(self, cursor, ip, self.objects.upvalue_mut(upvalue_id));
                             let old = upvalue.closed;
                             upvalue.closed = val;
                             old
@@ -981,7 +1053,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                 OpCode::CloseUpvalue => {
                     self.stack_top = stack.top;
                     let location = self.stack_top - 1;
-                    self.close_upvalues(location)?;
+                    vm_try!(self, cursor, ip, self.close_upvalues(location));
                     self.pop_unchecked();
                     stack.top = self.stack_top;
                 }
@@ -992,7 +1064,7 @@ impl<W: std::io::Write> VirtualMachine<W> {
                         unsafe { cursor.read_index(ip, matches!(opcode, OpCode::ClassLong)) };
                     ip += width;
                     let class_name = unsafe { cursor.read_constant(class_ix) };
-                    let class = self.objects.alloc_class(class_name)?;
+                    let class = vm_try!(self, cursor, ip, self.objects.alloc_class(class_name));
                     self.push(class);
                     stack.top = self.stack_top;
                 }
@@ -1013,15 +1085,26 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     }
                     self.stack_top = stack.top;
                     ip += width;
-                    let property_id = unsafe { cursor.read_constant(prop_ix) }.try_str()?;
-                    let instance_id = self.peek_unchecked(0).try_instance()?;
-                    if let Some(val) =
-                        Self::get_member(instance_id, property_id, &mut self.objects)?
-                    {
+                    let property_id = vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        unsafe { cursor.read_constant(prop_ix) }.try_str()
+                    );
+                    let instance_id =
+                        vm_try!(self, cursor, ip, self.peek_unchecked(0).try_instance());
+                    if let Some(val) = vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        Self::get_member(instance_id, property_id, &mut self.objects)
+                    ) {
                         self.pop_unchecked();
                         self.push(val);
                     } else {
-                        let name = string_chars(&self.objects, property_id)?.to_owned();
+                        let name =
+                            vm_try!(self, cursor, ip, string_chars(&self.objects, property_id))
+                                .to_owned();
                         return self.runtime_error_at(
                             &cursor,
                             instruction_ip,
@@ -1053,9 +1136,11 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     };
                     self.objects.retain(self.peek_unchecked(0));
                     let property_value = self.pop_unchecked();
-                    let instance_id = self.pop_unchecked().try_instance_field()?;
+                    let instance_id =
+                        vm_try!(self, cursor, ip, self.pop_unchecked().try_instance_field());
                     let old = {
-                        let instance = self.objects.instance_mut(instance_id)?;
+                        let instance =
+                            vm_try!(self, cursor, ip, self.objects.instance_mut(instance_id));
                         instance.fields.insert(property_id, property_value)
                     };
                     if let Some(old) = old
@@ -1071,7 +1156,12 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     let (method_ix, width) =
                         unsafe { cursor.read_index(ip, matches!(opcode, OpCode::MethodLong)) };
                     ip += width;
-                    self.define_method(unsafe { cursor.read_constant(method_ix) })?;
+                    vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.define_method(unsafe { cursor.read_constant(method_ix) })
+                    );
                     stack.top = self.stack_top;
                 }
                 OpCode::Inherit => {
@@ -1083,13 +1173,19 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             RuntimeError::SuperclassMustBeClass,
                         );
                     };
-                    let sub_class_id = self.peek_unchecked(0).try_class()?;
-                    let super_methods = self.objects.class(super_class_id)?.methods.clone();
+                    let sub_class_id =
+                        vm_try!(self, cursor, ip, self.peek_unchecked(0).try_class());
+                    let super_methods =
+                        vm_try!(self, cursor, ip, self.objects.class(super_class_id))
+                            .methods
+                            .clone();
                     for (name, method) in super_methods {
-                        if !self.objects.class(sub_class_id)?.methods.contains_key(name) {
+                        if !vm_try!(self, cursor, ip, self.objects.class(sub_class_id))
+                            .methods
+                            .contains_key(name)
+                        {
                             self.objects.retain(method);
-                            self.objects
-                                .class_mut(sub_class_id)?
+                            vm_try!(self, cursor, ip, self.objects.class_mut(sub_class_id))
                                 .methods
                                 .insert(name, method);
                         }
@@ -1108,25 +1204,35 @@ impl<W: std::io::Write> VirtualMachine<W> {
                             return self.runtime_error_at(&cursor, instruction_ip, err);
                         }
                     };
-                    let super_class_id = self.pop_unchecked().try_class()?;
+                    let super_class_id =
+                        vm_try!(self, cursor, ip, self.pop_unchecked().try_class());
                     // Peek then pop (like GetProperty) so the instance stays live
                     // while `alloc_bound_method` retains it as the receiver.
-                    let instance_id = self.peek_unchecked(0).try_instance()?;
-                    let Some(method) = self.objects.class(super_class_id)?.methods.get(name_id)
+                    let instance_id =
+                        vm_try!(self, cursor, ip, self.peek_unchecked(0).try_instance());
+                    let Some(method) =
+                        vm_try!(self, cursor, ip, self.objects.class(super_class_id))
+                            .methods
+                            .get(name_id)
                     else {
+                        let name = vm_try!(self, cursor, ip, string_chars(&self.objects, name_id))
+                            .to_owned();
                         return self.runtime_error_at(
                             &cursor,
                             instruction_ip,
-                            RuntimeError::UndefinedMethodOrProperty(
-                                string_chars(&self.objects, name_id)?.to_owned(),
-                            ),
+                            RuntimeError::UndefinedMethodOrProperty(name),
                         );
                     };
-                    let method_closure_id = method.try_closure()?;
-                    let bound = self.objects.alloc_bound_method(
-                        LoxValue::from_obj(instance_id, ObjType::Instance),
-                        method_closure_id,
-                    )?;
+                    let method_closure_id = vm_try!(self, cursor, ip, method.try_closure());
+                    let bound = vm_try!(
+                        self,
+                        cursor,
+                        ip,
+                        self.objects.alloc_bound_method(
+                            LoxValue::from_obj(instance_id, ObjType::Instance),
+                            method_closure_id,
+                        )
+                    );
                     self.pop_unchecked();
                     self.push(bound);
                     stack.top = self.stack_top;
@@ -1140,19 +1246,23 @@ impl<W: std::io::Write> VirtualMachine<W> {
                     ip += width + 1;
                     self.frames[cursor.index].ip = ip;
                     let prev_frame_count = self.frame_count;
-                    let name_id = method_name.try_str()?;
-                    let super_class_id = self.pop_unchecked().try_class()?;
-                    let Some(method) = self.objects.class(super_class_id)?.methods.get(name_id)
+                    let name_id = vm_try!(self, cursor, ip, method_name.try_str());
+                    let super_class_id =
+                        vm_try!(self, cursor, ip, self.pop_unchecked().try_class());
+                    let Some(method) =
+                        vm_try!(self, cursor, ip, self.objects.class(super_class_id))
+                            .methods
+                            .get(name_id)
                     else {
+                        let name = vm_try!(self, cursor, ip, string_chars(&self.objects, name_id))
+                            .to_owned();
                         return self.runtime_error_at(
                             &cursor,
                             instruction_ip,
-                            RuntimeError::UndefinedMethodOrProperty(
-                                string_chars(&self.objects, name_id)?.to_owned(),
-                            ),
+                            RuntimeError::UndefinedMethodOrProperty(name),
                         );
                     };
-                    self.call_value(*method, argc as usize)?;
+                    vm_try!(self, cursor, ip, self.call_value(*method, argc as usize));
                     stack.top = self.stack_top;
                     if self.frame_count != prev_frame_count {
                         (cursor, ip) = FrameCursor::active(self);
@@ -2162,6 +2272,22 @@ print yacxa;
         // Assert
         assert!(result.is_ok(), "{result:?}");
         assert_eq!(output, "true\ntrue\nfalse\n1\n2\n");
+    }
+
+    #[test_case("print 1;\n\n1();", &["at script:3"] ; "call non callable")]
+    #[test_case("fun f(a) {}\n\nf(1, 2);", &["at script:3"] ; "wrong arity")]
+    #[test_case("var a = \"x\";\na.b = 1;", &["at script:2"] ; "set field on non instance")]
+    #[test_case("print 1;\nprint sqrt(\"x\");", &["at script:2"] ; "native error")]
+    #[test_case("fun f(a) {\n  return a.x;\n}\nprint 1;\nf(2);", &["at f:2", "at script:5"] ; "error in callee")]
+    fn runtime_error_reports_failing_line(source: &str, trace: &[&str]) {
+        // Act
+        let (result, _) = run_script(source);
+
+        // Assert
+        let text = error_text(result);
+        for frame in trace {
+            assert!(text.contains(frame), "{frame} not found in {text}");
+        }
     }
 
     /// Declares enough globals to push every later constant index above 255.
