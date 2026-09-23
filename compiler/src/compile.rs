@@ -17,6 +17,7 @@ use crate::{
     chunk::{MAX_LONG_VALUE, MAX_SHORT_VALUE, OpCode},
     object::ObjectStore,
     value::{Function, LoxValue},
+    vm::STACK_MAX,
 };
 
 fn heap_value<T>(result: Result<T, RuntimeError>) -> crate::Result<T> {
@@ -326,7 +327,11 @@ impl<'a> Parser<'a> {
         self.emit_indexed(OpCode::Closure, OpCode::ClosureLong, constant)?;
         for (is_local, index) in uvals {
             self.emit_byte(u8::from(is_local));
-            self.emit_byte_operand(index)?;
+            self.compiler
+                .borrow_mut()
+                .function
+                .chunk
+                .write_u24(index, self.tokens.line);
         }
 
         Ok(())
@@ -390,8 +395,9 @@ impl<'a> Parser<'a> {
         if self.compiler.borrow().scope_depth == 0 {
             return Ok(());
         }
-        // Local slots are addressed by a one-byte operand: at most 256 of them.
-        if self.compiler.borrow().locals.len() > MAX_SHORT_VALUE {
+        // Local slots are addressed by up to three-byte operands, but a frame
+        // can never hold more slots than the whole value stack.
+        if self.compiler.borrow().locals.len() >= STACK_MAX {
             return Err(miette::miette!(
                 labels = vec![LabeledSpan::at(
                     self.current_span(),

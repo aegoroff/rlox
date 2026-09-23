@@ -8,12 +8,15 @@ use crate::obj_map::ObjMap;
 use crate::object::{HeapObject, ObjId, ObjType, ObjectStore, string_chars};
 use crate::value::LoxValue;
 use crate::{RuntimeError, builtin};
-use crate::{chunk::OpCode, compile::Parser};
+use crate::{
+    chunk::{OpCode, UPVALUE_OPERAND_SIZE},
+    compile::Parser,
+};
 
 const FRAMES_MAX: usize = 64;
 const CONST_SIZE: usize = 1;
 const CONST_LONG_SIZE: usize = 3;
-const STACK_MAX: usize = FRAMES_MAX * 256;
+pub(crate) const STACK_MAX: usize = FRAMES_MAX * 256;
 const OPCODE_MAX: u8 = OpCode::SuperInvokeLong as u8;
 
 /// Call frame with raw pointers into the callee's immutable bytecode.
@@ -1177,14 +1180,14 @@ impl<W: std::io::Write> VirtualMachine<W> {
 
         for _ in 0..upvalues_count {
             let is_local = unsafe { cursor.read_byte(ip) };
-            let index = unsafe { cursor.read_byte(ip + 1) };
-            ip += 2;
+            let index = unsafe { cursor.read_u24(ip + 1) };
+            ip += UPVALUE_OPERAND_SIZE;
             let upvalue = if is_local == 1 {
-                self.capture_upvalue(cursor.slots + index as usize - 1)?
+                self.capture_upvalue(cursor.slots + index - 1)?
             } else {
                 self.objects
                     .closure(self.frames[cursor.index].closure)?
-                    .upvalues[index as usize]
+                    .upvalues[index]
             };
             upvalues.push(upvalue);
         }
@@ -2192,6 +2195,79 @@ print g299;
         // Assert
         assert!(result.is_ok(), "{result:?}");
         assert_eq!(output, "254\n");
+    }
+
+    /// A function body declaring `v0` .. `v299`, each initialized to its own
+    /// index, so slots from 256 on need the long local operands.
+    fn many_locals() -> String {
+        (0..300).map(|i| format!("var v{i} = {i};\n")).collect()
+    }
+
+    #[test]
+    fn locals_past_slot_255_are_read_and_written() {
+        // Arrange
+        let source = format!(
+            "fun f() {{\n{}v299 = v299 + v256;\nprint v299;\nprint v0;\n}}\nf();",
+            many_locals()
+        );
+
+        // Act
+        let (result, output) = run_script(&source);
+
+        // Assert
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(output, "555\n0\n");
+    }
+
+    #[test]
+    fn closures_capture_locals_past_slot_255() {
+        // Arrange
+        let source = format!(
+            r#"fun f() {{
+{}fun inc() {{ v299 = v299 + 1; }}
+fun outer() {{
+  fun inner() {{ return v298 + v299; }}
+  return inner;
+}}
+inc();
+print v299;
+print outer()();
+}}
+f();"#,
+            many_locals()
+        );
+
+        // Act
+        let (result, output) = run_script(&source);
+
+        // Assert
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(output, "300\n598\n");
+    }
+
+    #[test]
+    fn too_many_locals_is_compile_error() {
+        // Arrange: slot 0 is the function itself; the rest fill a frame as
+        // large as the whole value stack. Nested blocks keep each scope small,
+        // so the duplicate-name scan stays cheap while every local takes a slot.
+        const PER_BLOCK: usize = 128;
+        let mut source = String::from("fun f() {\n");
+        let mut blocks = 0;
+        for i in 0..STACK_MAX - 1 {
+            if i > 0 && i % PER_BLOCK == 0 {
+                source += "{\n";
+                blocks += 1;
+            }
+            source += &format!("var v{i};\n");
+        }
+        source += "var oops;\n";
+        source += &"}".repeat(blocks + 1);
+
+        // Act
+        let (result, _) = run_script(&source);
+
+        // Assert
+        assert!(error_text(result).contains("Too many local variables in function."));
     }
 
     #[test]

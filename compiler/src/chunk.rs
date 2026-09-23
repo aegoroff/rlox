@@ -67,6 +67,10 @@ pub enum OpCode {
 pub const MAX_SHORT_VALUE: usize = 255;
 /// The largest index a 3-byte (`*Long`) operand can encode.
 pub const MAX_LONG_VALUE: usize = 0x00FF_FFFF;
+/// A `Closure` operand describing one captured variable: an `is_local` byte,
+/// then the slot or enclosing upvalue index. The index is always three bytes
+/// wide because a captured local may sit past slot 255.
+pub const UPVALUE_OPERAND_SIZE: usize = 4;
 
 impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -295,8 +299,8 @@ impl Chunk {
                 self.disassembly_jump_instruction(offset, &code, 1)
             }
             OpCode::Loop => self.disassembly_jump_instruction(offset, &code, -1),
-            OpCode::Closure => self.disassembly_closure_instruction(offset, store, 1),
-            OpCode::ClosureLong => self.disassembly_closure_instruction(offset, store, 3),
+            OpCode::Closure => self.disassembly_closure_instruction(offset, &code, store, 1),
+            OpCode::ClosureLong => self.disassembly_closure_instruction(offset, &code, store, 3),
             OpCode::Invoke | OpCode::SuperInvoke => {
                 self.disassembly_invoke_instruction(offset, &code, 1)
             }
@@ -352,6 +356,7 @@ impl Chunk {
     fn disassembly_closure_instruction(
         &self,
         offset: usize,
+        code: &OpCode,
         store: &ObjectStore,
         constant_size: usize,
     ) -> usize {
@@ -367,20 +372,20 @@ impl Chunk {
                     .and_then(|function| store.string(function.name)),
             ) {
                 let name = name.chars.as_str();
-                println!("{:<16} {function_ix:4} {name}", OpCode::Closure.to_string());
+                println!("{:<16} {function_ix:4} {name}", code.to_string());
                 let upvalue_count = function.upvalue_count;
                 for _ in 0..upvalue_count {
                     let is_local = self.code[offset];
                     let is_local = if is_local == 1 { "local" } else { "upvalue" };
-                    let index = self.code[offset + 1];
+                    let index = self.read_three_bytes(offset + 1);
                     println!("{offset:04}    |                     {is_local} {index}");
-                    offset += 2;
+                    offset += UPVALUE_OPERAND_SIZE;
                 }
             } else {
-                println!("{:<16} {function_ix:4}", OpCode::Closure.to_string());
+                println!("{:<16} {function_ix:4}", code.to_string());
             }
         } else {
-            println!("{:<16} {function_ix:4}", OpCode::Closure.to_string());
+            println!("{:<16} {function_ix:4}", code.to_string());
         }
         offset
     }
